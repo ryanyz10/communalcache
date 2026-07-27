@@ -6,16 +6,16 @@ import (
 )
 
 type Config struct {
-	DatabaseURL             string
-	SupabaseURL             string
-	SupabaseAnonKey         string
-	SupabaseServiceRoleKey  string
-	ResendAPIKey            string
-	EmailFrom               string
-	VAPIDPublicKey          string
-	VAPIDPrivateKey         string
-	AppBaseURL              string
-	ListenAddr              string
+	DatabaseURL            string
+	SupabaseURL            string
+	SupabaseAnonKey        string
+	SupabaseServiceRoleKey string
+	ResendAPIKey           string
+	EmailFrom              string
+	VAPIDPublicKey         string
+	VAPIDPrivateKey        string
+	AppBaseURL             string
+	ListenAddr             string
 }
 
 func Load() (Config, error) {

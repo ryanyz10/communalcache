@@ -26,8 +26,8 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"supabase_url":     s.Cfg.SupabaseURL,
+		"supabase_url":      s.Cfg.SupabaseURL,
 		"supabase_anon_key": s.Cfg.SupabaseAnonKey,
-		"vapid_public_key": s.Cfg.VAPIDPublicKey,
+		"vapid_public_key":  s.Cfg.VAPIDPublicKey,
 	})
 }
