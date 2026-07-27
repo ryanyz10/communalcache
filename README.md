@@ -1,11 +1,58 @@
 # Communal Cache
 
-This repository currently contains the implementation specification for the
-Communal Cache MVP: a mobile-first household inventory-sharing application
-built with React, Go, Postgres, Supabase Auth, Resend, and Fly.io.
+Mobile-first household sharing app: React + Go + Postgres (Supabase Auth/Storage),
+web push + Resend email, deployed on Fly.io.
 
-Start with [docs/README.md](docs/README.md). It is the handoff index and defines
-the reading order, source-of-truth rules, and completion criteria for an
-implementation agent.
+## Status
 
-No application code has been created yet.
+Scaffold only: schema migration, health/config endpoints, embed SPA shell,
+Dockerfile, and `fly.toml`. Feature work (auth, caches, items, requests,
+notifications) is next.
+
+## Layout
+
+```
+cmd/server/          Go entrypoint + embedded SPA dist/
+internal/
+  api/               HTTP handlers
+  auth/              JWT validation (pending)
+  config/            Env config
+  db/                pgx pool + migrations
+  notify/            Push + email (pending)
+  outbox/            Delivery worker (pending)
+web/                 Vite + React + TypeScript SPA
+```
+
+## Local
+
+```bash
+# Postgres (session mode / direct — not Supavisor transaction port 6543)
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
+
+go run ./cmd/server
+# GET /api/healthz
+# GET /api/config
+```
+
+Frontend:
+
+```bash
+cd web && npm ci && npm run dev
+```
+
+Production build embeds the SPA:
+
+```bash
+make web-build
+go build -o bin/communalcache ./cmd/server
+```
+
+## Deploy
+
+Secrets: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`,
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `APP_BASE_URL`.
+
+One-time Supabase: disable Data API; asymmetric JWT keys; Resend as custom SMTP;
+redirect allowlist `{APP_BASE_URL}/join/*`; private storage bucket with no policies.
+`DATABASE_URL` must be direct or Supavisor **session** mode.

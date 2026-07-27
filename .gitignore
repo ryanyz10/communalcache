@@ -1,0 +1,13 @@
+# Communal Cache
+# Scaffold — SPA assets are built into the Go binary later.
+web/dist/
+!web/dist/.gitkeep
+# Built SPA; keep a placeholder so go:embed succeeds before web build.
+cmd/server/dist/*
+!cmd/server/dist/index.html
+*.exe
+.env
+.DS_Store
+node_modules/
+web/node_modules/
+web/dist/
