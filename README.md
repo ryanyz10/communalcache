@@ -3,6 +3,16 @@
 Mobile-first household sharing app: React + Go + Postgres (Supabase Auth/Storage),
 web push + Resend email, deployed on Fly.io.
 
+## Docs
+
+- **[docs/build-guide.md](docs/build-guide.md)** — phase-by-phase implementation guide:
+  build order, concepts, the traps worth slowing down for, and the check that proves
+  each phase. Start here.
+- **[docs/plan.md](docs/plan.md)** — the spec. Data model, per-route authorization,
+  delivery semantics, known tradeoffs.
+- **[AGENTS.md](AGENTS.md)** — invariants and conventions, read automatically by coding
+  agents.
+
 ## Status
 
 Scaffold only: schema migration, health/config endpoints, embed SPA shell,
