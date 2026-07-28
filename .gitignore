@@ -11,3 +11,4 @@ cmd/server/dist/*
 node_modules/
 web/node_modules/
 web/dist/
+.cursor/hooks/state/

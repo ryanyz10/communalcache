@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "bash .cursor/hooks/docs-record-edit.sh"
+      }
+    ],
+    "stop": [
+      {
+        "command": "bash .cursor/hooks/docs-check.sh",
+        "loop_limit": 3
+      }
+    ]
+  }
+}
