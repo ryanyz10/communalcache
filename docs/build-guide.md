@@ -38,7 +38,7 @@ export DATABASE_URL="$TEST_DATABASE_URL"
 Completion gates, run before calling any phase done:
 
 ```bash
-go test ./... && go vet ./... && gofmt -l . && (cd web && npx tsc --noEmit && npm run build)
+make test && make vet && test -z "$(gofmt -l .)" && (cd web && npx tsc --noEmit && npm run build)
 ```
 
 ---
@@ -61,10 +61,8 @@ go test ./... && go vet ./... && gofmt -l . && (cd web && npx tsc --noEmit && np
 
 Done in the skeleton/auth handoff: body-size + JSON decode helper (`decodeJSON`),
 shared error helper, SQL half of the Data API boundary test (ledger included),
-migration ledger moved into `app` with `002_ledger_hardening.sql`.
-
-Still operator-side: first Fly deploy + hosted PostgREST half via
-`make boundary-http` (see [deploy.md](deploy.md)).
+migration ledger moved into `app` with `002_ledger_hardening.sql`. First Fly
+deploy and hosted PostgREST half (`make boundary-http`) are done.
 
 ### Traps
 
@@ -84,9 +82,8 @@ Still operator-side: first Fly deploy + hosted PostgREST half via
   ledger itself used to live in `public` — that is the same hole. Keep it in `app`
   (bootstrap + `002_ledger_hardening.sql`); never recreate `public.schema_migrations`.
 - **`TEST_DATABASE_URL` must never point at the hosted project.** Local `go test`
-  suites insert and delete under concurrency. The hosted PostgREST check uses
-  `HOSTED_DATABASE_URL` on a read-only transaction and `make boundary-http`, not
-  `TEST_DATABASE_URL`.
+  suites insert and delete under concurrency. The hosted PostgREST check is
+  `make boundary-http` (HTTP only; uses `SUPABASE_URL` + anon key from `.env`).
 
 ### Proof
 
@@ -99,18 +96,18 @@ happily when three of them have quietly stopped working:
 - `relrowsecurity` is true on each
 - `relforcerowsecurity` is **false** on each
 
-Enumerate tables from `information_schema` rather than hardcoding a list, so a
-table added later without RLS fails here instead of slipping through. The harness
-must `CREATE ROLE anon` and `CREATE ROLE authenticated` before migrating —
-vanilla Postgres has neither, and `REVOKE` fails without them. `001_init.sql`
-creates them if absent.
+Enumerate tables from `information_schema` and compare against
+`dbtest.ExpectedAppTables`, so a table added later without RLS fails here instead
+of slipping through. The harness must `CREATE ROLE anon` and
+`CREATE ROLE authenticated` before migrating — vanilla Postgres has neither, and
+`REVOKE` fails without them. `001_init.sql` creates them if absent.
 
 **HTTP half** (`make boundary-http`, build tag `hosted`): occasional **operator
-smoke**, not CI. Hits PostgREST with the legacy JWT anon key and a real signed-in
-token + `Accept-Profile: app`. Proves the Data API / gateway layer that SQL
-`SET ROLE` cannot. Use the anon key from `GET /api/config` (`eyJ…`, not
-`sb_publishable_…`). Accepted denials include `503`/`PGRST002` when the Data API
-is off; any 2xx is a failure. Never point `TEST_DATABASE_URL` at the hosted DB.
+smoke**, not CI. Hits PostgREST with the legacy JWT anon key +
+`Accept-Profile: app` for each name in `dbtest.ExpectedAppTables`. Proves the
+Data API / gateway layer that SQL `SET ROLE` cannot. Needs only `SUPABASE_URL`
+and `SUPABASE_ANON_KEY` from `.env` (`eyJ…`, not `sb_publishable_…`). Accepted
+denials include `503`/`PGRST002` when the Data API is off; any 2xx is a failure.
 
 ---
 
@@ -137,7 +134,7 @@ is off; any 2xx is a failure. Never point `TEST_DATABASE_URL` at the hosted DB.
    login with explicit `emailRedirectTo` → onboarding from null `display_name` on
    `GET /api/me` → `/join/:token` stash. Vite proxies `/api` to Go.~~
 
-Operator remaining: Resend as Supabase custom SMTP; asymmetric JWT keys; Site URL;
+Operator setup done: Resend as Supabase custom SMTP; asymmetric JWT keys; Site URL;
 redirect wildcards `{APP_BASE_URL}/join/*` and `http://localhost:5173/**`; deploy +
 smoke.
 

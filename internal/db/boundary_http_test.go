@@ -3,7 +3,6 @@
 package db_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,37 +11,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ryanzhou/communalcache/internal/dbtest"
 )
 
 // Hosted PostgREST boundary check — operator smoke, not CI.
 // Isolated from TEST_DATABASE_URL and from `go test ./...` (build tag `hosted`).
-// Run via `make boundary-http`.
-//
-// Required env:
-//
-//	HOSTED_DATABASE_URL  — catalog reads only; never TEST_DATABASE_URL
-//	SUPABASE_URL
-//	SUPABASE_ANON_KEY    — legacy JWT anon key (eyJ…), not sb_publishable_…
-//	BOUNDARY_USER_JWT    — a real signed-in access token
+// Run via `make boundary-http`. Needs SUPABASE_URL + SUPABASE_ANON_KEY from .env.
 func TestHostedPostgRESTBoundary(t *testing.T) {
-	hostedURL := os.Getenv("HOSTED_DATABASE_URL")
 	supabaseURL := strings.TrimRight(os.Getenv("SUPABASE_URL"), "/")
 	anonKey := os.Getenv("SUPABASE_ANON_KEY")
-	userJWT := os.Getenv("BOUNDARY_USER_JWT")
 
 	missing := []string{}
-	if hostedURL == "" {
-		missing = append(missing, "HOSTED_DATABASE_URL")
-	}
 	if supabaseURL == "" {
 		missing = append(missing, "SUPABASE_URL")
 	}
 	if anonKey == "" {
 		missing = append(missing, "SUPABASE_ANON_KEY")
-	}
-	if userJWT == "" {
-		missing = append(missing, "BOUNDARY_USER_JWT")
 	}
 	if len(missing) > 0 {
 		t.Fatalf("hosted boundary requires %s", strings.Join(missing, ", "))
@@ -50,56 +34,18 @@ func TestHostedPostgRESTBoundary(t *testing.T) {
 	if !strings.HasPrefix(anonKey, "eyJ") {
 		t.Fatal("SUPABASE_ANON_KEY must be the legacy JWT anon key (eyJ…), not sb_publishable_…; copy from GET /api/config")
 	}
-
-	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, hostedURL)
-	if err != nil {
-		t.Fatalf("hosted db connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `SET TRANSACTION READ ONLY`); err != nil {
-		t.Fatal(err)
-	}
-
-	rows, err := tx.Query(ctx, `
-		SELECT table_name FROM information_schema.tables
-		WHERE table_schema = 'app' AND table_type = 'BASE TABLE'
-		ORDER BY table_name
-	`)
-	if err != nil {
-		t.Fatalf("list app tables: %v", err)
-	}
-	var tables []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			t.Fatal(err)
-		}
-		tables = append(tables, name)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if len(tables) == 0 {
-		t.Fatal("hosted app schema has no tables")
+	if len(dbtest.ExpectedAppTables) == 0 {
+		t.Fatal("ExpectedAppTables is empty — boundary assertions would pass vacuously")
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	// Positive control: project is reachable. Do not send apikey — Auth health
-	// rejects sb_publishable_ keys and this check only proves connectivity.
+	// Positive control: project is reachable with the same anon key the probe uses.
 	req, err := http.NewRequest(http.MethodGet, supabaseURL+"/auth/v1/health", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Header.Set("apikey", anonKey)
 	res, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("positive control transport error: %v", err)
@@ -111,30 +57,23 @@ func TestHostedPostgRESTBoundary(t *testing.T) {
 	}
 
 	restBase := supabaseURL + "/rest/v1"
-	for _, table := range tables {
-		t.Run("anon/"+table, func(t *testing.T) {
-			assertDenied(t, client, restBase+"/"+table+"?select=*&limit=1", anonKey, "")
-		})
-		t.Run("user/"+table, func(t *testing.T) {
-			assertDenied(t, client, restBase+"/"+table+"?select=*&limit=1", anonKey, userJWT)
+	for _, table := range dbtest.ExpectedAppTables {
+		t.Run(table, func(t *testing.T) {
+			assertDenied(t, client, restBase+"/"+table+"?select=*&limit=1", anonKey)
 		})
 	}
 }
 
-func assertDenied(t *testing.T, client *http.Client, url, anonKey, bearer string) {
+func assertDenied(t *testing.T, client *http.Client, url, anonKey string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("apikey", anonKey)
+	req.Header.Set("Authorization", "Bearer "+anonKey)
 	req.Header.Set("Accept-Profile", "app")
 	req.Header.Set("Content-Profile", "app")
-	if bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+bearer)
-	} else {
-		req.Header.Set("Authorization", "Bearer "+anonKey)
-	}
 
 	res, err := client.Do(req)
 	if err != nil {

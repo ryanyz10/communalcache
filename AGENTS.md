@@ -71,6 +71,15 @@ justified in the docs; do not "simplify" them away.
 - Intentional simplifications get a `ponytail:` comment naming the ceiling and the
   upgrade path.
 - Comments explain constraints the code cannot show. Not what the next line does.
+- **Keep it simple enough to read cold.** Follow the boring best practice over the
+  clever one. Never build abstractions, interfaces, or harnesses ahead of need —
+  every layer you add is one a new reader has to load before they can change
+  anything. Someone should be able to open a file and understand what it does and
+  why, without cross-referencing three other files or reconstructing indirections.
+  If a simpler shape does the job — a list instead of a live query, one function
+  instead of two layers of wiring — the simpler shape is correct. Deleting code
+  beats adding it. When something genuinely needs the complexity, the comment says
+  why; otherwise complexity is a defect.
 - Non-trivial logic leaves one runnable check behind. Concurrency, constraint, and
   migration tests run against real Postgres from `TEST_DATABASE_URL`, never a mock.
 - One commit per branch or PR; amend rather than stacking commits.
@@ -78,33 +87,35 @@ justified in the docs; do not "simplify" them away.
 ## Commands
 
 ```bash
-go test ./... && go vet ./... && gofmt -l .      # backend gates
+make test && make vet && test -z "$(gofmt -l .)"  # backend gates (Make loads .env)
 cd web && npx tsc --noEmit && npm run build      # frontend gates
 make web-build                                   # build SPA into cmd/server/dist
-go run ./cmd/server                              # needs DATABASE_URL, SUPABASE_URL,
-                                                 # SUPABASE_ANON_KEY, APP_BASE_URL
-make boundary-http                               # hosted PostgREST; not go test ./...
+make dev                                         # go run ./cmd/server via .env
+make boundary-http                               # hosted PostgREST; not make test
 
 docker run -d --name cc-pg -p 5432:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=communalcache postgres:16
 ```
+
+Put `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `APP_BASE_URL` (and
+later Phase 4/6 vars) in a gitignored `.env`; the Makefile `-include`s it.
+A bare `go test ./...` does **not** load `.env`.
 
 Test harness must `CREATE ROLE anon` and `CREATE ROLE authenticated` before migrating —
 vanilla Postgres lacks both, and the `REVOKE` in migration 001 fails without them.
 
 ## Current state
 
-Phases 1–2 are implemented on branch `skeleton-auth-handoff` (agent-authored plumbing
-for this session; Phase 3+ is hand implementation again):
+Phases 1–2 are on `master`, deployed at https://communalcache.fly.dev. Magic-link
+login and display-name onboarding verified locally and on Fly. Providers
+configured (Resend SMTP, Data API off, asymmetric JWT keys, Site URL + redirect
+wildcards). Hosted PostgREST boundary passes via `make boundary-http`.
 
 - **Phase 1:** migration runner with ledger in `app.schema_migrations` (+ `002`
-  hardening), body-size/JSON decode helper, shared error helper, SQL Data API
-  boundary test, `/api/healthz` + `/api/config`, SPA embed, Dockerfile, `fly.toml`.
-  Docs: `docs/database.md`, `docs/deploy.md`. Hosted PostgREST half is
-  `make boundary-http` (build tag `hosted`, never `TEST_DATABASE_URL`).
+  hardening), body-size/JSON decode helper, shared error helper, SQL + hosted
+  Data API boundary checks, `/api/healthz` + `/api/config`, SPA embed, Dockerfile,
+  `fly.toml`. Docs: `docs/database.md`, `docs/deploy.md`.
 - **Phase 2:** JWKS JWT validator, auth + `requireProfile`, `GET`/`PATCH /api/me`,
   minimal login/onboarding/`/join/:token` SPA with Vite `/api` proxy.
 
-**Next:** Phase 3 (caches). Confirm Resend SMTP, Supabase console (Data API off,
-asymmetric JWT keys, Site URL, redirect wildcards), and Fly deploy/smoke before
-calling the session fully closed.
+**Next:** Phase 3 (caches), by hand.

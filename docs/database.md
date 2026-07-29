@@ -18,25 +18,51 @@ deploying at once would both migrate. It also breaks pgx's prepared-statement
 cache. Session mode (or a direct connection) keeps one backend session for the
 life of the client connection, which is what the lock needs.
 
-Paste the URI into a local `.env` (gitignored) or into Fly secrets — never into
-the repo:
+Put connection strings in a local `.env` at the repo root (gitignored) or into
+Fly secrets — never into the repo. The Makefile does `-include .env` and
+exports every variable `internal/config` reads (plus the test-only ones), so
+**commands that need those vars must run through `make`** (`make dev`,
+`make test`, `make boundary-http`). A bare `go test ./...` does not load
+`.env` and will silently skip database tests when `TEST_DATABASE_URL` is
+unset.
 
-```bash
-export DATABASE_URL='postgres://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres'
+Make parses `.env` as makefile syntax, not as a shell script:
+
+- Prefer plain `KEY=value` lines. `export KEY=value` is also valid Make, but
+  unnecessary — the Makefile exports.
+- **Percent-encode reserved characters in passwords** (`@` → `%40`, `#` →
+  `%23`, etc.). Required for a valid URI (`net/url: invalid userinfo` is how
+  a literal `@` or `#` in the password crashed the first Fly deploy), and it
+  avoids Make treating `#` as a comment.
+- Shell quotes do **not** help: Make has no quote concept, so
+  `DATABASE_URL='postgres://...#x'` yields a value starting with a literal
+  `'` and truncated at `#`. Prefer `%23` over a backslash-escaped `\#`.
+- A literal `$` in a value must be written `$$` (single `$` starts a Make
+  variable reference).
+
+Example `.env` for local Docker Postgres (password needs no encoding):
+
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=...
+APP_BASE_URL=http://localhost:5173
 ```
 
-For local tests against Docker Postgres, use a separate URL and **never** point
-it at the hosted project:
+Hosted session-mode URI shape (password percent-encoded; port **5432**, never
+6543):
 
-```bash
-export TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable'
+```
+DATABASE_URL=postgres://postgres.<ref>:<encoded-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
 
-`TEST_DATABASE_URL` is what `go test` uses. Later phases insert and delete under
-concurrency. If that URL is your production database, those tests will mutate
-live data. The hosted Data API boundary check uses **`HOSTED_DATABASE_URL`** on a
-read-only transaction and runs only via `make boundary-http` — never as part of
-`go test ./...`.
+`TEST_DATABASE_URL` is what `make test` / `make migrate-check` use. Later
+phases insert and delete under concurrency. If that URL is your production
+database, those tests will mutate live data — **never** point it at the hosted
+project. The hosted Data API boundary check (`make boundary-http`) hits PostgREST
+over HTTP with the anon key from `.env` — never as part of `make test`, and never
+with a production database URL.
 
 ## What a connection pool is
 
@@ -56,8 +82,9 @@ connection for the whole run, and only then releases it.
 docker run -d --name cc-pg -p 5432:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=communalcache postgres:16
 
-export TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable'
-go test ./internal/db -count=1 -v
+# In .env (or export for one-off):
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
+make migrate-check
 ```
 
 Vanilla Postgres has no `anon` / `authenticated` roles — Supabase provisions

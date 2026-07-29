@@ -10,6 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ExpectedAppTables is every base table in schema app after migrations.
+// Shared by the local SQL boundary test and the hosted HTTP smoke so the
+// lists cannot drift; make test compares against information_schema.
+var ExpectedAppTables = []string{
+	"cache_members",
+	"caches",
+	"items",
+	"outbox",
+	"push_subscriptions",
+	"requests",
+	"schema_migrations",
+	"users",
+}
+
 // testDBLock is distinct from the migration lock in migrate.go.
 const testDBLock int64 = 87201402
 
