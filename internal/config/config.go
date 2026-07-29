@@ -31,8 +31,17 @@ func Load() (Config, error) {
 		AppBaseURL:             os.Getenv("APP_BASE_URL"),
 		ListenAddr:             envOr("LISTEN_ADDR", ":8080"),
 	}
-	if c.DatabaseURL == "" {
-		return c, fmt.Errorf("DATABASE_URL is required")
+	for _, check := range []struct {
+		name, val string
+	}{
+		{"DATABASE_URL", c.DatabaseURL},
+		{"SUPABASE_URL", c.SupabaseURL},
+		{"SUPABASE_ANON_KEY", c.SupabaseAnonKey},
+		{"APP_BASE_URL", c.AppBaseURL},
+	} {
+		if check.val == "" {
+			return c, fmt.Errorf("%s is required", check.name)
+		}
 	}
 	return c, nil
 }

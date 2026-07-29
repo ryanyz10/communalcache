@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ryanzhou/communalcache/internal/api"
+	"github.com/ryanzhou/communalcache/internal/auth"
 	"github.com/ryanzhou/communalcache/internal/config"
 	"github.com/ryanzhou/communalcache/internal/db"
 )
@@ -32,10 +33,14 @@ func main() {
 		log.Fatalf("migrate: %v", err)
 	}
 
-	apiSrv := &api.Server{Cfg: cfg}
+	validator, err := auth.NewValidator(ctx, cfg.SupabaseURL)
+	if err != nil {
+		log.Fatalf("auth: %v", err)
+	}
+
+	apiSrv := &api.Server{Cfg: cfg, Pool: pool, Auth: validator}
 	mux := http.NewServeMux()
 	mux.Handle("/", apiSrv.Routes())
-	// SPA fallback for non-API routes is layered in withSPA.
 	handler := withSPA(mux)
 
 	httpSrv := &http.Server{
