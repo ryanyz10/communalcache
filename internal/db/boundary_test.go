@@ -10,17 +10,6 @@ import (
 	"github.com/ryanzhou/communalcache/internal/dbtest"
 )
 
-var expectedAppTables = []string{
-	"cache_members",
-	"caches",
-	"items",
-	"outbox",
-	"push_subscriptions",
-	"requests",
-	"schema_migrations",
-	"users",
-}
-
 func appTables(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT table_name FROM information_schema.tables
@@ -56,13 +45,13 @@ func TestDataAPIBoundaryLayers(t *testing.T) {
 	if len(tables) == 0 {
 		t.Fatal("app schema has no tables — boundary assertions would pass vacuously")
 	}
-	for _, want := range expectedAppTables {
+	for _, want := range dbtest.ExpectedAppTables {
 		if !slices.Contains(tables, want) {
 			t.Errorf("missing expected app table %q (got %v)", want, tables)
 		}
 	}
-	if len(tables) != len(expectedAppTables) {
-		t.Errorf("app tables = %v, want exactly %v", tables, expectedAppTables)
+	if len(tables) != len(dbtest.ExpectedAppTables) {
+		t.Errorf("app tables = %v, want exactly %v", tables, dbtest.ExpectedAppTables)
 	}
 
 	var publicOurs int
@@ -70,7 +59,7 @@ func TestDataAPIBoundaryLayers(t *testing.T) {
 		SELECT count(*) FROM information_schema.tables
 		WHERE table_schema = 'public'
 		  AND table_name = ANY($1)
-	`, expectedAppTables).Scan(&publicOurs); err != nil {
+	`, dbtest.ExpectedAppTables).Scan(&publicOurs); err != nil {
 		t.Fatal(err)
 	}
 	if publicOurs != 0 {

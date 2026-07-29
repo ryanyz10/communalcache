@@ -19,9 +19,11 @@ web push + Resend email, deployed on Fly.io.
 
 ## Status
 
-Phases 1–2 done: schema + migration ledger in `app`, health/config, JWT auth,
-`GET`/`PATCH /api/me`, magic-link login and display-name onboarding UI. Next is
-Phase 3 (caches). See [docs/build-guide.md](docs/build-guide.md).
+Phases 1–2 done and deployed (https://communalcache.fly.dev): schema + migration
+ledger in `app`, health/config, JWT auth, `GET`/`PATCH /api/me`, magic-link login
+and display-name onboarding (verified locally and on Fly). Providers configured;
+hosted PostgREST boundary passes. Next is Phase 3 (caches), by hand. See
+[docs/build-guide.md](docs/build-guide.md).
 
 ## Layout
 
@@ -40,16 +42,21 @@ web/                 Vite + React + TypeScript SPA (Tailwind, react-router, TanS
 
 ## Local
 
-```bash
-# Postgres (session mode / direct — not Supavisor transaction port 6543)
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
-export TEST_DATABASE_URL="$DATABASE_URL"
-# Never point TEST_DATABASE_URL at the hosted Supabase project.
-export SUPABASE_URL=https://xxxx.supabase.co
-export SUPABASE_ANON_KEY=...
-export APP_BASE_URL=http://localhost:5173
+Put vars in a gitignored `.env` at the repo root (Make loads them). Never point
+`TEST_DATABASE_URL` at the hosted Supabase project. Session mode / direct —
+not Supavisor transaction port 6543. See [docs/database.md](docs/database.md).
 
-go run ./cmd/server
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=...
+APP_BASE_URL=http://localhost:5173
+```
+
+```bash
+make test && make vet && test -z "$(gofmt -l .)"   # backend gates
+make dev                                          # :8080; needs .env
 # GET /api/healthz
 # GET /api/config  (includes app_base_url)
 
@@ -64,17 +71,18 @@ make web-build
 go build -o bin/communalcache ./cmd/server
 ```
 
-Hosted PostgREST boundary (separate from `go test ./...`):
+Hosted PostgREST boundary (separate from `make test`):
 
 ```bash
 make boundary-http
-# needs HOSTED_DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY BOUNDARY_USER_JWT
+# needs SUPABASE_URL + SUPABASE_ANON_KEY from .env
 ```
 
 ## Deploy
 
 See [docs/deploy.md](docs/deploy.md). Phase 2 secrets: `DATABASE_URL`,
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `APP_BASE_URL`.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `APP_BASE_URL` (stdin import — never on
+argv). Phase 4 adds `SUPABASE_SERVICE_ROLE_KEY`.
 
 Later: `RESEND_API_KEY`, `EMAIL_FROM`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`.
 

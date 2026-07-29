@@ -1,10 +1,20 @@
-.PHONY: test vet web-build docker-build migrate-check boundary-http
+# Local dev env (gitignored). Leading dash: absent in CI and on fresh clones.
+-include .env
+export DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY
+export RESEND_API_KEY EMAIL_FROM VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY
+export APP_BASE_URL LISTEN_ADDR
+export TEST_DATABASE_URL
+
+.PHONY: test vet dev web-build docker-build migrate-check boundary-http
 
 test:
 	go test ./...
 
 vet:
 	go vet ./...
+
+dev:
+	go run ./cmd/server
 
 web-install:
 	cd web && npm ci
@@ -22,10 +32,8 @@ migrate-check:
 	go test ./internal/db -count=1 -v
 
 # Hosted PostgREST boundary. Never uses TEST_DATABASE_URL.
-# Requires: HOSTED_DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY BOUNDARY_USER_JWT
+# Requires: SUPABASE_URL SUPABASE_ANON_KEY (from .env).
 boundary-http:
-	@test -n "$$HOSTED_DATABASE_URL" || (echo "HOSTED_DATABASE_URL required" && exit 1)
 	@test -n "$$SUPABASE_URL" || (echo "SUPABASE_URL required" && exit 1)
 	@test -n "$$SUPABASE_ANON_KEY" || (echo "SUPABASE_ANON_KEY required" && exit 1)
-	@test -n "$$BOUNDARY_USER_JWT" || (echo "BOUNDARY_USER_JWT required" && exit 1)
 	go test -tags=hosted ./internal/db -count=1 -run TestHostedPostgRESTBoundary -v

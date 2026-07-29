@@ -54,29 +54,39 @@ Confirm the app name in [`fly.toml`](../fly.toml) matches your Fly app
 ## Secrets vs `[env]`
 
 `[env]` in `fly.toml` is plain config checked into git (`LISTEN_ADDR`). Secrets
-are set once on the app and never appear in the repo:
+are set once on the app and never appear in the repo.
+
+**Do not put secret values on a `fly secrets set` command line.** Anything on
+argv is recorded in shell history and visible to other processes via `ps` —
+that is how a database password leaked in an earlier session. Non-secret
+config may go through a heredoc into `fly secrets import`; every actual secret
+is read silently and piped on stdin.
+
+Phase 2 — needed for login (`DATABASE_URL` session mode / direct, never port
+6543 — see [database.md](database.md)):
 
 ```bash
-# Phase 2 — needed for login
-fly secrets set \
-  DATABASE_URL='...' \
-  SUPABASE_URL='https://xxxx.supabase.co' \
-  SUPABASE_ANON_KEY='...' \
-  SUPABASE_SERVICE_ROLE_KEY='...' \
-  APP_BASE_URL='https://communalcache.fly.dev'
+# Non-secrets via heredoc (safe to type / paste into the script).
+fly secrets import -a communalcache <<'EOF'
+SUPABASE_URL=https://xxxx.supabase.co
+APP_BASE_URL=https://communalcache.fly.dev
+EOF
 
-# Phase 4 — photos (set when you get there)
-# SUPABASE_SERVICE_ROLE_KEY is already above
+# Secrets via silent read → stdin. Subshell discards values even on failure.
+( read -rs 'anon?SUPABASE_ANON_KEY: '; echo
+  printf 'SUPABASE_ANON_KEY=%s\n' "$anon" | fly secrets import -a communalcache )
 
-# Phase 6 — notifications
-# RESEND_API_KEY='...'
-# EMAIL_FROM='cache@yourdomain.com'
-# VAPID_PUBLIC_KEY='...'
-# VAPID_PRIVATE_KEY='...'
+( read -rs 'pw?DB password: '; echo
+  enc=$(printf '%s' "$pw" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')
+  printf 'DATABASE_URL=postgresql://postgres.<ref>:%s@aws-0-<region>.pooler.supabase.com:5432/postgres\n' "$enc" \
+    | fly secrets import -a communalcache )
+
+# Phase 4 — photos (when you get there): same stdin pattern for
+# SUPABASE_SERVICE_ROLE_KEY.
+
+# Phase 6 — notifications: RESEND_API_KEY, EMAIL_FROM, VAPID_PUBLIC_KEY,
+# VAPID_PRIVATE_KEY — same stdin pattern; never inline on argv.
 ```
-
-`DATABASE_URL` must be session mode or direct — not port 6543. See
-[database.md](database.md).
 
 ## What the Dockerfile does
 
@@ -115,22 +125,19 @@ and `app_base_url`. It must **never** return the service role key.
 ## Hosted Data API boundary (operator smoke, not CI)
 
 Occasional check that PostgREST cannot read `app` tables over HTTP. It is **not**
-part of `go test ./...` (build tag `hosted`). Local SQL boundary tests cover
+part of `make test` (build tag `hosted`). Local SQL boundary tests cover
 grants/RLS; this probe covers the gateway / Data API console setting.
 
-After you have a real signed-in JWT and the Data API setting is settled:
+Needs only `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `.env` (both public —
+the anon key is served to every browser from `/api/config`):
 
 ```bash
-export HOSTED_DATABASE_URL='...'   # session/direct URI — NOT TEST_DATABASE_URL
-export SUPABASE_URL='https://xxxx.supabase.co'
-# Legacy JWT anon key (eyJ…), not sb_publishable_… — easiest from the live app:
-export SUPABASE_ANON_KEY="$(curl -sS https://communalcache.fly.dev/api/config | jq -r .supabase_anon_key)"
-export BOUNDARY_USER_JWT='...'     # access_token from a signed-in session
 make boundary-http
 ```
 
-Accepted denials include 404, 401/403, `PGRST106`, SQLSTATE `42501`, and
-`503`/`PGRST002` (Data API off / schema cache unusable). Any **2xx** is a failure.
+Use the legacy JWT anon key (`eyJ…`), not `sb_publishable_…`. Accepted denials
+include 404, 401/403, `PGRST106`, SQLSTATE `42501`, and `503`/`PGRST002` (Data
+API off / schema cache unusable). Any **2xx** is a failure.
 
 ## Rolling deploys and migrations
 
