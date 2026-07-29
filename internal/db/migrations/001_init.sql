@@ -4,10 +4,8 @@ CREATE SCHEMA IF NOT EXISTS app;
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "citext";
 
-CREATE TABLE IF NOT EXISTS public.schema_migrations (
-    filename text PRIMARY KEY,
-    applied_at timestamptz NOT NULL DEFAULT now()
-);
+-- schema_migrations lives in app and is created by the migration runner bootstrap,
+-- never here — a public ledger would sit in the schema PostgREST exposes to anon.
 
 CREATE TABLE app.users (
     id uuid PRIMARY KEY,

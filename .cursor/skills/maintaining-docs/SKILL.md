@@ -20,6 +20,8 @@ restructuring and wait for approval.
 | `README.md`           | `Status`, `Layout`, local run steps, deploy secrets list |
 | `docs/build-guide.md` | Phase order, concepts, traps, proofs                     |
 | `docs/plan.md`        | **Frozen. Never edit. Never split.**                     |
+| `docs/database.md`    | Postgres connection, session vs transaction mode, local test DB, migration ledger |
+| `docs/deploy.md`      | Fly deploy, secrets, one-time Supabase/Resend provider setup, rollback |
 
 Phase 1 in the build guide uses `Already scaffolded` / `Left to do`. Phases 2–8
 use `Build order`. "Mark the phase item done" means different edits in different

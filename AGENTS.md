@@ -65,7 +65,9 @@ justified in the docs; do not "simplify" them away.
   `internal/db` so authorization has one auditable chokepoint.
 - **No new dependencies without a reason** that survives "does stdlib or an installed
   dep already do this?" Current justified exceptions: `pgx`, `jwx` (never hand-roll
-  crypto), `webpush-go` (RFC 8291 encryption).
+  crypto), `webpush-go` (RFC 8291 encryption), `@supabase/supabase-js` (Auth client),
+  `react-router` (SPA routes), `@tanstack/react-query` (server state), Tailwind via
+  `@tailwindcss/vite` (CSS).
 - Intentional simplifications get a `ponytail:` comment naming the ceiling and the
   upgrade path.
 - Comments explain constraints the code cannot show. Not what the next line does.
@@ -79,7 +81,9 @@ justified in the docs; do not "simplify" them away.
 go test ./... && go vet ./... && gofmt -l .      # backend gates
 cd web && npx tsc --noEmit && npm run build      # frontend gates
 make web-build                                   # build SPA into cmd/server/dist
-go run ./cmd/server                              # needs DATABASE_URL
+go run ./cmd/server                              # needs DATABASE_URL, SUPABASE_URL,
+                                                 # SUPABASE_ANON_KEY, APP_BASE_URL
+make boundary-http                               # hosted PostgREST; not go test ./...
 
 docker run -d --name cc-pg -p 5432:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=communalcache postgres:16
@@ -90,7 +94,17 @@ vanilla Postgres lacks both, and the `REVOKE` in migration 001 fails without the
 
 ## Current state
 
-Phase 1 (skeleton) is scaffolded: migration runner, schema, `/api/healthz`,
-`/api/config`, SPA embed, Dockerfile, `fly.toml`. Still open in phase 1: body-size and
-JSON middleware, the shared error helper, the Data API boundary test, and a first Fly
-deploy. Phases 2–8 are untouched.
+Phases 1–2 are implemented on branch `skeleton-auth-handoff` (agent-authored plumbing
+for this session; Phase 3+ is hand implementation again):
+
+- **Phase 1:** migration runner with ledger in `app.schema_migrations` (+ `002`
+  hardening), body-size/JSON decode helper, shared error helper, SQL Data API
+  boundary test, `/api/healthz` + `/api/config`, SPA embed, Dockerfile, `fly.toml`.
+  Docs: `docs/database.md`, `docs/deploy.md`. Hosted PostgREST half is
+  `make boundary-http` (build tag `hosted`, never `TEST_DATABASE_URL`).
+- **Phase 2:** JWKS JWT validator, auth + `requireProfile`, `GET`/`PATCH /api/me`,
+  minimal login/onboarding/`/join/:token` SPA with Vite `/api` proxy.
+
+**Next:** Phase 3 (caches). Confirm Resend SMTP, Supabase console (Data API off,
+asymmetric JWT keys, Site URL, redirect wildcards), and Fly deploy/smoke before
+calling the session fully closed.

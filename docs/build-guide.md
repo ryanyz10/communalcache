@@ -59,14 +59,12 @@ go test ./... && go vet ./... && gofmt -l . && (cd web && npx tsc --noEmit && np
 
 ### Left to do
 
-1. **Body-size and JSON middleware.** Wrap write routes in `http.MaxBytesReader`:
-   16KB for JSON, 5MB for photo uploads. Decode with `DisallowUnknownFields` so a
-   typo'd field is a 400 rather than a silent no-op.
-2. **A shared error helper.** One place that writes `{"error": "code"}` with a status.
-   Every handler will use it; retrofitting is annoying.
-3. **The Data API boundary test.** See Proof below. This is the highest-value test in
-   the codebase.
-4. **Deploy to Fly** to prove the pipeline before feature code exists.
+Done in the skeleton/auth handoff: body-size + JSON decode helper (`decodeJSON`),
+shared error helper, SQL half of the Data API boundary test (ledger included),
+migration ledger moved into `app` with `002_ledger_hardening.sql`.
+
+Still operator-side: first Fly deploy + hosted PostgREST half via
+`make boundary-http` (see [deploy.md](deploy.md)).
 
 ### Traps
 
@@ -82,28 +80,37 @@ go test ./... && go vet ./... && gofmt -l . && (cd web && npx tsc --noEmit && np
   exemption and locks the application out through its own wall.
 - **Tables live in `app`, never `public`.** Supabase serves a PostgREST Data API over
   `public` using the anon key, which this app hands to every browser from
-  `/api/config`. A table in `public` with RLS off is world-readable.
+  `/api/config`. A table in `public` with RLS off is world-readable. The migration
+  ledger itself used to live in `public` — that is the same hole. Keep it in `app`
+  (bootstrap + `002_ledger_hardening.sql`); never recreate `public.schema_migrations`.
+- **`TEST_DATABASE_URL` must never point at the hosted project.** Local `go test`
+  suites insert and delete under concurrency. The hosted PostgREST check uses
+  `HOSTED_DATABASE_URL` on a read-only transaction and `make boundary-http`, not
+  `TEST_DATABASE_URL`.
 
 ### Proof
 
-The boundary test must go **over HTTP against PostgREST** with a real anon key, not via
-`SET ROLE` in a database session — role switching exercises grants while proving
-nothing about the exposed-schemas config or the API gateway in front of it. Enumerate
-tables from `information_schema` rather than hardcoding a list, so a table added later
-without RLS fails the test instead of slipping through.
-
-Then assert the four layers _independently_, because an end-to-end "anon gets nothing"
-check passes just as happily when three of them have quietly stopped working:
+**SQL half** (`go test` + `TEST_DATABASE_URL`): assert the four layers
+_independently_, because an end-to-end "anon gets nothing" check passes just as
+happily when three of them have quietly stopped working:
 
 - `has_schema_privilege('anon', 'app', 'USAGE')` is false
 - `pg_policies` is empty for every `app` table
 - `relrowsecurity` is true on each
 - `relforcerowsecurity` is **false** on each
 
-The test harness must `CREATE ROLE anon` and `CREATE ROLE authenticated` before
-migrating. Vanilla Postgres has neither — they exist only because Supabase provisions
-them — and `REVOKE ALL ON SCHEMA app FROM anon` errors outright on a missing role.
-`001_init.sql` creates them if absent, so local migration works today; keep that.
+Enumerate tables from `information_schema` rather than hardcoding a list, so a
+table added later without RLS fails here instead of slipping through. The harness
+must `CREATE ROLE anon` and `CREATE ROLE authenticated` before migrating —
+vanilla Postgres has neither, and `REVOKE` fails without them. `001_init.sql`
+creates them if absent.
+
+**HTTP half** (`make boundary-http`, build tag `hosted`): occasional **operator
+smoke**, not CI. Hits PostgREST with the legacy JWT anon key and a real signed-in
+token + `Accept-Profile: app`. Proves the Data API / gateway layer that SQL
+`SET ROLE` cannot. Use the anon key from `GET /api/config` (`eyJ…`, not
+`sb_publishable_…`). Accepted denials include `503`/`PGRST002` when the Data API
+is off; any 2xx is a failure. Never point `TEST_DATABASE_URL` at the hosted DB.
 
 ---
 
@@ -121,14 +128,18 @@ them — and `REVOKE ALL ON SCHEMA app FROM anon` errors outright on a missing r
 
 ### Build order
 
-1. `internal/auth` — a validator holding a cached JWKS fetcher. Validate signature,
-   then `iss` == `{SUPABASE_URL}/auth/v1`, `aud` == `authenticated`, and `exp`.
-2. Middleware that extracts the bearer token, validates it, upserts the `app.users`
-   row from `sub` + `email`, and puts the user on the request context.
-3. `requireProfile` middleware — 409 `profile_incomplete` when `display_name IS NULL`.
-4. `GET /api/me`, `PATCH /api/me`.
-5. Frontend: `/api/config` fetch → `supabase-js` client → magic-link login screen →
-   display-name onboarding screen driven by the 409.
+1. ~~`internal/auth` — cached JWKS validator (`iss`/`aud`/`exp`, ES256/RS256 allowlist,
+   rate-limited unknown-`kid` refresh).~~
+2. ~~Auth middleware upserts `app.users` without clobbering `display_name`;
+   `requireProfile` applied only to cache/item/request mutations.~~
+3. ~~`GET /api/me`, `PATCH /api/me`.~~
+4. ~~Frontend: runtime `/api/config` (incl. `app_base_url`) → supabase-js → magic-link
+   login with explicit `emailRedirectTo` → onboarding from null `display_name` on
+   `GET /api/me` → `/join/:token` stash. Vite proxies `/api` to Go.~~
+
+Operator remaining: Resend as Supabase custom SMTP; asymmetric JWT keys; Site URL;
+redirect wildcards `{APP_BASE_URL}/join/*` and `http://localhost:5173/**`; deploy +
+smoke.
 
 ### Traps
 

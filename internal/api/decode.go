@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 )
 
@@ -14,15 +15,27 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	dec.DisallowUnknownFields()
 
 	if err := dec.Decode(dst); err != nil {
-		var maxBytes *http.MaxBytesError
-		if errors.As(err, &maxBytes) {
-			writeError(w, http.StatusRequestEntityTooLarge, "body_too_large")
-			return false
-		}
-
-		writeError(w, http.StatusBadRequest, "invalid_json")
+		writeDecodeError(w, err)
 		return false
 	}
-
+	// Reject trailing content so MaxBytesReader still bounds the whole body,
+	// and a second JSON value is a 400 rather than a silent no-op.
+	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			writeError(w, http.StatusBadRequest, "invalid_json")
+			return false
+		}
+		writeDecodeError(w, err)
+		return false
+	}
 	return true
+}
+
+func writeDecodeError(w http.ResponseWriter, err error) {
+	var maxBytes *http.MaxBytesError
+	if errors.As(err, &maxBytes) {
+		writeError(w, http.StatusRequestEntityTooLarge, "body_too_large")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid_json")
 }
