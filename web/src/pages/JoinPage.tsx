@@ -19,7 +19,7 @@ export function JoinPage() {
       navigate('/login', { replace: true })
       return
     }
-    // Join API is Phase 3; keep the token stashed so that work can resume.
+    // Joining ships in Feature 2; preserve the token until then.
     navigate('/', { replace: true })
   }, [ready, session, navigate])
 

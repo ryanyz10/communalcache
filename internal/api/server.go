@@ -22,6 +22,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/config", s.publicConfig)
 	mux.HandleFunc("GET /api/me", s.requireAuth(s.getMe))
 	mux.HandleFunc("PATCH /api/me", s.requireAuth(s.patchMe))
+	mux.HandleFunc("POST /api/caches", s.requireProfile(s.createCache))
+	mux.HandleFunc("GET /api/caches", s.requireAuth(s.listCaches))
+	mux.HandleFunc("GET /api/caches/{id}", s.requireAuth(s.getCache))
+	mux.HandleFunc("PATCH /api/caches/{id}", s.requireProfile(s.patchCache))
+	mux.HandleFunc("POST /api/caches/{id}/invite/rotate", s.requireProfile(s.rotateCacheInvite))
 	return mux
 }
 

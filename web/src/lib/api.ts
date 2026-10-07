@@ -17,6 +17,18 @@ export type Me = {
   display_name: string | null
 }
 
+export type Cache = {
+  id: string
+  name: string
+  owner_id: string
+  invite_token: string
+  requires_approval: boolean
+}
+
+export type CacheDetail = Cache & {
+  members: { user_id: string; display_name: string | null }[]
+}
+
 type ApiOptions = {
   method?: string
   body?: unknown
