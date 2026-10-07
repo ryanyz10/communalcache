@@ -1,494 +1,480 @@
 # Build guide
 
-A phase-by-phase route through implementing Communal Cache by hand.
+Build Communal Cache feature by feature, one PR each, in this order. Each feature
+includes Worker/DO logic, its UI slice and tests. [plan.md](plan.md) is the settled
+spec; this guide names the scope, traps and check that proves the implementation.
 
-[docs/plan.md](plan.md) is the spec and the source of truth on _what_ to build. This
-file is about _how_ and _in what order_, plus the specific mistakes that are easy to
-make. It deliberately does not contain the implementation — it names the shape,
-the traps, and the check that proves each phase.
+Every feature ends deployable. Destructive endpoints come late because removal
+without cleanup and notifications is worse than not exposing removal yet.
 
-Each phase ends deployable. That is why the destructive endpoints come last: an
-intermediate deploy that can remove a member but cannot clean up after them is worse
-than one that cannot remove anyone.
-
-**The traps in each phase are not hypothetical.** Every one is a defect that a review
-pass caught in the plan before any code existed. They are the things worth slowing
-down for.
+The Go foundation and Caches/Joining PRs are references, not completed Cloudflare
+features. Port them before adding later features; retain their product behaviors
+and authorization tests, not their Postgres/Fly mechanisms.
 
 ## Before you start
 
-Concepts that show up throughout, worth being comfortable with:
+- **Worker bindings**: D1 is global; a cache DO's local SQLite owns authorization
+  and all cache data. R2/Queue/D1 calls are external I/O, not local transactions.
+- **`transactionSync`**: read, decide in JS, write and record intent synchronously;
+  throw rolls back. No await, async callback or cursor crossing an await.
+- **DO scheduling**: single-threaded does not mean one entire async handler at a
+  time. External awaits can interleave. Alarms retry automatically only six times;
+  pending work needs explicit re-arming and a recovery backstop.
+- **Discovery vs permission**: `my_caches` discovers the caller's home list and
+  requests fan-out; each DO still authorizes. Registry is for discovery/sweeps,
+  never an ownership or membership source.
+- **Cloudflare Vitest plugin**: real local Worker/D1/DO storage tests. Mock provider
+  HTTP, not SQL. `vitest-pool-workers` is deprecated; use `vitest-plugin`.
 
-- **Go 1.22+ `http.ServeMux` patterns** — `"GET /api/items/{id}"` with `r.PathValue("id")`.
-  No router library is needed or wanted.
-- **pgx v5** — `pgxpool.Pool` for normal work, `pool.Acquire` when you need a _session_
-  (advisory locks), `tx.Begin/Commit/Rollback` for transactions.
-- **Postgres row locking** — `FOR UPDATE`, `FOR SHARE`, `SKIP LOCKED`, and why
-  `READ COMMITTED` (the default) is what this app wants rather than `REPEATABLE READ`.
+### Completion gates
 
-Local Postgres for tests:
-
-```bash
-docker run -d --name cc-pg -p 5432:5432 \
-  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=communalcache postgres:16
-export TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/communalcache?sslmode=disable'
-export DATABASE_URL="$TEST_DATABASE_URL"
-```
-
-Completion gates, run before calling any phase done:
+Foundation adds the root Worker package/tooling and Wrangler configuration; these
+are **target commands**, not commands already supplied by this docs-only PR:
 
 ```bash
-make test && make vet && test -z "$(gofmt -l .)" && (cd web && npx tsc --noEmit && npm run build)
+npx --no-install tsc --noEmit
+npx --no-install vitest run
+(cd web && npx --no-install tsc --noEmit && npm run build)
+npx --no-install wrangler d1 migrations apply communalcache --local
+npx --no-install wrangler deploy --dry-run
 ```
 
+Also test empty D1 migrations and old→new DO schema versions in the suite; smoke
+local `/api/healthz`, `/api/config`, SPA deep links and API 404s under
+`wrangler dev`. It defaults to local storage; no `--remote` or production test
+bindings. No package install or account command is part of this docs change.
+
+For legacy Go-only reference validation, existing `make test`, `make vet`, gofmt
+and frontend commands still apply to that code. Do not mistake them for Worker/DO
+validation. Do not run legacy database tests against hosted Postgres.
+
+## Status
+
+Update a feature's row in its own PR. Implementation and review status are separate.
+
+| # | Feature | Cloudflare status | Reference PR |
+| --- | --- | --- | --- |
+| — | Foundation port | Not started; Go foundation live | — |
+| 1 | Caches | Port not started; Go implementation ready for review | [#2](https://github.com/ryanyz10/communalcache/pull/2) |
+| 2 | Joining | Port not started; Go implementation ready for review | [#3](https://github.com/ryanyz10/communalcache/pull/3) |
+| 3 | Items (no photos) | Not started | — |
+| 4 | Photos | Not started | — |
+| 5 | Requests | Not started | — |
+| 6 | Notifications + email | Not started | — |
+| 7 | Web push + PWA | Not started | — |
+| 8 | Member removal and item deletion | Not started | — |
+| 9 | Polish | Not started | — |
+
 ---
 
-## Phase 1 — Skeleton
+## Foundation port
 
-**Goal:** a deployable binary that migrates its own schema and serves the SPA.
+**Goal:** deployable Worker/SPA foundation with real local storage tests and no
+change to existing production services without explicit approval.
 
-### Already scaffolded
+### Scope
 
-- `cmd/server/main.go` — startup, migration call, SPA fallback, graceful shutdown
-- `cmd/server/embed.go` — `go:embed all:dist`
-- `internal/db/migrate.go` — advisory-locked migration runner
-- `internal/db/migrations/001_init.sql` — full schema, `app` schema, RLS deny-all
-- `internal/config/config.go` — env loading
-- `internal/api/server.go` — `/api/healthz`, `/api/config`
-- `Dockerfile`, `fly.toml`, `Makefile`, Vite app in `web/`
-
-### Left to do
-
-Done in the skeleton/auth handoff: body-size + JSON decode helper (`decodeJSON`),
-shared error helper, SQL half of the Data API boundary test (ledger included),
-migration ledger moved into `app` with `002_ledger_hardening.sql`. First Fly
-deploy and hosted PostgREST half (`make boundary-http`) are done.
+- TypeScript module Worker, plain dispatch, health/config, JSON/error/body helpers.
+- React build served by Workers static assets; `/api/*` runs Worker logic before
+  SPA fallback. Vite proxies API to local Wrangler development.
+- Better Auth 1.7.7 in the Worker under `/api/auth/*`, native D1 adapter and
+  nodejs_compat; six-digit email codes sent synchronously through Resend fetch.
+  D1 cookie sessions, persistent auth rate limits, `GET/PATCH /api/me`, nullable
+  app display-name onboarding and profile exemptions (including auth routes).
+- Reviewed hand-written auth SQL derived from pinned schema generation: user,
+  session, account, verification, rateLimit and additional display_name field.
+  Cookies HttpOnly/Secure/SameSite=Lax; exact trustedOrigins plus app-mutation
+  Origin checks. No passwords/admin/list-users or unused auth paths.
+- D1 global schema/migrations including outbox from the beginning. Local cache DO
+  schema includes config/members/items/requests/pending_sync, with versioned
+  constructor migration under `blockConcurrencyWhile`.
+- Vitest + `@cloudflare/vitest-plugin` harness; D1 migration setup, DO transaction,
+  schema/rollback and alarm helpers. No Postgres roles/RLS/lock harness in the port.
+- Document configuration, local `.dev.vars`, dry-run bundle and migration checks.
 
 ### Traps
 
-- **The advisory lock must be held on one dedicated connection**, not the pool.
-  Advisory locks are session-scoped; taken from a pool, the lock lands on a different
-  connection than the migrations and protects nothing. `migrate.go` already does this
-  via `pool.Acquire` — understand why before changing it.
-- **`DATABASE_URL` must be a direct connection or Supavisor _session_ mode.** Not port 6543. Transaction pooling multiplexes per transaction, which silently turns the
-  advisory lock into a no-op and breaks pgx's prepared statements.
-- **Never set `FORCE ROW LEVEL SECURITY`.** RLS is enabled with zero policies as a
-  deny-all wall against anything that reaches the tables. Go gets through because the
-  `DATABASE_URL` role _owns_ the tables and owners are exempt. `FORCE` removes that
-  exemption and locks the application out through its own wall.
-- **Tables live in `app`, never `public`.** Supabase serves a PostgREST Data API over
-  `public` using the anon key, which this app hands to every browser from
-  `/api/config`. A table in `public` with RLS off is world-readable. The migration
-  ledger itself used to live in `public` — that is the same hole. Keep it in `app`
-  (bootstrap + `002_ledger_hardening.sql`); never recreate `public.schema_migrations`.
-- **`TEST_DATABASE_URL` must never point at the hosted project.** Local `go test`
-  suites insert and delete under concurrency. The hosted PostgREST check is
-  `make boundary-http` (HTTP only; uses `SUPABASE_URL` + anon key from `.env`).
+- **No Data API/pooling invariants in the new store.** D1/DO bindings are not public
+  browser database credentials. Leave legacy Postgres protections intact until
+  approved retirement; this is not permission to change the old service.
+- **No await in local check-then-write.** Prove rollback on a thrown error now;
+  external D1/fetch calls can interleave other requests despite single-threaded JS.
+- **Schema migration runs before requests**, under constructor
+  `blockConcurrencyWhile`, with a version number; failed migration must not stamp
+  the new version. D1 migrations run through Wrangler, not on HTTP startup.
+- **Profile/auth exemptions and no email-derived names.** `PATCH /api/me`, push
+  and `/api/auth/*` are not gated; auth core name cannot bypass display-name setup.
+  App/auth responses expose only the caller's own email/session/user.
+- **Cookies need CSRF beyond the auth handler.** Exact production trustedOrigins;
+  reject missing/null/foreign Origin on app mutations. Cookie cache stays off;
+  logout/revocation uses D1. Development origins never become production wildcards.
+- **Hash OTPs and rotate resends.** Six digits/300 seconds/three attempts; hashed
+  storage cannot reuse the old code. Tell users to use the newest email.
+- **D1 rate-limit storage, not isolate memory.** Explicitly enabled in tests; prove
+  concurrent redemption/attempt limits and counters across Worker instances. Native
+  adapter support is not proof of every concurrency property.
+- **Only one signup flow.** Allow verified email-OTP signup, disable password,
+  reset/change-email and other unused paths/plugins. No admin/list-users.
+- **Invite stays on the page.** Stash cacheId/secret before requesting a code;
+  verify code, set display name and resume join POST body. Keep no-referrer; no
+  callback URL or auth-email copy of the join secret.
+- **Auth delivery is synchronous.** Await bounded Resend fetch from the auth
+  request, not Queue/waitUntil. communalcache.com sending-domain setup needs
+  approval; an auth-mail send failure must surface without losing the invite.
+- **API errors are not the SPA.** Test invalid API paths/auth failures as JSON;
+  use a compatibility date supporting RPC and the selected error serialization.
+- **The pending_sync/outbox tables exist before events.** Later delivery cannot
+  recover events that were never recorded.
 
 ### Proof
 
-**SQL half** (`go test` + `TEST_DATABASE_URL`): assert the four layers
-_independently_, because an end-to-end "anon gets nothing" check passes just as
-happily when three of them have quietly stopped working:
+Local empty D1/DO creation/version upgrades including auth schema; atomic rollback;
+OTP correctness/expiry/replay/three attempts/resend invalidation/hashed storage;
+concurrent auth-limit tests; tampered/expired/revoked cookies and flags; app/auth
+CSRF, disabled endpoints, profile exemptions and caller-only email. Resend failure/
+timeout is visible and independent of Queue. Health/config/deep links; logged-out
+invite → code on the same page → name → original POST. Domain/delivery smoke waits
+for approval; target URL is https://communalcache.com.
 
-- `has_schema_privilege('anon', 'app', 'USAGE')` is false
-- `pg_policies` is empty for every `app` table
-- `relrowsecurity` is true on each
-- `relforcerowsecurity` is **false** on each
-
-Enumerate tables from `information_schema` and compare against
-`dbtest.ExpectedAppTables`, so a table added later without RLS fails here instead
-of slipping through. The harness must `CREATE ROLE anon` and
-`CREATE ROLE authenticated` before migrating — vanilla Postgres has neither, and
-`REVOKE` fails without them. `001_init.sql` creates them if absent.
-
-**HTTP half** (`make boundary-http`, build tag `hosted`): occasional **operator
-smoke**, not CI. Hits PostgREST with the legacy JWT anon key +
-`Accept-Profile: app` for each name in `dbtest.ExpectedAppTables`. Proves the
-Data API / gateway layer that SQL `SET ROLE` cannot. Needs only `SUPABASE_URL`
-and `SUPABASE_ANON_KEY` from `.env` (`eyJ…`, not `sb_publishable_…`). Accepted
-denials include `503`/`PGRST002` when the Data API is off; any 2xx is a failure.
+**Planned auth follow-up:** magic-link plugin with hashed 300s tokens, exact-origin
+callbacks and a scanner-safe SPA Continue button; no verification on page load.
+One email containing link + code is the goal, but combined challenge coordination
+is UNVERIFIED and needs its own tests. SMS/phone plugin is deferred, not Foundation
+or Features 1–9; it needs an SMS provider, registration/compliance and pumping controls.
 
 ---
 
-## Phase 2 — Auth
+## Feature 1 — Caches
 
-**Goal:** a signed-in user with a display name.
+**Goal:** create a cache, open it immediately and share its invite link.
 
-### Concepts
+### Scope
 
-- **JWKS** — Supabase publishes public keys at
-  `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`. You validate signatures locally
-  against those keys; no network call per request once cached.
-- `github.com/lestrrat-go/jwx/v3` covers both JWS verification and a caching JWKS
-  fetcher. Do not hand-roll JWT parsing.
+- `POST /api/caches`: Worker creates UUID, calls DO `create(owner, name)`; one
+  transaction inserts config, active owner and registry/reverse-index intents.
+- `GET /api/caches`: caller's D1 discovery projection, not authorization.
+- `GET/PATCH /api/caches/{cacheId}`: authoritative DO detail/members/settings;
+  PATCH is owner-only. Include shareable `cacheId.secret` link for active members.
+- `POST /api/caches/{cacheId}/invite/rotate`: owner-only, 32 random bytes/base64url.
+- Ordered idempotent sync, re-arming alarm and registry Cron backstop. Notification
+  Queue delivery arrives later; durable intents must already survive.
 
-### Build order
-
-1. ~~`internal/auth` — cached JWKS validator (`iss`/`aud`/`exp`, ES256/RS256 allowlist,
-   rate-limited unknown-`kid` refresh).~~
-2. ~~Auth middleware upserts `app.users` without clobbering `display_name`;
-   `requireProfile` applied only to cache/item/request mutations.~~
-3. ~~`GET /api/me`, `PATCH /api/me`.~~
-4. ~~Frontend: runtime `/api/config` (incl. `app_base_url`) → supabase-js → magic-link
-   login with explicit `emailRedirectTo` → onboarding from null `display_name` on
-   `GET /api/me` → `/join/:token` stash. Vite proxies `/api` to Go.~~
-
-Operator setup done: Resend as Supabase custom SMTP; asymmetric JWT keys; Site URL;
-redirect wildcards `{APP_BASE_URL}/join/*` and `http://localhost:5173/**`; deploy +
-smoke.
+UI: dashboard/create; navigate straight to cache page on creation; cache shell,
+copy invite, member sheet and owner settings. No join/removal yet.
 
 ### Traps
 
-- **`requireProfile` must exempt `PATCH /api/me`** and the push subscription routes.
-  Setting a display name is itself a write; gating it leaves a new user with no way
-  out. This is a real deadlock, not a theoretical one.
-- **Do not default `display_name` to the email's local part.** It would leak a fragment
-  of everyone's email into the member list and pending queue, which contradicts the
-  privacy stance. `NULL` until the user picks one.
-- **Pin `alg` to an explicit allowlist** of exactly `ES256` and `RS256`, matched against
-  the JWK's own `alg`. Inferring from key type still admits weaker algorithms sharing
-  that type. Reject `none` and HS256-signed-with-the-public-key.
-- **Unknown `kid` should trigger one rate-limited JWKS refetch**, not a refetch per
-  request — otherwise key rotation becomes a DoS vector against your own server.
-- **Supabase's built-in email sender is rate-limited** to a handful per hour and is not
-  for production. Configure Resend as custom SMTP or magic links silently stop arriving.
-- **The invite token must survive the magic-link round trip.** A logged-out user tapping
-  an invite link is the _primary_ onboarding path. Stash the token in `sessionStorage`
-  and pass `emailRedirectTo = {APP_BASE_URL}/join/{token}`, and add
-  `{APP_BASE_URL}/join/*` to Supabase's redirect allowlist or the link bounces.
+- **Creator membership and intents are atomic.** A partially created cache must
+  not strand its owner. Missing `my_caches` immediately afterward is expected.
+- **D1 never authorizes**; fetch/authorize inside the DO, non-member 404.
+- **No member email payloads.** Enrich names from D1 by IDs after DO authorization.
+- **Stable IDs and ordered replay.** Upsert registry before reverse-index insert;
+  delete pending work only after external effects succeed. Concurrent alarm and
+  `flushSync` drains cannot apply stale projection changes after newer ones.
+- **Alarm retry limit is not recovery.** Catch/reschedule failures; every entry
+  point re-arms pending work. Test the creation commit/alarm scheduling gap before
+  declaring sync reliable; a pre-registry cache cannot be found by registry Cron.
 
 ### Proof
 
-- JWT rejection matrix: wrong `iss`, wrong `aud`, expired, `alg=none`, HS256 signed with
-  the public key, an `alg` outside the allowlist, unknown `kid`. Rotation succeeds after
-  one refetch.
-- Profile gate: cache/item/request writes 409 before `display_name` is set, while
-  `PATCH /api/me` succeeds. That second half is the assertion that catches the deadlock.
+Auth matrix: non-member/pending/removed/active/owner; settings and rotate owner-only.
+Creation returns an immediately readable cache while home discovery lags. Inject
+sync crashes at each boundary, replay twice, and fail beyond six alarm retries;
+show no duplicate outbox ID or reordered projection, entry-point re-arm and Cron
+flush. Open/create/copy/rotate through the UI.
 
 ---
 
-## Phase 3 — Caches
+## Feature 2 — Joining
 
-**Goal:** create a cache, share a link, let people in.
+**Goal:** invite links join directly, optionally with owner approval.
 
-### Build order
+### Scope
 
-1. `POST /api/caches` — cache row + owner's `active` membership, **one transaction**.
-2. `GET /api/caches` — caches I'm an active member of.
-3. `GET /api/caches/{id}` — detail, member list, and the `invite_token`.
-4. `PATCH /api/caches/{id}` — name, `requires_approval`. Cache owner only.
-5. `POST /api/caches/{id}/invite/rotate` — new high-entropy token (32 bytes,
-   `crypto/rand`, base64url).
-6. `POST /api/join/{token}` — insert `active`, or `pending` when `requires_approval`.
-7. `GET /api/caches/{id}/join-requests` and approve/reject.
+- `POST /api/caches/{cacheId}/join` with body `{secret}` routes directly to the
+  cache DO; compare the fixed-length decoded secret in constant time, 404 on
+  missing cache/mismatch. Secret in the body, never the API path (request logs);
+  the `/join/...` SPA page sends `Referrer-Policy: no-referrer`.
+- Insert active or pending membership in `transactionSync`.
+- Owner `GET /api/caches/{cacheId}/join-requests` and
+  `POST .../join-requests/{userId}/approve|reject`.
+- Atomic membership plus pending_sync discovery updates/notification intents.
 
-No member-removal endpoint in this phase. It ships in Phase 7 with its cascade.
+UI: `/join/:token` through login/name onboarding, active/pending result, owner queue.
 
 ### Traps
 
-- **Resolve membership in the same SQL statement as the data fetch**, joining
-  `cache_members` on `status='active'`. Never a separate pre-check — that is exactly how
-  a direct-ID route drifts out of scope later.
-- **Return 404, not 403,** for non-members, so nobody can probe for a cache's existence.
-- **Cache creation must be one transaction.** Otherwise a partial failure leaves a
-  creator who is not a member of the cache they just made and cannot see it.
-- **A `removed` membership row blocks rejoin.** Leave it untouched and return 403. The
-  invite link is still sitting in the group chat, so removal is meaningless otherwise.
-- **A rejected join _deletes_ the pending row** rather than marking it `removed`, so a
-  mistaken rejection can be redone.
-- **Never return another user's `email`.** Member and queue payloads carry `user_id` and
-  `display_name` — the client needs the ID to key rows and address the removal route —
-  but email appears in exactly one response, `GET /api/me`, and only your own.
-- **Enqueue outbox rows now**, even though the worker arrives in Phase 6. The table
-  exists from migration 001 for this reason. Otherwise intermediate deploys drop join
-  approvals on the floor and you retrofit enqueue calls into reviewed handlers later.
+- **Removed member cannot rejoin.** Valid invite + removed row returns 403 without
+  changing it; ordinary cache-data access still returns 404.
+- **Reject deletes pending membership**, not marks removed, so retry is possible.
+- **Invite secret never lives in D1.** Cache ID selects the DO; compare/rotate there.
+- **Record recipients before deleting a row.** Sync must not reconstruct rejected
+  join recipients from a membership row that no longer exists.
+- **Durable notification intents arrive now**, not when the consumer ships.
 
 ### Proof
 
-Authorization matrix over non-member, pending member, removed member, active member,
-and cache owner, across every direct-ID route, asserting 404 for cross-cache access.
-Plus: creating a cache leaves the creator an active member; a removed member cannot
-rejoin with a valid token.
+Open/gated joins, idempotent join replay, removed denial, secret rotation/mismatch,
+owner-only decisions and cross-cache 404s. Rejection then rejoin works; thrown
+transaction creates neither state nor intent. Assert recipient IDs. Logged-out
+invite → email code on the same page → name → join POST body resumes correctly.
 
 ---
 
-## Phase 4 — Items
+## Feature 3 — Items (no photos)
 
-**Goal:** list things, with photos.
+**Goal:** members list things and owners edit them.
 
-### Build order
+### Scope
 
-1. `POST /api/caches/{id}/items` — active member; `owner_id` from the caller.
-2. `GET /api/caches/{id}/items`, `GET /api/items/{id}`.
-3. `PATCH /api/items/{id}` — item owner only.
-4. `POST /api/items/{id}/photo` — multipart, item owner only.
-5. Frontend `<canvas>` resize to max 1600px, re-encode to JPEG, then upload.
-6. Batched signed URLs for list views, 1-hour TTL.
-
-No delete endpoint in this phase. Phase 7.
+- `GET/POST /api/caches/{cacheId}/items`,
+  `GET/PATCH /api/caches/{cacheId}/items/{itemId}`.
+- Owner from caller; type immutable; local DO authorization and bound SQL.
+- UI item list/detail/add/edit. No upload yet; no deletion until Feature 8.
 
 ### Traps
 
-- **`is_consumable` is immutable after creation.** Flipping it strands `quantity` and
-  every pending reservation counted against it.
-- **`owner_id` comes from the authenticated caller, never the request body.**
-- **Client-side resize is a convenience, not a validation.** Go still sniffs the content
-  type, caps the body at 5MB, and rejects anything but JPEG/PNG/WebP. An SVG with a
-  script tag must not get through.
-- **Canvas decode can fail** on an unsupported format or a large image on a low-memory
-  device, and `toBlob` can hand back `null`. Surface "couldn't read that image, try
-  another" rather than uploading a blank frame.
-- **The storage bucket is private with zero `storage.objects` policies.** Supabase
-  Storage authorizes through RLS on that table, so a policy-less private bucket leaves
-  the service role — server-side only — as the sole accessor. The service key must never
-  appear in `/api/config` or any browser-reachable response.
+- **Item stock is 0–9999 for consumables, NULL otherwise.** Zero is valid stock;
+  positive-only applies to requests in Feature 5, not item creation.
+- **`is_consumable` is immutable**; conversion strands reservations.
+- **Never accept forged owner ID.** Non-owner writes/wrong-cache IDs return 404.
+- **No D1 item locator.** Cache ID in the route selects the DO, item UUID stays plain.
 
 ### Proof
 
-Upload validation rejects an oversize body, a wrong content type, and an SVG with a
-script. Owner-only mutations 404 for non-owners. `is_consumable` cannot be changed.
-Anonymous and authenticated clients can neither list the bucket nor download a known
-object path, while server-side upload and a signed URL both work.
+Authorization matrix, forged owner rejection, immutable type, zero-stock creation,
+NULL rules and bounded integers. UI list/detail/create/edit. Keep request-type
+checks for Feature 5, not a fictional ban on empty consumable stock.
 
 ---
 
-## Phase 5 — Requests
+## Feature 4 — Photos
 
-**Goal:** the ask/approve handshake, without over-booking.
+**Goal:** owner uploads and member reads without exposing R2.
 
-This is the only genuinely non-trivial invariant in the app. Slow down here.
+### Scope
 
-### The invariant
+- `POST/GET /api/caches/{cacheId}/items/{itemId}/photo`.
+- Owner check via DO, capped/sniffed upload through Worker to R2 key
+  `cacheId/itemId`, then DO attachment re-check after the external write.
+- Read: DO `photoKey(user, item)` checks active membership/existence/photo; Worker
+  streams `BUCKET.get(key)` with `Cache-Control: private`. No signed URLs.
+- Canvas resize/re-encode JPEG, photo picker/errors and list/detail rendering.
 
-```
-available = items.quantity - COALESCE(SUM(requests.quantity) WHERE status='pending', 0)
-```
-
-Three paths mutate it — create a request, decide a request, edit quantity — and all
-three run the same shape inside a `READ COMMITTED` transaction:
-
-1. `SELECT ... FROM app.items WHERE id = $1 FOR UPDATE` — serializes the three paths.
-2. Read the pending sum in a **separate statement**, after the lock is held.
-3. Mutate, checking the invariant.
-
-Step 2 being a separate statement is the whole trick. Under `READ COMMITTED`, a
-statement issued after the lock is acquired sees what the previous lock holder
-committed. Under `REPEATABLE READ` it would still see the stale snapshot from
-transaction start — which is why this app deliberately does not use it.
-
-### Per path
-
-- **Create** — 409 if `quantity > available`.
-- **Approve** — `UPDATE app.requests SET status='approved', decided_at=now()
-WHERE id=$1 AND status='pending'`. **Zero rows changed means someone already decided
-  it: roll back with 409.** Then `quantity -= request.quantity`. Net effect on
-  `available` is zero; the reservation became a real deduction.
-- **Reject** — same guarded UPDATE, `decision_reason` required.
-- **Edit quantity** — floor the new value at the current pending sum; 409 below it.
-  Restocking upward is unconstrained.
+R2 creation/settings/bindings need explicit approval, not this feature's existence.
 
 ### Traps
 
-- **The guarded `UPDATE ... WHERE status='pending'` is what stops a racing
-  double-approval from deducting twice.** Reading the status and then updating it in two
-  statements does not; two approvals interleave and the item loses two units for one
-  request. Check the rows-affected count.
-- **`quantity` must be `NULL` for a non-consumable and a bounded positive int for a
-  consumable.** This is a cross-table rule no `CHECK` constraint can express, so the
-  handler enforces it and a test covers both directions.
-- **The item's own owner cannot request it.**
-- **The pending queue is a deliberate disclosure** — requester `display_name`, quantity,
-  and `created_at`, visible to every active member, because the product calls for a
-  publicly visible queue. Decided requests stay visible only to the requester and the
-  item owner.
+- **Client resize is not validation.** Cap actual bytes at 5 MB, sniff content;
+  JPEG/PNG/WebP only. An SVG with a script cannot pass.
+- **Decode/toBlob can fail.** Show "couldn't read that image, try another".
+- **R2 and DO do not commit together.** Re-check owner/member when attaching after
+  upload; cleanup orphan writes if state changed. Do not retain an authorization
+  decision across R2 I/O and assume it is still current.
+- **Same-origin images use cookies.** Plain `<img src>` attaches the session
+  cookie; every read still checks membership in the DO. No bearer/blob workaround.
+- **No public bucket or shared authorized-response cache.** Removing membership
+  blocks the next photo read; cached responses must not bypass that check.
 
 ### Proof
 
-Concurrency, against real Postgres, with actual goroutines:
-
-- Concurrent creates never let pending exceed available.
-- Concurrent approves of the same request deduct exactly once.
-- Approve-after-reject returns 409.
-- A restock racing a create loses neither write.
-- Quantity rejected when supplied for a non-consumable and when omitted for a consumable.
+Oversize/chunked input, wrong type/SVG, owner-only upload, removal racing upload,
+orphan cleanup, anonymous/non-member 404, active streaming and private headers.
+Exercise canvas failures and authenticated image rendering from the UI.
 
 ---
 
-## Phase 6 — Notifications
+## Feature 5 — Requests
 
-**Goal:** the owner finds out, fast.
+**Goal:** ask/approve/reject without over-booking.
 
-### Concepts
+### Scope
 
-- **Web push is RFC 8291** — payloads are ECDH + AES-GCM encrypted per subscription.
-  Use `github.com/SherClockHolmes/webpush-go`; there is no stdlib equivalent.
-- **VAPID** keys identify your server to the push services.
-- **Transactional outbox** — rows written in the same transaction as the state change,
-  delivered later by a worker, so a notification can never describe a rollback.
+- `POST /api/caches/{cacheId}/items/{itemId}/requests`.
+- Owner `POST /api/caches/{cacheId}/requests/{requestId}/approve|reject`.
+- Item detail's public pending queue; decided rows only for requester/item owner.
+- `GET /api/requests` discovers the caller's `my_caches`, then parallel bounded
+  DO calls with live membership/party checks; no whole-registry fan-out.
+- Quantity edit floor and atomic pending_sync notification intents.
 
-### The worker loop
+UI: "Ask to use", incoming/outgoing lists, approval/rejection with required reason.
 
-Claim, committed immediately:
+### Invariant and traps
 
-```sql
-UPDATE app.outbox SET attempts = attempts + 1,
-       send_after = now() + least(interval '90 seconds' * power(2, attempts), interval '1 hour')
-WHERE id IN (
-  SELECT id FROM app.outbox
-  WHERE sent_at IS NULL AND failed_at IS NULL AND send_after <= now()
-  ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 10
-) RETURNING *
-```
+`available = quantity - COALESCE(SUM(pending request quantities), 0)`.
 
-Then send outside the transaction, under a single 30s context per row, processing the
-batch concurrently. On success set `sent_at`; on an observed failure at
-`attempts >= 6` set `failed_at` and log.
-
-### Traps
-
-These are subtle and cost three review rounds to get right. The reasoning matters more
-than the rules.
-
-- **Bound claim eligibility on `failed_at`, never on `attempts`.** The claim _increments_
-  `attempts`, so a predicate like `attempts < 6` makes the last permitted claim
-  ineligible for reclamation _before its send is even attempted_ — a crash during that
-  send loses the notification permanently, having never delivered it once.
-- **`attempts` is a claim budget, not a failure budget.** A crash consumes one, so a row
-  can reach the give-up threshold with fewer than six observed failures. That is the
-  intended reading; assert it rather than assuming six failures.
-- **Guard both terminal writes** with `AND sent_at IS NULL AND failed_at IS NULL`. A
-  worker whose lease expired mid-send is still running; another worker may have already
-  delivered the row, and the straggler must not stamp `failed_at` on a message that went
-  out.
-- **Process the claimed batch concurrently.** Ten rows sequentially at up to 30s each is
-  300s, well past the 90s lease, so another worker re-claims the tail and duplicates it.
-  Concurrently, batch wall time is its slowest row: 30s < 90s regardless of batch size.
-- **Per-call timeouts alone do not bound a send.** Three subscriptions plus an email
-  fallback is four sequential calls; at 10s each that is 40s. One deadline for the whole
-  row is the bound that actually holds.
-- **Email is structural, not an escalation ladder.** A recipient gets email if and only
-  if they have no live push subscription — none registered, or every one answered
-  404/410 this pass, in which case those rows are deleted and email goes out in the same
-  pass. There is deliberately no "push kept failing, so escalate" path; that ladder
-  produced a bug in three consecutive review rounds because it made the escalation
-  threshold and the give-up threshold interact.
-- **A push endpoint is untrusted input and the worker POSTs to it from inside Fly's
-  network**, where cloud metadata and 6PN private addresses are reachable. Three
-  controls: an origin allowlist of the real push services at subscribe time
-  (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `web.push.apple.com`,
-  `*.notify.windows.com`), HTTPS-only with no userinfo, and a client that refuses
-  redirects and refuses to dial a non-public IP after DNS resolution.
-- **An endpoint identifies a browser, not a person.** On a shared device, or after a
-  logout and a different login, the same endpoint arrives under a second account.
-  `ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id` reassigns it;
-  ignoring the conflict would send one account's notifications to another's device.
-
-### Recipients per event
-
-| Event                         | Notifies                                                |
-| ----------------------------- | ------------------------------------------------------- |
-| Request created               | The item's owner                                        |
-| Request approved or rejected  | The requester                                           |
-| Item deleted                  | Everyone with a pending request on it                   |
-| Member removed                | The requesters whose requests were rejected as a result |
-| Join request on a gated cache | The cache owner                                         |
-| Join approved or rejected     | The person who asked                                    |
+- **One transactionSync for check/decision/state/intent.** No await inside; no
+  SQL cursor crossing an await. A thrown 404/409 rolls back local effects.
+- **Create**: active non-owner, quantity NULL for non-consumable or 1–9999 for
+  consumable; insufficient available stock returns 409.
+- **Approve**: pending-only guarded transition, zero changed rows 409, exactly one
+  deduction in the same transaction. Reject requires reason/releases reservation.
+- **Edit**: new stock cannot be below pending sum; upward restock within bounds.
+- **Queue disclosure is deliberate**, names/quantity/time/IDs only, never email.
+- **Discovery index is not permission.** Stale rows 404; missing rows can delay
+  aggregate visibility. `ponytail:` cap requests aggregation at 50 caches per page,
+  with continuation/bounded concurrency and budget for other binding calls;
+  paginate further rather than granting access from the index. Failed RPCs need an
+  unavailable state, not a misleading empty list.
 
 ### Proof
 
-- A kill mid-send loses nothing; a duplicate is acceptable and expected.
-- A kill immediately after the sixth claim still leaves the row claimable.
-- Six claims of mixed crashes and observed failures reach the give-up threshold.
-- A recipient with no subscriptions gets email; a 410 deletes the subscription and emails
-  in the same pass; a permanently failing send sets `failed_at` and stops being claimed.
-- A straggler cannot stamp `failed_at` over another worker's `sent_at`.
-- SSRF at dial time, which subscribe-time checks do not reach: an allowlisted hostname
-  that _resolves_ to a private address is refused, and a 302 toward an internal address
-  has the redirect refused.
-- Endpoint reassignment between two accounts, after which the first receives nothing.
+Concurrent DO RPC creates never overbook; concurrent approves deduct once;
+approve-after-reject 409; restock/create race loses neither write; stock floor and
+NULL/type quantity rules; rollback leaves no intent. Tamper cache IDs and discovery
+rows; test cap/continuation/partial failures and party visibility. Two-account
+ask/approve/reject UI walkthrough.
 
 ---
 
-## Phase 7 — Destructive endpoints and cascades
+## Feature 6 — Notifications + email
 
-**Goal:** removal and deletion that clean up after themselves.
+**Goal:** deliver recorded events with Queue retries and Cron recovery.
 
-### Build order
+### Scope
 
-1. `DELETE /api/caches/{id}/members/{userId}` — status flip, delete their items in that
-   cache, reject their outstanding requests, notify.
-2. `DELETE /api/items/{id}` — cascade its requests, notify pending requesters.
+- Flush pending_sync outbox rows idempotently to D1 by stable DO ID, then Queue ID.
+- Queue consumer guarded expiring claim/terminal states; Cron re-enqueues old
+  nonterminal rows with expired claims and flushes cache sync via the registry.
+- Resend `fetch`, no SDK; HTML escaping, 10s provider/30s row abort deadlines.
+- Until push ships, every recipient uses email. Links point back to the app.
 
-### The two mechanisms differ
+Configuring Queue/Cron/Resend/secrets requires approval. No new public UI screen.
 
-- **An item is deleted** — its requests go with it via `ON DELETE CASCADE`. No row
-  survives to display a rejection reason on, so the notification carries the whole
-  story, embedding the item title.
-- **A member is removed** — the requests they made against _surviving_ items are
-  rejected, not deleted. The row survives, so `decision_reason` is visible normally.
+### Recipients
+
+| Event | Notifies |
+| --- | --- |
+| Request created | Item owner |
+| Request approved/rejected | Requester |
+| Item deleted | Pending requesters |
+| Member removed | Requesters whose requests were rejected |
+| Gated join requested | Cache owner |
+| Join approved/rejected | Person who asked |
 
 ### Traps
 
-- **Lock every affected item `FOR UPDATE` before snapshotting the pending requests you
-  are about to destroy or decide.** Otherwise: the delete snapshots the pending list, a
-  member concurrently creates a request (their create takes the item lock, commits, and
-  returns them a 201), and then the cascade erases it — with no notification, because
-  the snapshot predated the insert. Locking first forces that create to either land
-  before the snapshot and be included, or block and then fail with a 404 the requester
-  actually sees.
-- **The lock set is wider than the items being deleted.** Member removal also _decides_
-  requests against other people's items, and a decision needs those item locks for the
-  over-booking guard. Removal locks the union: their own items in that cache, plus every
-  item they hold a pending request against.
-- **One lock order, everywhere, no exceptions:** the `cache_members` row first
-  (`FOR SHARE` on write paths resolving membership, `FOR UPDATE` on removal), then item
-  rows ascending by `id`. This is the whole deadlock story, and it is easy to get wrong
-  because removal naturally reaches for the membership row first while creating a request
-  naturally reaches for the item first. Those two orders deadlock against each other.
-- **The cache owner cannot be removed** and cannot remove themselves. Ownership transfer
-  is out of scope.
+- **Outbox is eventually filled, intent is atomic.** The mutation's local
+  pending_sync row is the durable bridge; a thrown mutation records nothing.
+- **Claim guard plus rows-changed count.** Terminal rows or unexpired claims are
+  not acquired; `meta.changes === 0` means ack/skip. Lease initially 90s > row 30s.
+- **Failed-at bounds eligibility, not attempts.** Claim increments attempts;
+  crashing on the sixth claim must not permanently lose the notification. Only
+  an observed failure at the budget writes failed_at. Attempts include crashes.
+- **Both terminal writes guard sent/failed and current claim token.** A stale
+  sender cannot stamp failed over sent or a newer claim.
+- **Queues retries are finite too.** Explicit retry configuration; default three
+  retries can end in deletion. Cron + durable outbox repair dropped Queue IDs.
+- **Per-call deadlines alone do not bound the row.** Three subscriptions and an
+  email can otherwise exceed a lease. Respect the six simultaneous connection
+  limit and CPU/subrequest quotas with bounded processing.
 
 ### Proof
 
-- Removal deletes their items and rejects their outstanding requests in both directions.
-- A request created concurrently with removal cannot land.
-- Destructive races: creating a request concurrently with a direct item deletion, and
-  with removal of the item's owner, each end in exactly one of two states — the create
-  fails with 404, or it succeeds _and_ its notification outbox row exists. Never success
-  with the request silently gone.
-- Per-event recipients are correct, and a rolled-back mutation enqueues nothing.
+Crash after mutation, D1 insert, Queue send and final claim; replay is idempotent.
+Competing claims send once while lease is valid; crash after sixth claim remains
+recoverable; mixed crashes/observed failures pin the claim-budget meaning;
+stale terminal update rejected; Cron revives expired/dropped Queue work. Check
+recipients, HTML escaping, deadlines and permanently failed terminal state.
 
 ---
 
-## Phase 8 — Polish
+## Feature 7 — Web push + PWA
 
-**Goal:** ship it.
+**Goal:** installed browsers get push; those without live subscriptions get email.
 
-1. **Write rate limits.** A small in-memory token bucket per user is enough at this
-   scale; joins and request creation are the paths worth limiting.
-2. **Empty and error states** for every list and every mutation.
-3. **PWA manifest and service worker.**
-4. **Accessibility pass** — labeled form controls, visible focus, keyboard-reachable
-   modals and sheets, sufficient text contrast.
-5. **README setup steps** and the manual smoke checklist.
+### Scope
+
+- Caller-scoped `POST/DELETE /api/push/subscribe`, exempt from profile gate.
+- WebCrypto RFC 8291/VAPID candidate `@block65/webcrypto-web-push` 2.x, only added
+  after a Worker-runtime proof; application-controlled fetch policy/deadlines.
+- 404/410 cleanup, structural channel choice, runtime VAPID public key; private
+  VAPID key remains a secret. PWA/service worker and notification links.
+- Explicit enable/disable action and iOS install/permission guidance.
 
 ### Traps
 
-- **iOS has no programmable install prompt.** There is no `beforeinstallprompt` in
-  Safari, so iOS gets rendered instructions ("Share, then Add to Home Screen") and
-  nothing more.
-- **`Notification.requestPermission()` must be called from an explicit user gesture**,
-  and on iOS only inside the installed PWA — that is the only context there that can
-  receive push at all.
+- **Structural email, no retry escalation.** No subscriptions, or all 404/410 this
+  pass, means email now; transient push errors remain push retries.
+- **Untrusted endpoint.** Strict origins, HTTPS/default port/no userinfo; check at
+  subscribe and send, and force `redirect: 'manual'`. Reject redirects.
+- **No assumed platform SSRF immunity.** Production private/loopback/link-local
+  fetch/DNS guarantees are UNVERIFIED. `ponytail:` no fetch DNS/dial hook means the
+  origin allowlist is the control; stronger IP-level enforcement needs vetted egress.
+- **Endpoints belong to browsers.** UPSERT reassigns endpoint to the new account;
+  ignoring UNIQUE conflict leaks previous-account notifications. Logout removes it.
+- **iOS has no programmable install prompt.** Render instructions; ask permission
+  only from a gesture, on iOS only in the installed PWA.
+- **Do not equate README support with project proof.** Verify RFC vectors, VAPID,
+  runtime CPU and actual target-provider behavior, particularly installed iOS push.
 
-### Manual smoke checklist
+### Proof
 
-None of these is cheaply automatable, and each covers a path the test suite cannot:
+Worker crypto tests, no subscriptions → email, 410 deletion → same-pass email,
+transient push no escalation, malicious origin/HTTP/userinfo rejection, manual
+302 refusal, two-account reassignment/logout, gesture permission and installed
+iOS delivery. Local fetch tests cannot certify production private-IP restrictions.
 
-- A magic link arrives (exercises Supabase's SMTP config).
-- A _notification_ email arrives — a separate path, the Resend API called directly from
-  Go, so the magic link passing proves nothing about it.
-- A signed image URL renders.
-- Push arrives on an installed iOS PWA.
-- A Fly rolling deploy with a pending migration comes up clean.
+---
+
+## Feature 8 — Member removal and item deletion
+
+**Goal:** destructive endpoints arrive with cleanup and durable notifications.
+
+### Scope
+
+- Owner `DELETE /api/caches/{cacheId}/members/{userId}`.
+- Item owner `DELETE /api/caches/{cacheId}/items/{itemId}`.
+- One transactionSync for membership/status/cascades and pending_sync snapshots,
+  outbox intents, reverse-index removal and R2 cleanup intents.
+- UI confirmations in owner members sheet and item detail.
+
+### Traps
+
+- **Snapshot before local cascade, in the same transaction.** Deleted item requests
+  do not survive to carry a reason: notification snapshots include title/recipient.
+- **Two different cascades.** Deleted items cascade requests; removed member's
+  requests on surviving items are rejected with "left the cache", not erased.
+- **No await or Postgres lock ceremony.** Atomic DO SQL replaces lock order and
+  lock-before-snapshot; external cleanup is durable sync after commit.
+- **The cache owner cannot be removed**, including self-removal.
+- **No replay resurrection.** Old reverse-index/name/outbox/R2 effects cannot undo
+  newer removal state; retain stable IDs and ordered drain behavior.
+
+### Proof
+
+Both request directions on removal, owner prohibition, repeat deletion, correct
+recipients/R2 cleanup, failed mutation leaves neither partial state nor intents.
+Create vs deletion/owner-removal yields 404, or success included in durable removal
+notifications; never success silently erased without an intent. Stale D1 indexes
+and photo links fail the next DO membership check.
+
+---
+
+## Feature 9 — Polish
+
+**Goal:** everyday UX, resource budgets and approved release checks.
+
+### Scope and traps
+
+- Write rate limits on joins/requests, keyed by verified user + route. Prefer the
+  Workers Rate Limiting binding when its account-plan availability is confirmed;
+  per-location/eventually consistent, not a global exact quota. Free availability
+  is UNVERIFIED in the reviewed docs; no per-isolate in-memory bucket masquerading
+  as durable/global protection.
+- Empty/error/partial-unavailable states for every list and mutation.
+- Accessibility: labels, visible focus, keyboard sheets/modals, contrast.
+- README setup, quotas/backlog/CPU monitoring, bounded sweeps/fan-out and runbook.
+- Keep previous traps green. Free tier availability is not proof auth, push and
+  sync fit its CPU/storage/Queue limits; measure before choosing a production plan.
+
+### Proof and manual smoke
+
+Whole completion gates; rate-limit behavior, list/errors and accessible controls;
+claim/sync backlog recovery after repeated failures; projected discovery drift.
+
+After explicit approval, separately verify: Resend sign-in code from the auth
+request, Queue-driven notification email, authorized image stream, installed iOS
+push, alarm/Queue/Cron recovery,
+migration-compatible Worker update, and rollback procedure. Legacy production
+stays live until approved cutover; no teardown is bundled into this feature.
