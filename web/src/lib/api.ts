@@ -29,6 +29,17 @@ export type CacheDetail = Cache & {
   members: { user_id: string; display_name: string | null }[]
 }
 
+export type JoinResult = {
+  cache_id: string
+  status: 'active' | 'pending'
+}
+
+export type JoinRequest = {
+  user_id: string
+  display_name: string | null
+  created_at: string
+}
+
 type ApiOptions = {
   method?: string
   body?: unknown

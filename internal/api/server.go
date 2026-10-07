@@ -27,6 +27,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/caches/{id}", s.requireAuth(s.getCache))
 	mux.HandleFunc("PATCH /api/caches/{id}", s.requireProfile(s.patchCache))
 	mux.HandleFunc("POST /api/caches/{id}/invite/rotate", s.requireProfile(s.rotateCacheInvite))
+	mux.HandleFunc("POST /api/join/{token}", s.requireProfile(s.joinCache))
+	mux.HandleFunc("GET /api/caches/{id}/join-requests", s.requireAuth(s.listJoinRequests))
+	mux.HandleFunc("POST /api/caches/{id}/join-requests/{userId}/approve", s.requireProfile(s.approveJoinRequest))
+	mux.HandleFunc("POST /api/caches/{id}/join-requests/{userId}/reject", s.requireProfile(s.rejectJoinRequest))
 	return mux
 }
 

@@ -50,7 +50,7 @@ separate: an open PR can be ready for review while the next feature is being bui
 | --- | --- | --- | --- |
 | — | Foundation | Done | — |
 | 1 | Caches | In review | [#2](https://github.com/ryanyz10/communalcache/pull/2) |
-| 2 | Joining | Not started | — |
+| 2 | Joining | In review | [#3](https://github.com/ryanyz10/communalcache/pull/3) |
 | 3 | Items (no photos) | Not started | — |
 | 4 | Photos | Not started | — |
 | 5 | Requests | Not started | — |

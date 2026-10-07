@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, ApiError, type Cache, type CacheDetail, type Me } from '../lib/api'
 import { OnboardingPage } from './OnboardingPage'
+import { JoinRequests } from '../components/JoinRequests'
 
 export function CachePage() {
   const { id } = useParams()
@@ -112,7 +113,7 @@ export function CachePage() {
       <section className="mt-8" aria-labelledby="invite-heading">
         <h2 id="invite-heading" className="text-xl font-semibold">Invite link</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Anyone with this link can ask to join. Joining ships in the next feature.
+          {cache.requires_approval ? 'Anyone with this link can ask to join. The owner approves new members.' : 'Anyone with this link can join this cache.'}
         </p>
         <label htmlFor="invite-link" className="mt-3 block text-sm font-medium">Share this link</label>
         <input
@@ -148,6 +149,7 @@ export function CachePage() {
             </li>
           ))}
         </ul>
+        {isOwner ? <JoinRequests cacheID={cache.id} /> : null}
       </section>
 
       {isOwner ? (

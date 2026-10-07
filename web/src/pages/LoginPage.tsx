@@ -1,16 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
-
-const JOIN_TOKEN_KEY = 'cc_join_token'
-
-export function stashJoinToken(token: string) {
-  sessionStorage.setItem(JOIN_TOKEN_KEY, token)
-}
-
-export function peekJoinToken(): string | null {
-  return sessionStorage.getItem(JOIN_TOKEN_KEY)
-}
+import { peekJoinToken } from '../lib/joinToken'
 
 export function LoginPage() {
   const { supabase, config, session, ready } = useAuth()

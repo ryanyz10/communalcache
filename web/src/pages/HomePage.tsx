@@ -4,7 +4,7 @@ import { Link, Navigate, useNavigate } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, ApiError, type Cache, type Me } from '../lib/api'
 import { OnboardingPage } from './OnboardingPage'
-import { peekJoinToken } from './LoginPage'
+import { peekJoinToken } from '../lib/joinToken'
 
 export function HomePage() {
   const { session, supabase, user } = useAuth()
@@ -62,6 +62,8 @@ export function HomePage() {
   }
   const me = meQuery.data
   if (!me.display_name) return <OnboardingPage />
+  const joinToken = peekJoinToken()
+  if (joinToken) return <Navigate to={`/join/${encodeURIComponent(joinToken)}`} replace />
 
   return (
     <main className="mx-auto max-w-md px-4 py-8">
@@ -75,12 +77,6 @@ export function HomePage() {
           Sign out
         </button>
       </div>
-      {peekJoinToken() ? (
-        <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Invite saved. Joining will be available in the next feature.
-        </p>
-      ) : null}
-
       <section className="mt-8" aria-labelledby="my-caches">
         <h2 id="my-caches" className="text-xl font-semibold">My caches</h2>
         {cachesQuery.isPending ? <p className="mt-3 text-slate-600">Loading caches…</p> : null}
