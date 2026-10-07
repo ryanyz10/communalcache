@@ -10,16 +10,25 @@ Storage. Web push with email fallback via Resend. Deployed on Fly.io.
 
 ## How to work on this repo
 
-**The human is implementing this by hand, on purpose, to learn it.** Default to
-explaining, reviewing, and unblocking rather than producing code.
+The agent implements one feature per PR; the human reviews each on a whiteboard.
 
-- Do **not** write a whole phase unless explicitly asked. Asked "how does the outbox
-  lease work?", answer the question — don't implement the worker.
-- When asked for code, prefer the smallest useful unit: a function signature, a SQL
-  fragment, one tricky block. Leave the surrounding wiring to them.
-- Reviewing their code, weigh it against the invariants below and the traps in
-  [docs/build-guide.md](docs/build-guide.md). Those traps are real defects caught in
-  review, not style preferences.
+- Implement the features in [docs/build-guide.md](docs/build-guide.md) in order,
+  end to end: backend, that feature's UI slice, and tests.
+- Each feature gets its own branch `feat/<short-name>` and exactly one commit
+  (amend, don't stack). Before committing, run the backend and frontend gates below.
+- Open a PR with `gh pr create`. If the previous feature's PR has not merged, base
+  the new branch on it, set the PR base to that branch, and add a `Depends-on: #N`
+  line to the PR body. In the same PR, update the feature's build-guide status row.
+- After opening the PR, publish a review whiteboard: what now works and how to try
+  it, flow/sequence diagrams with code links for key paths, a diff of the
+  invariant-critical code, and findings (risks, deviations from `plan.md`, open
+  questions).
+- Keep building the next feature without waiting for review. Apply feedback by
+  amending the relevant branch and restacking the branches above it.
+- External changes (Fly deploys, Supabase dashboard/storage config, secrets) need
+  the human's explicit approval first.
+- Review against the invariants below and the build-guide traps. Those traps are
+  real defects caught in review, not style preferences.
 - Say when something is a genuine bug versus a preference, and don't invent problems.
 
 ## Documents
@@ -27,8 +36,9 @@ explaining, reviewing, and unblocking rather than producing code.
 - **[docs/plan.md](docs/plan.md)** — the spec. Source of truth on _what_ to build,
   including the data model, per-route authorization, and known tradeoffs. Treat it as
   settled; the decisions in it survived eight review rounds. Do not edit it.
-- **[docs/build-guide.md](docs/build-guide.md)** — phase order, concepts, traps, and the
-  check that proves each phase. Start here to find out what phase we're in.
+- **[docs/build-guide.md](docs/build-guide.md)** — feature order, status, concepts,
+  traps, and the check that proves each feature. Start here to find out which feature
+  is next.
 
 ## Non-negotiable invariants
 
@@ -98,7 +108,8 @@ docker run -d --name cc-pg -p 5432:5432 \
 ```
 
 Put `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `APP_BASE_URL` (and
-later Phase 4/6 vars) in a gitignored `.env`; the Makefile `-include`s it.
+later Photos, Notification worker + email, and Web push + PWA vars) in a gitignored
+`.env`; the Makefile `-include`s it.
 A bare `go test ./...` does **not** load `.env`.
 
 Test harness must `CREATE ROLE anon` and `CREATE ROLE authenticated` before migrating —
@@ -106,16 +117,12 @@ vanilla Postgres lacks both, and the `REVOKE` in migration 001 fails without the
 
 ## Current state
 
-Phases 1–2 are on `master`, deployed at https://communalcache.fly.dev. Magic-link
-login and display-name onboarding verified locally and on Fly. Providers
-configured (Resend SMTP, Data API off, asymmetric JWT keys, Site URL + redirect
-wildcards). Hosted PostgREST boundary passes via `make boundary-http`.
+Foundation is done on `master` and deployed at https://communalcache.fly.dev:
+app schema and migration ledger, health/config, embedded SPA, JWT auth,
+`GET`/`PATCH /api/me`, magic-link login, and display-name onboarding. Login and
+onboarding are verified locally and on Fly. Providers are configured (Resend SMTP,
+Data API off, asymmetric JWT keys, Site URL + redirect wildcards). Hosted PostgREST
+boundary passes via `make boundary-http`.
 
-- **Phase 1:** migration runner with ledger in `app.schema_migrations` (+ `002`
-  hardening), body-size/JSON decode helper, shared error helper, SQL + hosted
-  Data API boundary checks, `/api/healthz` + `/api/config`, SPA embed, Dockerfile,
-  `fly.toml`. Docs: `docs/database.md`, `docs/deploy.md`.
-- **Phase 2:** JWKS JWT validator, auth + `requireProfile`, `GET`/`PATCH /api/me`,
-  minimal login/onboarding/`/join/:token` SPA with Vite `/api` proxy.
-
-**Next:** Phase 3 (caches), by hand.
+**Next:** Feature 1 (Caches). Per-feature status lives in the
+[build-guide status table](docs/build-guide.md#status).

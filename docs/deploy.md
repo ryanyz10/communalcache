@@ -1,7 +1,8 @@
 # Deploying to Fly.io
 
 How this app gets to production. Read [database.md](database.md) first if you do
-not yet have a working `DATABASE_URL`.
+not yet have a working `DATABASE_URL`. Provider configuration, secret changes, and
+Fly deploys need the human's explicit approval before running them.
 
 ## One-time provider setup
 
@@ -25,10 +26,10 @@ A deploy without these comes up healthy and cannot log anyone in.
    the domain verifies, then paste Resend's SMTP settings into Supabase.
    `EMAIL_FROM` must be an address on that verified domain.
 
-   Magic links go through Supabase's SMTP config. Notification email (Phase 6)
+   Magic links go through Supabase's SMTP config. Notification email (Feature 6)
    calls the Resend HTTP API from Go and uses a separate Fly secret
    `RESEND_API_KEY`. The two paths are independent; each can fail on its own.
-   For Phase 2 you only need the Supabase SMTP path — do **not** put the Resend
+   For Foundation you only need the Supabase SMTP path — do **not** put the Resend
    key in Fly secrets yet unless you want it ready early.
 
 ### Resend domain checklist
@@ -62,7 +63,7 @@ that is how a database password leaked in an earlier session. Non-secret
 config may go through a heredoc into `fly secrets import`; every actual secret
 is read silently and piped on stdin.
 
-Phase 2 — needed for login (`DATABASE_URL` session mode / direct, never port
+Foundation — needed for login (`DATABASE_URL` session mode / direct, never port
 6543 — see [database.md](database.md)):
 
 ```bash
@@ -81,11 +82,10 @@ EOF
   printf 'DATABASE_URL=postgresql://postgres.<ref>:%s@aws-0-<region>.pooler.supabase.com:5432/postgres\n' "$enc" \
     | fly secrets import -a communalcache )
 
-# Phase 4 — photos (when you get there): same stdin pattern for
-# SUPABASE_SERVICE_ROLE_KEY.
-
-# Phase 6 — notifications: RESEND_API_KEY, EMAIL_FROM, VAPID_PUBLIC_KEY,
-# VAPID_PRIVATE_KEY — same stdin pattern; never inline on argv.
+# Feature 4 — Photos: same stdin pattern for SUPABASE_SERVICE_ROLE_KEY.
+# Feature 6 — Notification worker + email: RESEND_API_KEY, EMAIL_FROM.
+# Feature 7 — Web push + PWA: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
+# Same stdin pattern for each; never inline on argv.
 ```
 
 ## What the Dockerfile does
@@ -107,7 +107,7 @@ curl -sS https://communalcache.fly.dev/api/healthz
 ```
 
 `fly.toml` keeps `min_machines_running = 1` and `auto_stop_machines = "off"` so
-the outbox worker (Phase 6) actually runs. Auto-stop would delay notifications
+the outbox worker (Feature 6) actually runs. Auto-stop would delay notifications
 until traffic wakes the machine.
 
 ## Logs and health

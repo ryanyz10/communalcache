@@ -5,9 +5,9 @@ web push + Resend email, deployed on Fly.io.
 
 ## Docs
 
-- **[docs/build-guide.md](docs/build-guide.md)** — phase-by-phase implementation guide:
-  build order, concepts, the traps worth slowing down for, and the check that proves
-  each phase. Start here.
+- **[docs/build-guide.md](docs/build-guide.md)** — feature-by-feature PR plan:
+  build order, status, concepts, the traps worth slowing down for, and the check that
+  proves each feature. Start here.
 - **[docs/plan.md](docs/plan.md)** — the spec. Data model, per-route authorization,
   delivery semantics, known tradeoffs.
 - **[docs/database.md](docs/database.md)** — Postgres connection string, session vs
@@ -19,11 +19,11 @@ web push + Resend email, deployed on Fly.io.
 
 ## Status
 
-Phases 1–2 done and deployed (https://communalcache.fly.dev): schema + migration
+Foundation is done and deployed (https://communalcache.fly.dev): schema + migration
 ledger in `app`, health/config, JWT auth, `GET`/`PATCH /api/me`, magic-link login
 and display-name onboarding (verified locally and on Fly). Providers configured;
-hosted PostgREST boundary passes. Next is Phase 3 (caches), by hand. See
-[docs/build-guide.md](docs/build-guide.md).
+hosted PostgREST boundary passes. Next is Feature 1 (Caches), one feature per PR.
+See the [build-guide status table](docs/build-guide.md#status).
 
 ## Layout
 
@@ -80,11 +80,13 @@ make boundary-http
 
 ## Deploy
 
-See [docs/deploy.md](docs/deploy.md). Phase 2 secrets: `DATABASE_URL`,
+See [docs/deploy.md](docs/deploy.md). Foundation secrets: `DATABASE_URL`,
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `APP_BASE_URL` (stdin import — never on
-argv). Phase 4 adds `SUPABASE_SERVICE_ROLE_KEY`.
+argv). Feature 4 (Photos) adds `SUPABASE_SERVICE_ROLE_KEY`.
 
-Later: `RESEND_API_KEY`, `EMAIL_FROM`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`.
+Feature 6 (Notification worker + email) adds `RESEND_API_KEY` and `EMAIL_FROM`;
+Feature 7 (Web push + PWA) adds `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`.
+External config, secrets, and deploys need the human's explicit approval.
 
 One-time Supabase: disable Data API; asymmetric JWT keys; Resend as custom SMTP;
 redirect allowlist `{APP_BASE_URL}/join/*` and `http://localhost:5173/**`; private

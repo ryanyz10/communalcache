@@ -1,17 +1,17 @@
 # Build guide
 
-A phase-by-phase route through implementing Communal Cache by hand.
+Build Communal Cache feature by feature, one PR each, in the order below. Each PR
+includes the backend, that feature's UI slice, and its tests.
 
 [docs/plan.md](plan.md) is the spec and the source of truth on _what_ to build. This
 file is about _how_ and _in what order_, plus the specific mistakes that are easy to
-make. It deliberately does not contain the implementation — it names the shape,
-the traps, and the check that proves each phase.
+make. It names the scope, the traps, and the check that proves each feature.
 
-Each phase ends deployable. That is why the destructive endpoints come last: an
+Each feature ends deployable. That is why the destructive endpoints come late: an
 intermediate deploy that can remove a member but cannot clean up after them is worse
 than one that cannot remove anyone.
 
-**The traps in each phase are not hypothetical.** Every one is a defect that a review
+**The traps in each feature are not hypothetical.** Every one is a defect that a review
 pass caught in the plan before any code existed. They are the things worth slowing
 down for.
 
@@ -35,36 +35,53 @@ export TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/communalca
 export DATABASE_URL="$TEST_DATABASE_URL"
 ```
 
-Completion gates, run before calling any phase done:
+Completion gates, run before calling any feature done:
 
 ```bash
 make test && make vet && test -z "$(gofmt -l .)" && (cd web && npx tsc --noEmit && npm run build)
 ```
 
+## Status
+
+Update the feature's row in its own PR. Implementation status and review status are
+separate: an open PR can be ready for review while the next feature is being built.
+
+| # | Feature | Status | PR |
+| --- | --- | --- | --- |
+| — | Foundation | Done | — |
+| 1 | Caches | Not started | — |
+| 2 | Joining | Not started | — |
+| 3 | Items (no photos) | Not started | — |
+| 4 | Photos | Not started | — |
+| 5 | Requests | Not started | — |
+| 6 | Notification worker + email | Not started | — |
+| 7 | Web push + PWA | Not started | — |
+| 8 | Member removal and item deletion | Not started | — |
+| 9 | Polish | Not started | — |
+
 ---
 
-## Phase 1 — Skeleton
+## Foundation (done)
 
-**Goal:** a deployable binary that migrates its own schema and serves the SPA.
+Already on `master` and deployed at https://communalcache.fly.dev:
 
-### Already scaffolded
+- Single Go binary with embedded SPA, graceful shutdown, `/api/healthz` and
+  `/api/config`, env loading, Dockerfile, Fly config, and Make targets.
+- Dedicated-connection migration runner, full schema with deny-all RLS in `app`,
+  migration ledger in `app.schema_migrations` with `002_ledger_hardening.sql`,
+  body-size/JSON decode helper, shared error helper, and SQL/hosted Data API checks.
+- Cached JWKS JWT validation via `github.com/lestrrat-go/jwx/v3`, auth middleware
+  that upserts users without clobbering `display_name`, `requireProfile`, and
+  `GET`/`PATCH /api/me`.
+- Runtime config → supabase-js → magic-link login → display-name onboarding →
+  `/join/:token` stash, with Vite proxying `/api` to Go.
+- Resend custom SMTP, asymmetric JWT keys, Site URL and redirect wildcards,
+  deployed login/onboarding smoke, and hosted PostgREST boundary verified.
 
-- `cmd/server/main.go` — startup, migration call, SPA fallback, graceful shutdown
-- `cmd/server/embed.go` — `go:embed all:dist`
-- `internal/db/migrate.go` — advisory-locked migration runner
-- `internal/db/migrations/001_init.sql` — full schema, `app` schema, RLS deny-all
-- `internal/config/config.go` — env loading
-- `internal/api/server.go` — `/api/healthz`, `/api/config`
-- `Dockerfile`, `fly.toml`, `Makefile`, Vite app in `web/`
+See [database.md](database.md) for connection and migration details and
+[deploy.md](deploy.md) for provider setup, secrets, deploys, and rollback.
 
-### Left to do
-
-Done in the skeleton/auth handoff: body-size + JSON decode helper (`decodeJSON`),
-shared error helper, SQL half of the Data API boundary test (ledger included),
-migration ledger moved into `app` with `002_ledger_hardening.sql`. First Fly
-deploy and hosted PostgREST half (`make boundary-http`) are done.
-
-### Traps
+### Traps that still apply
 
 - **The advisory lock must be held on one dedicated connection**, not the pool.
   Advisory locks are session-scoped; taken from a pool, the lock lands on a different
@@ -84,8 +101,25 @@ deploy and hosted PostgREST half (`make boundary-http`) are done.
 - **`TEST_DATABASE_URL` must never point at the hosted project.** Local `go test`
   suites insert and delete under concurrency. The hosted PostgREST check is
   `make boundary-http` (HTTP only; uses `SUPABASE_URL` + anon key from `.env`).
+- **`requireProfile` must exempt `PATCH /api/me`** and the push subscription routes.
+  Setting a display name is itself a write; gating it leaves a new user with no way
+  out. This is a real deadlock, not a theoretical one.
+- **Do not default `display_name` to the email's local part.** It would leak a fragment
+  of everyone's email into the member list and pending queue, which contradicts the
+  privacy stance. `NULL` until the user picks one.
+- **Pin `alg` to an explicit allowlist** of exactly `ES256` and `RS256`, matched against
+  the JWK's own `alg`. Inferring from key type still admits weaker algorithms sharing
+  that type. Reject `none` and HS256-signed-with-the-public-key.
+- **Unknown `kid` should trigger one rate-limited JWKS refetch**, not a refetch per
+  request — otherwise key rotation becomes a DoS vector against your own server.
+- **Supabase's built-in email sender is rate-limited** to a handful per hour and is not
+  for production. Configure Resend as custom SMTP or magic links silently stop arriving.
+- **The invite token must survive the magic-link round trip.** A logged-out user tapping
+  an invite link is the _primary_ onboarding path. Stash the token in `sessionStorage`
+  and pass `emailRedirectTo = {APP_BASE_URL}/join/{token}`, and add
+  `{APP_BASE_URL}/join/*` to Supabase's redirect allowlist or the link bounces.
 
-### Proof
+### Proof to keep green
 
 **SQL half** (`go test` + `TEST_DATABASE_URL`): assert the four layers
 _independently_, because an end-to-end "anon gets nothing" check passes just as
@@ -109,57 +143,6 @@ Data API / gateway layer that SQL `SET ROLE` cannot. Needs only `SUPABASE_URL`
 and `SUPABASE_ANON_KEY` from `.env` (`eyJ…`, not `sb_publishable_…`). Accepted
 denials include `503`/`PGRST002` when the Data API is off; any 2xx is a failure.
 
----
-
-## Phase 2 — Auth
-
-**Goal:** a signed-in user with a display name.
-
-### Concepts
-
-- **JWKS** — Supabase publishes public keys at
-  `{SUPABASE_URL}/auth/v1/.well-known/jwks.json`. You validate signatures locally
-  against those keys; no network call per request once cached.
-- `github.com/lestrrat-go/jwx/v3` covers both JWS verification and a caching JWKS
-  fetcher. Do not hand-roll JWT parsing.
-
-### Build order
-
-1. ~~`internal/auth` — cached JWKS validator (`iss`/`aud`/`exp`, ES256/RS256 allowlist,
-   rate-limited unknown-`kid` refresh).~~
-2. ~~Auth middleware upserts `app.users` without clobbering `display_name`;
-   `requireProfile` applied only to cache/item/request mutations.~~
-3. ~~`GET /api/me`, `PATCH /api/me`.~~
-4. ~~Frontend: runtime `/api/config` (incl. `app_base_url`) → supabase-js → magic-link
-   login with explicit `emailRedirectTo` → onboarding from null `display_name` on
-   `GET /api/me` → `/join/:token` stash. Vite proxies `/api` to Go.~~
-
-Operator setup done: Resend as Supabase custom SMTP; asymmetric JWT keys; Site URL;
-redirect wildcards `{APP_BASE_URL}/join/*` and `http://localhost:5173/**`; deploy +
-smoke.
-
-### Traps
-
-- **`requireProfile` must exempt `PATCH /api/me`** and the push subscription routes.
-  Setting a display name is itself a write; gating it leaves a new user with no way
-  out. This is a real deadlock, not a theoretical one.
-- **Do not default `display_name` to the email's local part.** It would leak a fragment
-  of everyone's email into the member list and pending queue, which contradicts the
-  privacy stance. `NULL` until the user picks one.
-- **Pin `alg` to an explicit allowlist** of exactly `ES256` and `RS256`, matched against
-  the JWK's own `alg`. Inferring from key type still admits weaker algorithms sharing
-  that type. Reject `none` and HS256-signed-with-the-public-key.
-- **Unknown `kid` should trigger one rate-limited JWKS refetch**, not a refetch per
-  request — otherwise key rotation becomes a DoS vector against your own server.
-- **Supabase's built-in email sender is rate-limited** to a handful per hour and is not
-  for production. Configure Resend as custom SMTP or magic links silently stop arriving.
-- **The invite token must survive the magic-link round trip.** A logged-out user tapping
-  an invite link is the _primary_ onboarding path. Stash the token in `sessionStorage`
-  and pass `emailRedirectTo = {APP_BASE_URL}/join/{token}`, and add
-  `{APP_BASE_URL}/join/*` to Supabase's redirect allowlist or the link bounces.
-
-### Proof
-
 - JWT rejection matrix: wrong `iss`, wrong `aud`, expired, `alg=none`, HS256 signed with
   the public key, an `alg` outside the allowlist, unknown `kid`. Rotation succeeds after
   one refetch.
@@ -168,11 +151,11 @@ smoke.
 
 ---
 
-## Phase 3 — Caches
+## Feature 1 — Caches
 
-**Goal:** create a cache, share a link, let people in.
+**Goal:** create a cache and share its invite link.
 
-### Build order
+### Scope
 
 1. `POST /api/caches` — cache row + owner's `active` membership, **one transaction**.
 2. `GET /api/caches` — caches I'm an active member of.
@@ -180,10 +163,10 @@ smoke.
 4. `PATCH /api/caches/{id}` — name, `requires_approval`. Cache owner only.
 5. `POST /api/caches/{id}/invite/rotate` — new high-entropy token (32 bytes,
    `crypto/rand`, base64url).
-6. `POST /api/join/{token}` — insert `active`, or `pending` when `requires_approval`.
-7. `GET /api/caches/{id}/join-requests` and approve/reject.
 
-No member-removal endpoint in this phase. It ships in Phase 7 with its cascade.
+UI: dashboard (my caches, create) and a cache view shell (name, copy invite link,
+owner-only rotate and settings, member list). Joining ships in Feature 2; member
+removal ships in Feature 8 with its cascade.
 
 ### Traps
 
@@ -193,46 +176,111 @@ No member-removal endpoint in this phase. It ships in Phase 7 with its cascade.
 - **Return 404, not 403,** for non-members, so nobody can probe for a cache's existence.
 - **Cache creation must be one transaction.** Otherwise a partial failure leaves a
   creator who is not a member of the cache they just made and cannot see it.
+- **Never return another user's `email`.** Member and queue payloads carry `user_id` and
+  `display_name` — the client needs the ID to key rows and address the removal route —
+  but email appears in exactly one response, `GET /api/me`, and only your own.
+
+### Proof
+
+Cover this feature's routes with the authorization matrix below. Creating a cache
+leaves the creator an active member; owner settings and invite rotation are owner-only.
+Try creating a cache, opening its shell, copying the link, and rotating it from the UI.
+
+---
+
+## Feature 2 — Joining
+
+**Goal:** an invite link brings a person into a cache, with owner approval when required.
+
+### Scope
+
+- `POST /api/join/{token}` — insert `active`, or `pending` when `requires_approval`.
+- `GET /api/caches/{id}/join-requests` — cache owner's pending queue.
+- `POST /api/caches/{id}/join-requests/{userId}/approve` and
+  `POST /api/caches/{id}/join-requests/{userId}/reject` — cache owner only.
+- Enqueue outbox rows for gated join requests and join approvals/rejections, in the
+  same transaction as the membership change.
+
+UI: wire `/join/:token` through login/onboarding to joining, and add the owner's
+pending queue with approve/reject actions to the members sheet.
+
+### Traps
+
 - **A `removed` membership row blocks rejoin.** Leave it untouched and return 403. The
   invite link is still sitting in the group chat, so removal is meaningless otherwise.
 - **A rejected join _deletes_ the pending row** rather than marking it `removed`, so a
   mistaken rejection can be redone.
-- **Never return another user's `email`.** Member and queue payloads carry `user_id` and
-  `display_name` — the client needs the ID to key rows and address the removal route —
-  but email appears in exactly one response, `GET /api/me`, and only your own.
-- **Enqueue outbox rows now**, even though the worker arrives in Phase 6. The table
+- **Enqueue outbox rows now**, even though the worker arrives in Feature 6. The table
   exists from migration 001 for this reason. Otherwise intermediate deploys drop join
   approvals on the floor and you retrofit enqueue calls into reviewed handlers later.
 
 ### Proof
+
+Run this matrix across both Caches and Joining routes:
 
 Authorization matrix over non-member, pending member, removed member, active member,
 and cache owner, across every direct-ID route, asserting 404 for cross-cache access.
 Plus: creating a cache leaves the creator an active member; a removed member cannot
 rejoin with a valid token.
 
+Also exercise open and gated joins, rejection followed by a retry, and the logged-out
+invite → magic link → display name → join path. Assert recipients and that a
+rolled-back membership change enqueues nothing.
+
 ---
 
-## Phase 4 — Items
+## Feature 3 — Items (no photos)
 
-**Goal:** list things, with photos.
+**Goal:** members list things and owners edit them.
 
-### Build order
+### Scope
 
 1. `POST /api/caches/{id}/items` — active member; `owner_id` from the caller.
 2. `GET /api/caches/{id}/items`, `GET /api/items/{id}`.
 3. `PATCH /api/items/{id}` — item owner only.
-4. `POST /api/items/{id}/photo` — multipart, item owner only.
-5. Frontend `<canvas>` resize to max 1600px, re-encode to JPEG, then upload.
-6. Batched signed URLs for list views, 1-hour TTL.
 
-No delete endpoint in this phase. Phase 7.
+UI: item list in the cache view, item detail sheet, and add-item form. No photo
+upload yet; no delete endpoint until Feature 8.
+
+Item stock is `NULL` for non-consumables and 0–9999 for consumables, as in plan.md.
+The positive-quantity trap below applies to requests against those items; enforce
+that cross-table rule when Requests ships, not as a ban on zero item stock.
 
 ### Traps
 
 - **`is_consumable` is immutable after creation.** Flipping it strands `quantity` and
   every pending reservation counted against it.
 - **`owner_id` comes from the authenticated caller, never the request body.**
+- **`quantity` must be `NULL` for a non-consumable and a bounded positive int for a
+  consumable.** This is a cross-table rule no `CHECK` constraint can express, so the
+  handler enforces it and a test covers both directions.
+
+### Proof
+
+Owner-only mutations 404 for non-owners. `is_consumable` cannot be changed.
+Creating an item cannot forge `owner_id`; item stock accepts zero for consumables
+and requires `NULL` for non-consumables. Exercise list, detail, create, and edit in
+the UI; retain the request-quantity proof in Feature 5.
+
+---
+
+## Feature 4 — Photos
+
+**Goal:** owners add photos and members see them without exposing the bucket.
+
+### Scope
+
+1. `POST /api/items/{id}/photo` — multipart, item owner only.
+2. Frontend `<canvas>` resize to max 1600px, re-encode to JPEG, then upload.
+3. Batched signed URLs for list views, 1-hour TTL.
+
+UI: photo picker and upload/error state in the item form/detail sheet, with photos
+in the item list. Creating the private Supabase Storage bucket and configuring its
+policies are external changes: get the human's explicit approval first. The service
+role key is a server-side secret and also needs approval before configuration.
+
+### Traps
+
 - **Client-side resize is a convenience, not a validation.** Go still sniffs the content
   type, caps the body at 5MB, and rejects anything but JPEG/PNG/WebP. An SVG with a
   script tag must not get through.
@@ -253,9 +301,22 @@ object path, while server-side upload and a signed URL both work.
 
 ---
 
-## Phase 5 — Requests
+## Feature 5 — Requests
 
 **Goal:** the ask/approve handshake, without over-booking.
+
+### Scope
+
+- `POST /api/items/{id}/requests` — active member, excluding the item's owner.
+- `POST /api/requests/{id}/approve` and `POST /api/requests/{id}/reject` — item owner only.
+- `GET /api/requests` — the caller's incoming and outgoing requests.
+- Item detail includes the public pending queue; decided requests stay private to
+  the requester and item owner.
+- Extend `PATCH /api/items/{id}` with the quantity-edit floor below.
+- Enqueue outbox rows for request creation and decisions in the mutation transaction.
+
+UI: "Ask to use" in the item sheet and a requests screen with incoming/outgoing
+lists, approve/reject actions, and a required rejection reason.
 
 This is the only genuinely non-trivial invariant in the app. Slow down here.
 
@@ -277,6 +338,8 @@ statement issued after the lock is acquired sees what the previous lock holder
 committed. Under `REPEATABLE READ` it would still see the stale snapshot from
 transaction start — which is why this app deliberately does not use it.
 
+Membership is locked before the item, using the lock order preserved under Feature 8.
+
 ### Per path
 
 - **Create** — 409 if `quantity > available`.
@@ -294,14 +357,13 @@ WHERE id=$1 AND status='pending'`. **Zero rows changed means someone already dec
   double-approval from deducting twice.** Reading the status and then updating it in two
   statements does not; two approvals interleave and the item loses two units for one
   request. Check the rows-affected count.
-- **`quantity` must be `NULL` for a non-consumable and a bounded positive int for a
-  consumable.** This is a cross-table rule no `CHECK` constraint can express, so the
-  handler enforces it and a test covers both directions.
 - **The item's own owner cannot request it.**
 - **The pending queue is a deliberate disclosure** — requester `display_name`, quantity,
   and `created_at`, visible to every active member, because the product calls for a
   publicly visible queue. Decided requests stay visible only to the requester and the
   item owner.
+
+The request-quantity NULL/positive rule is preserved under Feature 3 and enforced here.
 
 ### Proof
 
@@ -313,17 +375,32 @@ Concurrency, against real Postgres, with actual goroutines:
 - A restock racing a create loses neither write.
 - Quantity rejected when supplied for a non-consumable and when omitted for a consumable.
 
+Also prove edits below pending reservations return 409, incoming/outgoing lists are
+caller-scoped, and rolled-back creates/decisions enqueue nothing. Exercise the
+ask/approve/reject UI with two accounts.
+
 ---
 
-## Phase 6 — Notifications
+## Feature 6 — Notification worker + email
 
-**Goal:** the owner finds out, fast.
+**Goal:** deliver queued events by email; every recipient gets email until push exists.
+
+### Scope
+
+- Poll and lease outbox rows, deliver outside the transaction, retry with backoff,
+  and record guarded terminal states.
+- Deliver via the Resend HTTP API using `net/http`, with `html/template` escaping
+  user-supplied item titles and reasons. Use a 10s client timeout within the 30s row
+  deadline. `RESEND_API_KEY` and `EMAIL_FROM` configuration need human approval.
+- Use the recipients table below for events already enqueued by Joining and Requests;
+  destructive-event enqueue calls arrive in Feature 8.
+
+No new public API routes or UI screen. Email links take recipients back to the
+relevant cache or requests screen. Push subscription routes do not exist yet, so
+all recipients use email; Feature 7 adds structural channel selection.
 
 ### Concepts
 
-- **Web push is RFC 8291** — payloads are ECDH + AES-GCM encrypted per subscription.
-  Use `github.com/SherClockHolmes/webpush-go`; there is no stdlib equivalent.
-- **VAPID** keys identify your server to the push services.
 - **Transactional outbox** — rows written in the same transaction as the state change,
   delivered later by a worker, so a notification can never describe a rollback.
 
@@ -367,22 +444,6 @@ than the rules.
 - **Per-call timeouts alone do not bound a send.** Three subscriptions plus an email
   fallback is four sequential calls; at 10s each that is 40s. One deadline for the whole
   row is the bound that actually holds.
-- **Email is structural, not an escalation ladder.** A recipient gets email if and only
-  if they have no live push subscription — none registered, or every one answered
-  404/410 this pass, in which case those rows are deleted and email goes out in the same
-  pass. There is deliberately no "push kept failing, so escalate" path; that ladder
-  produced a bug in three consecutive review rounds because it made the escalation
-  threshold and the give-up threshold interact.
-- **A push endpoint is untrusted input and the worker POSTs to it from inside Fly's
-  network**, where cloud metadata and 6PN private addresses are reachable. Three
-  controls: an origin allowlist of the real push services at subscribe time
-  (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `web.push.apple.com`,
-  `*.notify.windows.com`), HTTPS-only with no userinfo, and a client that refuses
-  redirects and refuses to dial a non-public IP after DNS resolution.
-- **An endpoint identifies a browser, not a person.** On a shared device, or after a
-  logout and a different login, the same endpoint arrives under a second account.
-  `ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id` reassigns it;
-  ignoring the conflict would send one account's notifications to another's device.
 
 ### Recipients per event
 
@@ -400,25 +461,91 @@ than the rules.
 - A kill mid-send loses nothing; a duplicate is acceptable and expected.
 - A kill immediately after the sixth claim still leaves the row claimable.
 - Six claims of mixed crashes and observed failures reach the give-up threshold.
+- A straggler cannot stamp `failed_at` over another worker's `sent_at`.
+
+Assert that every recipient gets email, event recipients match the table, and a
+permanently failing send sets `failed_at` and stops being claimed. Keep the combined
+email/410 proof under Feature 7 for when subscriptions exist.
+
+---
+
+## Feature 7 — Web push + PWA
+
+**Goal:** installed browsers receive push; recipients without live subscriptions get email.
+
+### Scope
+
+- `POST /api/push/subscribe` and `DELETE /api/push/subscribe` — authenticated,
+  caller-scoped, exempt from `requireProfile`. Logout deletes the endpoint.
+- Add push delivery to the worker, 404/410 subscription cleanup, and structural
+  email selection. Keep the same per-call timeout and whole-row deadline.
+- Serve the VAPID public key through runtime `/api/config`; private key stays
+  server-side. Configuring VAPID secrets needs human approval.
+- PWA manifest and service worker for installability, push display, and notification
+  clicks back into the app.
+
+UI: explicit enable/disable notifications action, permission/error state, and iOS
+install instructions. There is no programmable iOS install prompt.
+
+### Concepts
+
+- **Web push is RFC 8291** — payloads are ECDH + AES-GCM encrypted per subscription.
+  Use `github.com/SherClockHolmes/webpush-go`; there is no stdlib equivalent.
+- **VAPID** keys identify your server to the push services.
+
+### Traps
+
+- **Email is structural, not an escalation ladder.** A recipient gets email if and only
+  if they have no live push subscription — none registered, or every one answered
+  404/410 this pass, in which case those rows are deleted and email goes out in the same
+  pass. There is deliberately no "push kept failing, so escalate" path; that ladder
+  produced a bug in three consecutive review rounds because it made the escalation
+  threshold and the give-up threshold interact.
+- **A push endpoint is untrusted input and the worker POSTs to it from inside Fly's
+  network**, where cloud metadata and 6PN private addresses are reachable. Three
+  controls: an origin allowlist of the real push services at subscribe time
+  (`fcm.googleapis.com`, `updates.push.services.mozilla.com`, `web.push.apple.com`,
+  `*.notify.windows.com`), HTTPS-only with no userinfo, and a client that refuses
+  redirects and refuses to dial a non-public IP after DNS resolution.
+- **An endpoint identifies a browser, not a person.** On a shared device, or after a
+  logout and a different login, the same endpoint arrives under a second account.
+  `ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id` reassigns it;
+  ignoring the conflict would send one account's notifications to another's device.
+- **iOS has no programmable install prompt.** There is no `beforeinstallprompt` in
+  Safari, so iOS gets rendered instructions ("Share, then Add to Home Screen") and
+  nothing more.
+- **`Notification.requestPermission()` must be called from an explicit user gesture**,
+  and on iOS only inside the installed PWA — that is the only context there that can
+  receive push at all.
+
+### Proof
+
 - A recipient with no subscriptions gets email; a 410 deletes the subscription and emails
   in the same pass; a permanently failing send sets `failed_at` and stops being claimed.
-- A straggler cannot stamp `failed_at` over another worker's `sent_at`.
 - SSRF at dial time, which subscribe-time checks do not reach: an allowlisted hostname
   that _resolves_ to a private address is refused, and a 302 toward an internal address
   has the redirect refused.
 - Endpoint reassignment between two accounts, after which the first receives nothing.
 
+Also reject metadata/private hosts, plain HTTP, userinfo, and off-allowlist origins
+at subscribe time; accept genuine Apple, Mozilla, and FCM endpoints. Check permission
+is gesture-driven, logout unsubscribes, and push arrives on an installed iOS PWA.
+
 ---
 
-## Phase 7 — Destructive endpoints and cascades
+## Feature 8 — Member removal and item deletion
 
 **Goal:** removal and deletion that clean up after themselves.
 
-### Build order
+### Scope
 
 1. `DELETE /api/caches/{id}/members/{userId}` — status flip, delete their items in that
    cache, reject their outstanding requests, notify.
 2. `DELETE /api/items/{id}` — cascade its requests, notify pending requesters.
+
+Member removal is cache-owner-only; item deletion is item-owner-only. Enqueue each
+notification in the destructive transaction. UI: removal in the owner's members
+sheet and deletion in the item owner's detail sheet, both with confirmation.
 
 ### The two mechanisms differ
 
@@ -461,26 +588,33 @@ than the rules.
 
 ---
 
-## Phase 8 — Polish
+## Feature 9 — Polish
 
-**Goal:** ship it.
+**Goal:** finish the everyday UX and release checks.
+
+### Scope
 
 1. **Write rate limits.** A small in-memory token bucket per user is enough at this
    scale; joins and request creation are the paths worth limiting.
 2. **Empty and error states** for every list and every mutation.
-3. **PWA manifest and service worker.**
-4. **Accessibility pass** — labeled form controls, visible focus, keyboard-reachable
+3. **Accessibility pass** — labeled form controls, visible focus, keyboard-reachable
    modals and sheets, sufficient text contrast.
-5. **README setup steps** and the manual smoke checklist.
+4. **README setup steps** and the manual smoke checklist.
+
+Apply these across the existing routes and UI screens; no new product endpoints.
+PWA and permission/install behavior already ship in Feature 7.
 
 ### Traps
 
-- **iOS has no programmable install prompt.** There is no `beforeinstallprompt` in
-  Safari, so iOS gets rendered instructions ("Share, then Add to Home Screen") and
-  nothing more.
-- **`Notification.requestPermission()` must be called from an explicit user gesture**,
-  and on iOS only inside the installed PWA — that is the only context there that can
-  receive push at all.
+Keep the Foundation and feature traps green while polishing. Magic-link delivery
+and notification email are independent paths; neither one's smoke check proves the
+other works.
+
+### Proof
+
+Run the completion gates and check rate limits on joins and request creation, every
+list's empty/error state, and failed mutations. Check labeled controls, visible
+focus, keyboard access to modals/sheets, and text contrast.
 
 ### Manual smoke checklist
 
@@ -492,3 +626,6 @@ None of these is cheaply automatable, and each covers a path the test suite cann
 - A signed image URL renders.
 - Push arrives on an installed iOS PWA.
 - A Fly rolling deploy with a pending migration comes up clean.
+
+Deploys, provider configuration, and secret changes in this checklist still need the
+human's explicit approval.

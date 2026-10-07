@@ -58,7 +58,7 @@ DATABASE_URL=postgres://postgres.<ref>:<encoded-password>@aws-0-<region>.pooler.
 ```
 
 `TEST_DATABASE_URL` is what `make test` / `make migrate-check` use. Later
-phases insert and delete under concurrency. If that URL is your production
+features insert and delete under concurrency. If that URL is your production
 database, those tests will mutate live data — **never** point it at the hosted
 project. The hosted Data API boundary check (`make boundary-http`) hits PostgREST
 over HTTP with the anon key from `.env` — never as part of `make test`, and never
@@ -119,4 +119,5 @@ works. Details and order live in [deploy.md](deploy.md):
 - Enable asymmetric JWT signing keys.
 - Site URL + redirect allowlist (`{APP_BASE_URL}/join/*` and local Vite origin).
 - Resend as custom SMTP for magic links.
-- Private storage bucket with no `storage.objects` policies (Phase 4).
+- Private storage bucket with no `storage.objects` policies (Feature 4 — Photos;
+  get the human's approval before creating it).
