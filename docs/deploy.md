@@ -1,9 +1,10 @@
 # Deploying the Cloudflare stack
 
-Target runbook, to be implemented during the port. This docs PR changes no resources,
-settings, secrets or deployments. **Get explicit approval before account operations,
-provider changes, a real deploy, data migration or decommissioning.** Existing
-production remains live until an approved cutover.
+Target release runbook; Foundation supplies tooling/bindings and commits the real
+ID of the approved `communalcache` D1 database. Remote migrations and deployment
+have not been authorized by that resource creation. **Get explicit approval before
+further account operations, provider changes, a real deploy, data migration or
+decommissioning.** Existing production remains live until an approved cutover.
 
 ## What is deployed
 
@@ -14,9 +15,12 @@ Better Auth runs inside the Worker with D1 users/sessions and email OTPs. Resend
 fetch serves two independent paths: sign-in codes awaited by the auth request,
 and Queue-driven notification email. No target Supabase service or SMTP setup.
 
-Root Worker tooling/config do not exist yet in this docs-only PR. Foundation adds
-and pins Wrangler/plugin versions and documents the actual binding/database names.
-Commands below assume that tooling and an approved environment configuration exist.
+Foundation supplies `wrangler.jsonc`, D1 binding `DB` (database `communalcache`),
+SQLite DO binding `CACHES` (class `Cache`) and `ASSETS` (`web/dist`). The approved
+D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1` is committed in `wrangler.jsonc`;
+remote migrations and deployment still need separate approval. Compatibility date
+`2026-09-30` supports RPC/default error serialization; `nodejs_compat` is set.
+R2/Queue/Cron bindings are later features, not provisioned here.
 
 ## Local checks first
 
@@ -27,11 +31,14 @@ for local values, never production bindings or `wrangler dev --remote` for tests
 npx --no-install tsc --noEmit
 npx --no-install vitest run
 (cd web && npx --no-install tsc --noEmit && npm run build)
-npx --no-install wrangler d1 migrations apply communalcache --local
-npx --no-install wrangler deploy --dry-run
-npx --no-install wrangler dev
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run
+npm run dev
 ```
 
+Copy `.dev.vars.example` to gitignored `.dev.vars`; use a fresh local-only auth
+secret and identical local APP_BASE_URL/BETTER_AUTH_URL (see README). Disable
+Wrangler dotenv fallback so legacy `.env` cannot supply Go/Supabase values.
 The dry run validates a bundle, not a live deployment. Smoke local health/config,
 SPA invite deep links and JSON API errors. Test migrations on empty D1 and older
 DO versions; no Go/Docker/Postgres gate proves these Worker paths.
@@ -42,8 +49,9 @@ DO versions; no Go/Docker/Postgres gate proves these Worker paths.
 
 1. Confirm account/environment and intended URL `https://communalcache.com` (the
    user owns this domain on Cloudflare). Custom-domain routing and resource
-   provisioning still need approval. Create D1, SQLite-backed cache DO namespace/
-   class, private R2 and notification Queue only after approval.
+   provisioning still need approval. D1 `communalcache` was created with approval;
+   provision its remaining settings, the SQLite-backed cache DO namespace/class,
+   private R2 and notification Queue only after approval.
 2. Bind them to the Worker. The DO can access that Worker's env bindings; those
    capabilities never appear in browser config. Use a compatibility date supporting
    RPC (`2024-04-03` or later); choose/test error serialization explicitly. Add
@@ -81,7 +89,10 @@ part of this application. Discovery projections never authorize access.
 - Database rate-limit storage, not memory; trusted Cloudflare IP header and tested
   send/resend/verify limits. App profile gate exempts auth, PATCH /api/me and push.
 - Auth code delivery awaits bounded Resend fetch, independent of notification
-  Queue. No callback redirect for code login: pending join stays in sessionStorage.
+  Queue. Better Auth 1.7.7 catches callback errors; a per-request closure result maps
+  failed sends/timeouts to generic JSON 502. No callback redirect for code login:
+  pending join stays in sessionStorage and returns to the same page. Foundation
+  proves preservation; Feature 2 adds the actual join POST.
 - Magic-link plugin is a later scanner-safe SPA Continue flow, hashed token and
   exact same-origin callbacks; combined link/code lifecycle needs proof. SMS is
   deferred, no provider account or sender provisioned.
@@ -134,7 +145,7 @@ never guess the account from whatever login happens to be active locally.
    A healthy `/api/healthz` alone says nothing about pending work delivery.
 
 The port must document its final environment-specific commands before a real
-release. No remote command in this runbook is executed by this spec PR.
+release. No remote command in this runbook is executed by Foundation.
 
 ## Manual smoke and observability
 

@@ -1,9 +1,6 @@
-import type { Session } from '@supabase/supabase-js'
-
 export class ApiError extends Error {
   status: number
   code: string
-
   constructor(status: number, code: string) {
     super(code)
     this.status = status
@@ -11,63 +8,30 @@ export class ApiError extends Error {
   }
 }
 
-export type Me = {
-  id: string
-  email: string
-  display_name: string | null
-}
+export type Me = { id: string; email: string; display_name: string | null }
 
-type ApiOptions = {
-  method?: string
-  body?: unknown
-  session: Session | null
-  onProfileIncomplete?: () => void
-}
+type ApiOptions = { method?: string; body?: unknown }
 
-export async function apiFetch<T>(path: string, opts: ApiOptions): Promise<T> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  }
-  if (opts.body !== undefined) {
-    headers['Content-Type'] = 'application/json'
-  }
-  if (opts.session?.access_token) {
-    headers.Authorization = `Bearer ${opts.session.access_token}`
-  }
-
+export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   const res = await fetch(path, {
     method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
-    headers,
+    credentials: 'same-origin',
+    headers: { Accept: 'application/json', ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
-
-  if (res.status === 409) {
-    let code = 'conflict'
-    try {
-      const data = (await res.json()) as { error?: string }
-      code = data.error ?? code
-    } catch {
-      /* ignore */
-    }
-    if (code === 'profile_incomplete') {
-      opts.onProfileIncomplete?.()
-    }
-    throw new ApiError(res.status, code)
-  }
-
   if (!res.ok) {
-    let code = 'request_failed'
-    try {
-      const data = (await res.json()) as { error?: string }
-      code = data.error ?? code
-    } catch {
-      /* ignore */
-    }
-    throw new ApiError(res.status, code)
+    const data = await res.json().catch(() => ({})) as { error?: string; code?: string }
+    throw new ApiError(res.status, data.error ?? data.code ?? 'request_failed')
   }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
 
-  if (res.status === 204) {
-    return undefined as T
-  }
-  return (await res.json()) as T
+export function errorMessage(error: unknown) {
+  if (!(error instanceof ApiError)) return 'Could not connect. Please try again.'
+  if (error.status === 429) return 'Too many tries. Please wait a minute and try again.'
+  if (error.code === 'email_unavailable') return 'Could not send the code. Your invite is saved; please try again.'
+  if (['INVALID_OTP', 'OTP_EXPIRED', 'TOO_MANY_ATTEMPTS', 'invalid_otp'].includes(error.code)) return 'That code is invalid or expired. Request a new code and use the newest email.'
+  if (error.code === 'invalid_display_name') return 'Choose a name between 1 and 60 characters.'
+  return 'Could not complete that request. Please try again.'
 }

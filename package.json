@@ -1,0 +1,21 @@
+{
+  "name": "communalcache-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler dev",
+    "types": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --strict-vars=false",
+    "ui:fixture": "node scripts/ui-fixture.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-auth": "1.7.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.3.4",
+    "typescript": "6.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.145.0"
+  }
+}

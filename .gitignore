@@ -12,3 +12,8 @@ node_modules/
 web/node_modules/
 web/dist/
 .cursor/hooks/state/
+.dev.vars*
+!.dev.vars.example
+.wrangler/
+*.tsbuildinfo
+.pi/

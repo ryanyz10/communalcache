@@ -1,6 +1,5 @@
 export type AppConfig = {
-  supabase_url: string
-  supabase_anon_key: string
+  better_auth_url: string
   vapid_public_key: string
   app_base_url: string
 }
