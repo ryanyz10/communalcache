@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { HomePage } from './pages/HomePage'
+import { CachePage } from './pages/CachePage'
 import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
 
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/" element={<HomePage />} />
+            <Route path="/caches/:cacheId" element={<CachePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Ready>
