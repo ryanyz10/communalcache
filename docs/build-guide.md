@@ -28,21 +28,22 @@ and authorization tests, not their Postgres/Fly mechanisms.
 
 ### Completion gates
 
-Foundation adds the root Worker package/tooling and Wrangler configuration; these
-are **target commands**, not commands already supplied by this docs-only PR:
+Foundation supplies the root Worker package/tooling and Wrangler configuration.
+These commands validate local bindings and bundle only, never production:
 
 ```bash
 npx --no-install tsc --noEmit
 npx --no-install vitest run
 (cd web && npx --no-install tsc --noEmit && npm run build)
-npx --no-install wrangler d1 migrations apply communalcache --local
-npx --no-install wrangler deploy --dry-run
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run
 ```
 
 Also test empty D1 migrations and old→new DO schema versions in the suite; smoke
 local `/api/healthz`, `/api/config`, SPA deep links and API 404s under
 `wrangler dev`. It defaults to local storage; no `--remote` or production test
-bindings. No package install or account command is part of this docs change.
+bindings. See [README.md](../README.md) for local `.dev.vars`, Vite origins and the
+provider-free UI fixture; legacy `.env` must not feed Worker bindings.
 
 For legacy Go-only reference validation, existing `make test`, `make vet`, gofmt
 and frontend commands still apply to that code. Do not mistake them for Worker/DO
@@ -54,7 +55,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 
 | # | Feature | Cloudflare status | Reference PR |
 | --- | --- | --- | --- |
-| — | Foundation port | Not started; Go foundation live | — |
+| — | Foundation port | Implemented; in review (local gates, no deployment) | — |
 | 1 | Caches | Port not started; Go implementation ready for review | [#2](https://github.com/ryanyz10/communalcache/pull/2) |
 | 2 | Joining | Port not started; Go implementation ready for review | [#3](https://github.com/ryanyz10/communalcache/pull/3) |
 | 3 | Items (no photos) | Not started | — |
@@ -109,15 +110,19 @@ change to existing production services without explicit approval.
   reject missing/null/foreign Origin on app mutations. Cookie cache stays off;
   logout/revocation uses D1. Development origins never become production wildcards.
 - **Hash OTPs and rotate resends.** Six digits/300 seconds/three attempts; hashed
-  storage cannot reuse the old code. Tell users to use the newest email.
+  storage cannot reuse the old code. Foundation adds exact-prefix OTP uniqueness
+  in D1 so resend replaces old rows even with equal timestamps and late wrong-code
+  restoration cannot revive a superseded code. Only that sign-in unique conflict
+  maps to 400 INVALID_OTP; other database failures stay visible. Tell users to use
+  the code from the newest request; concurrent mail delivery can finish out of order.
 - **D1 rate-limit storage, not isolate memory.** Explicitly enabled in tests; prove
   concurrent redemption/attempt limits and counters across Worker instances. Native
   adapter support is not proof of every concurrency property.
 - **Only one signup flow.** Allow verified email-OTP signup, disable password,
   reset/change-email and other unused paths/plugins. No admin/list-users.
 - **Invite stays on the page.** Stash cacheId/secret before requesting a code;
-  verify code, set display name and resume join POST body. Keep no-referrer; no
-  callback URL or auth-email copy of the join secret.
+  verify code, set display name and resume the join page. Feature 2 adds the join
+  POST body. Keep no-referrer; no callback URL or auth-email copy of the join secret.
 - **Auth delivery is synchronous.** Await bounded Resend fetch from the auth
   request, not Queue/waitUntil. communalcache.com sending-domain setup needs
   approval; an auth-mail send failure must surface without losing the invite.
@@ -133,8 +138,16 @@ OTP correctness/expiry/replay/three attempts/resend invalidation/hashed storage;
 concurrent auth-limit tests; tampered/expired/revoked cookies and flags; app/auth
 CSRF, disabled endpoints, profile exemptions and caller-only email. Resend failure/
 timeout is visible and independent of Queue. Health/config/deep links; logged-out
-invite → code on the same page → name → original POST. Domain/delivery smoke waits
-for approval; target URL is https://communalcache.com.
+invite → code on the same page → name → original join page, with sessionStorage
+retention and explicit cancellation. The actual join POST (secret in body) is
+proved in Feature 2, not Foundation. Domain/delivery smoke waits for approval;
+target URL is https://communalcache.com.
+
+Foundation uses compatibility date `2026-09-30` (RPC and default error serialization)
+and an empty-D1 pinned schema compiler reference in `scripts/auth-schema.mjs`.
+Better Auth 1.7.7 awaits but catches delivery callback errors; per-request closure
+state maps HTTP failure/timeout to generic JSON 502 without changing a rate-limited
+response. Tests prove concurrent send results cannot leak between requests.
 
 **Planned auth follow-up:** magic-link plugin with hashed 300s tokens, exact-origin
 callbacks and a scanner-safe SPA Continue button; no verification on page load.
