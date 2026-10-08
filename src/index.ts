@@ -1,5 +1,6 @@
 import { createAuth, type DeliveryResult } from './auth'
-import { getProfile, setDisplayName, type Profile } from './db'
+import { displayNames, getProfile, listMyCaches, setDisplayName, type Profile } from './db'
+import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
 export { Cache } from './cache'
 
@@ -61,23 +62,64 @@ async function dispatch(request: Request, env: Env) {
       vapid_public_key: env.VAPID_PUBLIC_KEY,
     })
   }
-  // Future features add their dispatch here; unknown paths never fall through to assets.
-  if (path !== '/api/me') throw new HttpError(404, 'not_found')
-  if (!['GET', 'PATCH'].includes(method)) throw new HttpError(405, 'method_not_allowed')
+  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate)?$/i)
+  if (path !== '/api/me' && path !== '/api/caches' && !cacheRoute) throw new HttpError(404, 'not_found')
+  const methods = path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(401, 'unauthorized')
   const profile = await getProfile(env.DB, session.user.id)
   if (!profile) throw new HttpError(401, 'unauthorized')
   requireProfile(path, method, profile)
-  if (method === 'GET') return json(profile)
-  const body = await readBody(request)
-  if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) {
-    throw new HttpError(400, 'invalid_display_name')
+  if (path === '/api/me') {
+    if (method === 'GET') return json(profile)
+    const body = await readBody(request)
+    if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
+    return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
   }
-  return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
+  if (path === '/api/caches' && method === 'GET') return json((await listMyCaches(env.DB, profile.id)).results)
+  try {
+    if (path === '/api/caches') {
+      const changes = cacheChanges(await readBody(request))
+      if (changes.name === undefined) throw new HttpError(400, 'invalid_name')
+      const id = crypto.randomUUID()
+      return json(await env.CACHES.get(env.CACHES.idFromName(id)).create(id, profile.id, changes.name, changes.requires_approval ?? false), 201)
+    }
+    const stub = env.CACHES.get(env.CACHES.idFromName(cacheRoute![1]))
+    if (cacheRoute![2]) {
+      if (request.body) await readBody(request)
+      return json(await stub.rotateInvite(profile.id))
+    }
+    if (method === 'PATCH') return json(await stub.update(profile.id, cacheChanges(await readBody(request))))
+    const detail = await stub.detail(profile.id)
+    const names = await displayNames(env.DB, detail.members.map(member => member.user_id))
+    return json({ ...detail, members: detail.members.map(member => ({ ...member, display_name: names.get(member.user_id) ?? null })) })
+  } catch (error) {
+    // RPC recreates Error objects; use only the stable messages defined by cache RPCs.
+    if (error instanceof Error && error.message === 'not_found') throw new HttpError(404, 'not_found')
+    if (error instanceof Error && error.message === 'cache_exists') throw new HttpError(409, 'cache_exists')
+    throw error
+  }
+}
+
+function cacheChanges(body: Record<string, unknown>) {
+  const changes: { name?: string; requires_approval?: boolean } = {}
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || !body.name.trim() || [...body.name.trim()].length > 60) throw new HttpError(400, 'invalid_name')
+    changes.name = body.name.trim()
+  }
+  if (body.requires_approval !== undefined) {
+    if (typeof body.requires_approval !== 'boolean') throw new HttpError(400, 'invalid_requires_approval')
+    changes.requires_approval = body.requires_approval
+  }
+  if (changes.name === undefined && changes.requires_approval === undefined) throw new HttpError(400, 'invalid_json')
+  return changes
 }
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Env) {
+    await sweepCacheSync(env)
+  },
   async fetch(request: Request, env: Env): Promise<Response> {
     try { return await dispatch(request, env) }
     catch (error) {
