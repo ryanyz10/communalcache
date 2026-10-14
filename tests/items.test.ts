@@ -182,7 +182,7 @@ it('Worker item routes enforce cookies, CSRF, profiles, validation, owner-only w
   const detail = await worker.fetch(appRequest(detailPath, { cookie: caller.cookie }), env)
   expect(await list.json()).toEqual([await detail.json()])
   expect(JSON.stringify(item)).not.toContain('example.test')
-  expect((await worker.fetch(appRequest(detailPath, { method: 'DELETE', cookie: caller.cookie }), env)).status).toBe(405)
+  expect((await worker.fetch(appRequest(detailPath, { method: 'PUT', cookie: caller.cookie }), env)).status).toBe(405)
   expect((await worker.fetch(appRequest(detailPath + '/photo', { cookie: caller.cookie }), env)).status).toBe(404)
   const other = cache()
   await other.stub.create(other.id, caller.id, 'Other', false)

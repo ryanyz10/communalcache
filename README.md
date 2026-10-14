@@ -91,7 +91,7 @@ fixture API is mocked; the runtime suite separately proves real D1/DO authority.
 For Items, use **Add item** from a cache: create a reusable item without stock or
 check Consumable and set stock (including zero). Open the item, edit its title,
 description or stock, and return to the cache list. Type is fixed after creation;
-deletion is intentionally absent. From item detail, choose a JPEG, PNG or WebP and
+the owner can delete it through a confirmation dialog. From item detail, choose a JPEG, PNG or WebP and
 **Upload photo**; the browser resizes/re-encodes it to JPEG. The owner can replace
 it, and item lists/detail load it from the same-origin authenticated photo route.
 The mock fixture covers UI flows only; real authorization, R2 cleanup and
@@ -107,6 +107,13 @@ real join/membership permissions are proved by DO tests, not this mock API.
 The real aggregate loads 25 discovered caches per page with **Load more caches**,
 and explicitly warns if some caches could not be loaded. There is no cancellation
 or handoff/return tracking.
+
+The cache owner's members sheet has **Remove** confirmation dialogs for non-owner
+members. Removal immediately blocks cache data (404), keeps the invite route's
+removed-member 403, deletes the member's items and rejects their pending requests
+on surviving items. Item deletion notifies pending requesters. D1/R2/notification
+cleanup is eventual through durable ordered sync; there is no self-leave or owner
+removal. The UI fixture mocks this flow, while runtime tests prove cascades.
 Use `UI_FIXTURE_PORT=4174 npm run ui:fixture` if 4173 is occupied, or additionally
 `UI_FIXTURE_DEV=1` to exercise the real Vite source UI before building.
 

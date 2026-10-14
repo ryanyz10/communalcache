@@ -173,6 +173,13 @@ one `transactionSync`. The stable intent ID becomes the D1 outbox ID through the
 existing ordered drain. Pending item queues are member-public; decided rows and
 cross-cache aggregation are restricted to the requester/item owner by local SQL.
 
+Removal/deletion also reuses v2. Each destructive transaction checks live authority,
+snapshots pending recipients, records notification, `discovery_delete`, exact R2
+and trailing-slash `r2_delete_prefix` intents, then cascades local SQL. A thrown step
+rolls all of it back. The drain repeatedly lists/deletes 100-key prefix pages and
+deletes that intent only after an empty list; failed D1/R2/Queue effects remain
+durable with the existing backoff. Stale `my_caches` rows still 404 at the DO.
+
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not
 rename a class/namespace casually and mistake a new empty DO for migrated data.

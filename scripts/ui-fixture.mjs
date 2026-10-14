@@ -78,6 +78,14 @@ const server = createServer(async (request, response) => {
         return
       }
       if (path.endsWith('/join-requests') && request.method==='GET') { json([]); return }
+      const memberRoute=path.match(/^\/api\/caches\/([^/]+)\/members\/([^/]+)$/)
+      if (memberRoute && request.method==='DELETE') {
+        const cache=caches.get(memberRoute[1])
+        if (!cache || cache.owner_id!==me.id) { json({error:'not_found'},404); return }
+        if (memberRoute[2]===cache.owner_id) { json({error:'owner_cannot_be_removed'},409); return }
+        for (const item of [...items.values()].filter(item=>item.cache_id===cache.id && item.owner_id===memberRoute[2])) items.delete(item.id)
+        response.writeHead(204,{'Cache-Control':'no-store'}); response.end(); return
+      }
       const decisionRoute=path.match(/^\/api\/caches\/([^/]+)\/requests\/([^/]+)\/(approve|reject)$/)
       if (decisionRoute) {
         const row=requests.get(decisionRoute[2])
@@ -137,6 +145,12 @@ const server = createServer(async (request, response) => {
         }
         const item=items.get(itemId)
         if (!item || item.cache_id!==cacheId) { json({error:'not_found'},404); return }
+        if (request.method === 'DELETE') {
+          if (item.owner_id!==me.id) { json({error:'not_found'},404); return }
+          items.delete(item.id); photos.delete(item.id)
+          for (const row of [...requests.values()].filter(row=>row.item_id===item.id)) requests.delete(row.id)
+          response.writeHead(204,{'Cache-Control':'no-store'}); response.end(); return
+        }
         if (request.method === 'PATCH') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (item.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }

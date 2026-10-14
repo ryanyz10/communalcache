@@ -51,7 +51,7 @@ it('distinguishes empty, unavailable and loading item lists', () => {
   expect(render('list', { list: 'loading' })).toContain('Loading items')
 })
 
-it('shows item details to members but edit and upload controls only to the item owner, with no deletion', () => {
+it('shows item details to members but edit, upload and confirmed delete controls only to the item owner', () => {
   const owner = render('detail')
   expect(owner).toContain('Sugar')
   expect(owner).toContain('For baking')
@@ -61,7 +61,10 @@ it('shows item details to members but edit and upload controls only to the item 
   const member = render('detail', { owner: false })
   expect(member).not.toContain('Edit item')
   expect(member).not.toContain('Upload photo')
-  expect(owner).not.toContain('Delete')
+  expect(member).not.toContain('Delete item')
+  expect(owner).toContain('Delete item')
+  expect(owner).toContain('Confirm deletion')
+  expect(owner).toContain('Neighbors with pending requests will be notified')
   expect(owner).toContain('Upload photo')
   expect(owner).toContain('accept="image/jpeg,image/png,image/webp"')
 })
@@ -121,4 +124,10 @@ it('sends cookie-auth item CRUD to nested routes, without owner assignment or ed
   expect(fetchMock.mock.calls.every(call => call[1]?.credentials === 'same-origin')).toBe(true)
   expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('owner_id')
   expect(JSON.parse(fetchMock.mock.calls[3][1]?.body as string)).not.toHaveProperty('is_consumable')
+})
+
+it('deletes through the same-origin nested item route without a request body', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
+  await apiFetch(`/api/caches/${cacheId}/items/${item.id}`, { method: 'DELETE' })
+  expect(fetchMock).toHaveBeenCalledWith(`/api/caches/${cacheId}/items/${item.id}`, expect.objectContaining({ method: 'DELETE', credentials: 'same-origin', body: undefined }))
 })
