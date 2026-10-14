@@ -36,7 +36,12 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_name') return 'Use a cache name between 1 and 60 characters.'
   if (error.code === 'member_removed') return 'You were removed from this cache and cannot rejoin with an invite.'
   if (error.code === 'join_not_pending') return 'This join request has already been decided. The list has been refreshed.'
-  if (error.status === 404) return 'This cache or invite is not available, or you are no longer a member.'
+  if (error.code === 'invalid_title') return 'Use an item title between 1 and 120 characters.'
+  if (error.code === 'invalid_description') return 'Keep the description within 2000 characters.'
+  if (error.code === 'invalid_quantity') return 'Use a whole stock quantity from 0 to 9999 for consumables; reusable items have no quantity.'
+  if (error.code === 'invalid_is_consumable' || error.code === 'immutable_is_consumable') return 'Choose an item type when adding it. The type cannot be changed later.'
+  if (error.code === 'quantity_reserved') return 'Stock cannot be lower than the quantity reserved by pending requests. Refresh the item and try again.'
+  if (error.status === 404) return 'This cache, item or invite is not available, or you are no longer a member.'
   if (error.status === 401) return 'Your session has expired. Sign in again.'
   return 'Could not complete that request. Please try again.'
 }

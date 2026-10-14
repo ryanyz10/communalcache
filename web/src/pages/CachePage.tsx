@@ -6,6 +6,7 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheDetail, CacheInfo } from '../lib/caches'
 import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
+import { ItemList } from './ItemPages'
 
 function OwnerSettings({cache}:{cache:CacheDetail}) {
   const queryClient=useQueryClient()
@@ -77,7 +78,7 @@ export function CachePage() {
       {owner && <button type="button" className="ml-3 rounded-md border border-slate-300 px-4 py-2" onClick={()=>{rotate.reset();rotateDialog.current?.showModal()}}>Rotate invite</button>}
       {rotationStatus && <p role="status" className="mt-3 text-emerald-700">{rotationStatus}</p>}
     </section>
-    <section className="mt-8" aria-labelledby="items-heading"><h2 id="items-heading" className="text-xl font-semibold">Shared things</h2><p className="mt-2 text-slate-600">Adding and browsing items comes in the Items feature.</p></section>
+    <ItemList cacheId={cache.id} />
     {owner && <JoinRequests cacheId={cache.id} />}
     {owner && <OwnerSettings cache={cache} />}
     <dialog ref={membersDialog} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="members-heading">
