@@ -3,6 +3,37 @@ import { applyCacheIntent } from './db'
 
 export type CacheInfo = { id: string; name: string; owner_id: string; invite_token: string; requires_approval: boolean }
 type CacheRow = { id: string; name: string; join_secret: string; requires_approval: number; created_at: number; owner_id: string }
+export type ItemInfo = { id: string; cache_id: string; owner_id: string; title: string; description: string | null; is_consumable: boolean; quantity: number | null; created_at: number }
+type ItemRow = Omit<ItemInfo, 'is_consumable'> & { is_consumable: number }
+
+function itemInfo(row: ItemRow): ItemInfo {
+  return { ...row, is_consumable: row.is_consumable === 1 }
+}
+
+function itemChanges(body: Record<string, unknown>, consumable: boolean, creating: boolean) {
+  const changes: { title?: string; description?: string | null; quantity?: number | null } = {}
+  if (Object.hasOwn(body, 'owner_id')) throw new Error('not_found')
+  if (!creating && Object.hasOwn(body, 'is_consumable')) throw new Error('immutable_is_consumable')
+  if (creating || Object.hasOwn(body, 'title')) {
+    if (typeof body.title !== 'string' || !body.title.trim() || [...body.title.trim()].length > 120) throw new Error('invalid_title')
+    changes.title = body.title.trim()
+  }
+  if (Object.hasOwn(body, 'description')) {
+    if (body.description !== null && (typeof body.description !== 'string' || [...body.description.trim()].length > 2000)) throw new Error('invalid_description')
+    changes.description = typeof body.description === 'string' ? body.description.trim() || null : null
+  }
+  if (creating || Object.hasOwn(body, 'quantity')) {
+    if (consumable) {
+      if (typeof body.quantity !== 'number' || !Number.isInteger(body.quantity) || body.quantity < 0 || body.quantity > 9999) throw new Error('invalid_quantity')
+      changes.quantity = body.quantity
+    } else {
+      if (body.quantity !== undefined && body.quantity !== null) throw new Error('invalid_quantity')
+      changes.quantity = null
+    }
+  }
+  if (!creating && !Object.keys(changes).length) throw new Error('invalid_json')
+  return changes
+}
 
 function newSecret() {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
@@ -205,6 +236,64 @@ export class Cache extends DurableObject<Env> {
     })
     await this.rearm()
     return result
+  }
+
+  private readItem(userId: string, itemId: string, ownerOnly = false): ItemRow {
+    const row = this.ctx.storage.sql.exec<ItemRow>(`
+      SELECT i.id, c.id AS cache_id, i.owner_id, i.title, i.description, i.is_consumable, i.quantity, i.created_at
+      FROM items i JOIN members caller ON caller.user_id = ? AND caller.status = 'active'
+      JOIN cache_config c ON c.singleton = 1
+      WHERE i.id = ? AND (? = 0 OR i.owner_id = caller.user_id)
+    `, userId, itemId, ownerOnly ? 1 : 0).toArray()[0]
+    if (!row) throw new Error('not_found')
+    return row
+  }
+
+  async listItems(userId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      const cache = this.readCache(userId)
+      return this.ctx.storage.sql.exec<ItemRow>(`
+        SELECT id, ? AS cache_id, owner_id, title, description, is_consumable, quantity, created_at
+        FROM items ORDER BY created_at DESC, id
+      `, cache.id).toArray().map(itemInfo)
+    })
+  }
+
+  async itemDetail(userId: string, itemId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => itemInfo(this.readItem(userId, itemId)))
+  }
+
+  async createItem(userId: string, body: Record<string, unknown>) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      this.readCache(userId)
+      if (typeof body.is_consumable !== 'boolean') throw new Error('invalid_is_consumable')
+      const changes = itemChanges(body, body.is_consumable, true)
+      const id = crypto.randomUUID()
+      this.ctx.storage.sql.exec(`
+        INSERT INTO items(id, owner_id, title, description, is_consumable, quantity, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, id, userId, changes.title!, changes.description ?? null, body.is_consumable ? 1 : 0, changes.quantity!, Date.now())
+      return itemInfo(this.readItem(userId, id))
+    })
+  }
+
+  async updateItem(userId: string, itemId: string, body: Record<string, unknown>) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      const item = this.readItem(userId, itemId, true)
+      const changes = itemChanges(body, item.is_consumable === 1, false)
+      if (changes.quantity !== undefined && changes.quantity !== null) {
+        const pending = this.ctx.storage.sql.exec<{ quantity: number }>("SELECT COALESCE(SUM(quantity), 0) AS quantity FROM requests WHERE item_id = ? AND status = 'pending'", itemId).one().quantity
+        if (changes.quantity < pending) throw new Error('quantity_reserved')
+      }
+      this.ctx.storage.sql.exec('UPDATE items SET title = ?, description = ?, quantity = ? WHERE id = ?',
+        changes.title ?? item.title, changes.description === undefined ? item.description : changes.description,
+        changes.quantity === undefined ? item.quantity : changes.quantity, itemId)
+      return itemInfo(this.readItem(userId, itemId))
+    })
   }
 
   async schemaVersion() {

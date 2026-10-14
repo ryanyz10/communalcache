@@ -82,6 +82,11 @@ For the Caches UI walkthrough, cancel the saved invite to reach the dashboard,
 create a cache and immediately open its page. Copy an invite, open the members
 sheet, change owner settings and rotate through the confirmation dialog. The
 fixture API is mocked; the runtime suite separately proves real D1/DO authority.
+For Items, use **Add item** from a cache: create a reusable item without stock or
+check Consumable and set stock (including zero). Open the item, edit its title,
+description or stock, and return to the cache list. Type is fixed after creation;
+photos and deletion are intentionally absent. The mock fixture covers these UI
+flows only; real authorization and pending-reservation floors are runtime tests.
 Use `UI_FIXTURE_PORT=4174 npm run ui:fixture` if 4173 is occupied, or additionally
 `UI_FIXTURE_DEV=1` to exercise the real Vite source UI before building.
 
