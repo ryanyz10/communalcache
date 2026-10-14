@@ -7,10 +7,11 @@ import { resolve, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const dist = fileURLToPath(new URL('../web/dist/', import.meta.url))
-let me = null
+const users = new Map()
 const caches = new Map()
 const items = new Map()
 const photos = new Map()
+const requests = new Map()
 let vite
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname
@@ -26,15 +27,18 @@ const server = createServer(async (request, response) => {
     let body = {}
     try { if (request.headers['content-type']?.startsWith('application/json')) body = JSON.parse(raw.toString() || '{}') }
     catch { json({error: 'invalid_json'}, 400); return }
-    const authenticated = request.headers.cookie?.includes('ui_fixture=active')
+    const sessionId = request.headers.cookie?.match(/(?:^|;\s*)ui_fixture=([^;]+)/)?.[1]
+    let me = [...users.values()].find(user=>user.id===sessionId) ?? null
+    const authenticated = !!me
     if (path === '/api/auth/email-otp/send-verification-otp') {
       json(body.email === 'failure@example.test' ? {error: 'email_unavailable'} : {success:true}, body.email === 'failure@example.test' ? 502 : 200)
       return
     }
     if (path === '/api/auth/sign-in/email-otp') {
       if (body.otp !== '123456') { json({code: 'INVALID_OTP'}, 400); return }
-      me = { id: 'fixture-user', email: body.email, display_name: null }
-      response.setHeader('Set-Cookie', 'ui_fixture=active; HttpOnly; SameSite=Lax; Path=/')
+      me = users.get(body.email) ?? { id: randomUUID(), email: body.email, display_name: null }
+      users.set(body.email,me)
+      response.setHeader('Set-Cookie', `ui_fixture=${me.id}; HttpOnly; SameSite=Lax; Path=/`)
       json({user:me})
       return
     }
@@ -49,6 +53,11 @@ const server = createServer(async (request, response) => {
       json(me)
       return
     }
+    if (path === '/api/requests') {
+      if (!authenticated) { json({error:'unauthorized'},401); return }
+      json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id),unavailable_cache_ids:[],next_cursor:null})
+      return
+    }
     if (path === '/api/caches' || path.startsWith('/api/caches/')) {
       if (!authenticated || !me) { json({error:'unauthorized'},401); return }
       if (path === '/api/caches' && request.method === 'GET') {
@@ -61,6 +70,35 @@ const server = createServer(async (request, response) => {
         const cache={id,name:body.name.trim(),owner_id:me.id,requires_approval:!!body.requires_approval,invite_token:`${id}.${randomBytes(32).toString('base64url')}`}
         caches.set(id,cache)
         json(cache,201)
+        return
+      }
+      if (path.endsWith('/join-requests') && request.method==='GET') { json([]); return }
+      const decisionRoute=path.match(/^\/api\/caches\/([^/]+)\/requests\/([^/]+)\/(approve|reject)$/)
+      if (decisionRoute) {
+        const row=requests.get(decisionRoute[2])
+        if (!row || row.cache_id!==decisionRoute[1] || row.owner_id!==me.id) { json({error:'not_found'},404); return }
+        if (row.status!=='pending') { json({error:'request_not_pending'},409); return }
+        if (decisionRoute[3]==='reject' && (!body.reason?.trim() || [...body.reason.trim()].length>500)) { json({error:'invalid_reason'},400); return }
+        row.status=decisionRoute[3]==='approve'?'approved':'rejected'
+        row.decision_reason=row.status==='rejected'?body.reason.trim():null
+        row.decided_at=Date.now()
+        if (row.status==='approved' && row.quantity!==null) items.get(row.item_id).quantity-=row.quantity
+        json(row)
+        return
+      }
+      const requestRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/requests$/)
+      if (requestRoute) {
+        const item=items.get(requestRoute[2])
+        if (!item || item.cache_id!==requestRoute[1]) { json({error:'not_found'},404); return }
+        const queue=[...requests.values()].filter(row=>row.item_id===item.id)
+        if (request.method==='GET') { json(queue.filter(row=>row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id)); return }
+        if (item.owner_id===me.id) { json({error:'not_found'},404); return }
+        if (item.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<1 || body.quantity>9999)) { json({error:'invalid_request_quantity'},400); return }
+        const pending=queue.filter(row=>row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)
+        if (item.is_consumable && body.quantity>item.quantity-pending) { json({error:'insufficient_stock'},409); return }
+        const row={id:randomUUID(),cache_id:item.cache_id,cache_name:caches.get(item.cache_id).name,item_id:item.id,item_title:item.title,owner_id:item.owner_id,owner_name:item.owner_name,requester_id:me.id,requester_name:me.display_name,quantity:item.is_consumable?body.quantity:null,status:'pending',decision_reason:null,decided_at:null,created_at:Date.now()}
+        requests.set(row.id,row)
+        json(row,201)
         return
       }
       const photoRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/photo$/)
@@ -97,6 +135,8 @@ const server = createServer(async (request, response) => {
         if (request.method === 'PATCH') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (item.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
+          const reserved=[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)
+          if (item.is_consumable && body.quantity<reserved) { json({error:'quantity_reserved'},409); return }
           item.title=body.title.trim()
           item.description=body.description??null
           item.quantity=item.is_consumable?body.quantity:null

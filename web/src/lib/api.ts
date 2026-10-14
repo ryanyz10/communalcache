@@ -41,6 +41,10 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_quantity') return 'Use a whole stock quantity from 0 to 9999 for consumables; reusable items have no quantity.'
   if (error.code === 'invalid_is_consumable' || error.code === 'immutable_is_consumable') return 'Choose an item type when adding it. The type cannot be changed later.'
   if (error.code === 'quantity_reserved') return 'Stock cannot be lower than the quantity reserved by pending requests. Refresh the item and try again.'
+  if (error.code === 'invalid_request_quantity') return 'Request a whole quantity from 1 to 9999 for consumables; reusable items have no quantity.'
+  if (error.code === 'insufficient_stock') return 'There is not enough available stock. The item and requests have been refreshed.'
+  if (error.code === 'request_not_pending') return 'This request has already been decided. The list has been refreshed.'
+  if (error.code === 'invalid_reason') return 'Give a rejection reason between 1 and 500 characters.'
   if (error.code === 'invalid_photo_type' || error.code === 'invalid_photo') return "Couldn't read that image, try another JPEG, PNG or WebP."
   if (error.code === 'photo_too_large') return 'That photo is too large. Try a smaller image (maximum 5 MB after resizing).'
   if (error.status === 404) return 'This cache, item or invite is not available, or you are no longer a member.'

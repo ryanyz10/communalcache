@@ -5,6 +5,10 @@ export type CacheInfo = { id: string; name: string; owner_id: string; invite_tok
 type CacheRow = { id: string; name: string; join_secret: string; requires_approval: number; created_at: number; owner_id: string }
 export type ItemInfo = { id: string; cache_id: string; owner_id: string; title: string; description: string | null; is_consumable: boolean; quantity: number | null; created_at: number; photo_version: string | null }
 type ItemRow = Omit<ItemInfo, 'is_consumable' | 'photo_version'> & { is_consumable: number; photo_path: string | null }
+export type RequestInfo = {
+  id: string; cache_id: string; cache_name: string; item_id: string; item_title: string; owner_id: string; requester_id: string
+  quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null; decided_at: number | null; created_at: number
+}
 
 function itemInfo(row: ItemRow): ItemInfo {
   const { photo_path, ...item } = row
@@ -295,6 +299,82 @@ export class Cache extends DurableObject<Env> {
         changes.quantity === undefined ? item.quantity : changes.quantity, itemId)
       return itemInfo(this.readItem(userId, itemId))
     })
+  }
+
+  private readRequests(userId: string, itemId: string | null, requestId: string | null, publicPending: boolean) {
+    return this.ctx.storage.sql.exec<RequestInfo>(`
+      SELECT r.id, c.id AS cache_id, c.name AS cache_name, r.item_id, i.title AS item_title, i.owner_id,
+        r.requester_id, r.quantity, r.status, r.decision_reason, r.decided_at, r.created_at
+      FROM requests r JOIN items i ON i.id = r.item_id
+      JOIN cache_config c ON c.singleton = 1
+      JOIN members caller ON caller.user_id = ? AND caller.status = 'active'
+      WHERE (? IS NULL OR r.item_id = ?) AND (? IS NULL OR r.id = ?)
+        AND (r.requester_id = ? OR i.owner_id = ? OR (? = 1 AND r.status = 'pending'))
+      ORDER BY r.created_at DESC, r.id
+    `, userId, itemId, itemId, requestId, requestId, userId, userId, publicPending ? 1 : 0).toArray()
+  }
+
+  async itemRequests(userId: string, itemId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      this.readItem(userId, itemId)
+      return this.readRequests(userId, itemId, null, true)
+    })
+  }
+
+  async requestsForMember(userId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      this.readCache(userId)
+      return this.readRequests(userId, null, null, false)
+    })
+  }
+
+  async createRequest(userId: string, itemId: string, body: Record<string, unknown>) {
+    await this.rearm()
+    const result = this.ctx.storage.transactionSync(() => {
+      const item = this.readItem(userId, itemId)
+      if (item.owner_id === userId || Object.hasOwn(body, 'requester_id') || Object.hasOwn(body, 'owner_id')) throw new Error('not_found')
+      let quantity: number | null = null
+      if (item.is_consumable === 1) {
+        if (typeof body.quantity !== 'number' || !Number.isInteger(body.quantity) || body.quantity < 1 || body.quantity > 9999) throw new Error('invalid_request_quantity')
+        quantity = body.quantity
+        const pending = this.ctx.storage.sql.exec<{ quantity: number }>("SELECT COALESCE(SUM(quantity), 0) AS quantity FROM requests WHERE item_id = ? AND status = 'pending'", itemId).one().quantity
+        if (quantity > item.quantity! - pending) throw new Error('insufficient_stock')
+      } else if (body.quantity !== undefined && body.quantity !== null) throw new Error('invalid_request_quantity')
+      const id = crypto.randomUUID(), now = Date.now()
+      this.ctx.storage.sql.exec("INSERT INTO requests(id, item_id, requester_id, quantity, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", id, itemId, userId, quantity, now)
+      const request = this.readRequests(userId, itemId, id, false)[0]
+      this.recordIntent('notification', { event: 'request_created', cache_id: item.cache_id, cache_name: request.cache_name, item_id: itemId, item_title: item.title, request_id: id, recipient_id: item.owner_id, user_id: userId, quantity, path: `/caches/${item.cache_id}/items/${itemId}` })
+      return request
+    })
+    await this.rearm()
+    return result
+  }
+
+  async decideRequest(userId: string, requestId: string, decision: 'approve' | 'reject', body: Record<string, unknown>) {
+    await this.rearm()
+    const result = this.ctx.storage.transactionSync(() => {
+      const request = this.readRequests(userId, null, requestId, false)[0]
+      if (!request || request.owner_id !== userId) throw new Error('not_found')
+      if (request.status !== 'pending') throw new Error('request_not_pending')
+      if (decision !== 'approve' && decision !== 'reject') throw new Error('invalid_decision')
+      let reason: string | null = null
+      if (decision === 'reject') {
+        if (typeof body.reason !== 'string' || !body.reason.trim() || [...body.reason.trim()].length > 500) throw new Error('invalid_reason')
+        reason = body.reason.trim()
+      }
+      const changed = this.ctx.storage.sql.exec("UPDATE requests SET status = ?, decision_reason = ?, decided_at = ? WHERE id = ? AND status = 'pending' RETURNING id", decision === 'approve' ? 'approved' : 'rejected', reason, Date.now(), requestId).toArray()
+      if (!changed.length) throw new Error('request_not_pending')
+      if (decision === 'approve' && request.quantity !== null) {
+        const deducted = this.ctx.storage.sql.exec('UPDATE items SET quantity = quantity - ? WHERE id = ? AND quantity >= ? RETURNING id', request.quantity, request.item_id, request.quantity).toArray()
+        if (!deducted.length) throw new Error('insufficient_stock')
+      }
+      this.recordIntent('notification', { event: decision === 'approve' ? 'request_approved' : 'request_rejected', cache_id: request.cache_id, cache_name: request.cache_name, item_id: request.item_id, item_title: request.item_title, request_id: request.id, recipient_id: request.requester_id, user_id: userId, quantity: request.quantity, reason, path: `/caches/${request.cache_id}/items/${request.item_id}` })
+      return this.readRequests(userId, request.item_id, requestId, false)[0]
+    })
+    await this.rearm()
+    return result
   }
 
   async photoKey(userId: string, itemId: string) {

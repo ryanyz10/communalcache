@@ -7,6 +7,7 @@ import type { CacheDetail } from '../lib/caches'
 import type { Item } from '../lib/items'
 import { OnboardingPage } from './OnboardingPage'
 import { ItemPhoto, PhotoUpload } from './ItemPhoto'
+import { ItemRequests } from './RequestsPage'
 
 export function ItemList({ cacheId }: { cacheId: string }) {
   const query = useQuery({ queryKey: ['items', cacheId], queryFn: () => apiFetch<Item[]>(`/api/caches/${cacheId}/items`) })
@@ -47,6 +48,7 @@ export function ItemPage() {
         <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="mt-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-white">Edit item</Link>
         <PhotoUpload item={query.data} />
       </>}
+      <ItemRequests item={query.data} />
     </>}
   </main>
 }
