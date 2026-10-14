@@ -12,6 +12,7 @@ export default defineConfig(async () => ({
             compatibilityDate: '2026-09-30',
             compatibilityFlags: ['nodejs_compat'],
             d1Databases: ['DB'],
+            r2Buckets: ['BUCKET'],
             durableObjects: { CACHES: { className: 'Cache', useSQLite: true } },
             bindings: {
               APP_BASE_URL: 'https://communalcache.com',

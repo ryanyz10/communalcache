@@ -2,6 +2,7 @@ import { createAuth, type DeliveryResult } from './auth'
 import { displayNames, getProfile, listMyCaches, setDisplayName, type Profile } from './db'
 import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
+import { readPhoto } from './photos'
 export { Cache } from './cache'
 
 const authMethods: Record<string, string> = {
@@ -63,14 +64,15 @@ async function dispatch(request: Request, env: Env) {
     })
   }
   const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
-  const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?$/i)
+  const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo)?)?$/i)
+  const photoRoute = !!itemRoute?.[3]
   if (path !== '/api/me' && path !== '/api/caches' && !cacheRoute && !itemRoute) throw new HttpError(404, 'not_found')
-  const methods = itemRoute ? (itemRoute[2] ? ['GET', 'PATCH'] : ['GET', 'POST']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  const methods = itemRoute ? (photoRoute || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
-  if (!session) throw new HttpError(401, 'unauthorized')
+  if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   const profile = await getProfile(env.DB, session.user.id)
-  if (!profile) throw new HttpError(401, 'unauthorized')
+  if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
@@ -89,6 +91,33 @@ async function dispatch(request: Request, env: Env) {
     if (itemRoute) {
       const stub = env.CACHES.get(env.CACHES.idFromName(itemRoute[1]))
       const itemId = itemRoute[2]
+      if (photoRoute) {
+        if (method === 'GET') {
+          const key = await stub.photoKey(profile.id, itemId)
+          const object = await env.BUCKET.get(key)
+          if (!object) throw new HttpError(404, 'not_found')
+          return new Response(object.body, { headers: {
+            'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream',
+            'Content-Length': String(object.size),
+            'Cache-Control': 'private, no-store',
+            'X-Content-Type-Options': 'nosniff',
+          } })
+        }
+        const key = await stub.photoUploadKey(profile.id, itemId)
+        const { bytes, contentType } = await readPhoto(request)
+        let attached = false
+        try {
+          await env.BUCKET.put(key, bytes, { httpMetadata: { contentType } })
+          attached = await stub.finishPhotoUpload(profile.id, itemId, key, true)
+        } catch (error) {
+          await stub.finishPhotoUpload(profile.id, itemId, key, false)
+          throw error
+        }
+        if (!attached) throw new HttpError(404, 'not_found')
+        const item = await stub.itemDetail(profile.id, itemId)
+        const names = await displayNames(env.DB, [item.owner_id])
+        return json({ ...item, owner_name: names.get(item.owner_id) ?? null })
+      }
       if (!itemId && method === 'GET') {
         const items = await stub.listItems(profile.id)
         const names = await displayNames(env.DB, [...new Set(items.map(item => item.owner_id))])

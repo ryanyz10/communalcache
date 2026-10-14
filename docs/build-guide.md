@@ -67,7 +67,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 1 | Caches | Implemented; in review (Cloudflare port, no deployment) | [#2](https://github.com/ryanyz10/communalcache/pull/2) (closed Go reference) |
 | 2 | Joining | Implemented; in review (Cloudflare port, no deployment) | [#3](https://github.com/ryanyz10/communalcache/pull/3) (closed Go reference) |
 | 3 | Items (no photos) | Implemented; in review (Cloudflare, pending-reservation stock floor; no deployment) | — |
-| 4 | Photos | Not started | — |
+| 4 | Photos | Implemented; in review (private local R2, cleanup recovery; remote buckets pending) | — |
 | 5 | Requests | Not started | — |
 | 6 | Notifications + email | Not started | — |
 | 7 | Web push + PWA | Not started | — |
@@ -293,6 +293,8 @@ checks for Feature 5, not a fictional ban on empty consumable stock.
 - Canvas resize/re-encode JPEG, photo picker/errors and list/detail rendering.
 
 R2 creation/settings/bindings need explicit approval, not this feature's existence.
+The port uses approved immutable `cacheId/itemId/uploadUUID` keys rather than the
+fixed key above, so racing replacement/orphan cleanup cannot erase another upload.
 
 ### Traps
 
@@ -312,6 +314,13 @@ R2 creation/settings/bindings need explicit approval, not this feature's existen
 Oversize/chunked input, wrong type/SVG, owner-only upload, removal racing upload,
 orphan cleanup, anonymous/non-member 404, active streaming and private headers.
 Exercise canvas failures and authenticated image rendering from the UI.
+
+The local R2 binding is `BUCKET`; remote `communalcache-photos` (default/production)
+and `communalcache-photos-staging` still need approved private creation before deploy.
+Replacement/rejected-upload cleanup is recorded transactionally and retried through
+the ordered sync drain. A Worker crash after R2 put but before DO finalization can
+leave an unreferenced object; a future orphan sweep/lifecycle policy is the recovery
+upgrade, not a claimed DO/R2 atomic commit.
 
 ---
 

@@ -13,7 +13,7 @@ remote migrations and deployment still require separate approval.
 | --- | --- | --- |
 | One SQLite DO per cache | Membership/owner role, settings/join secret, items, requests, pending_sync | Global email/subscription storage |
 | Global D1 | Better Auth users/sessions/challenges/rate limits, app profiles, cache registry, my_caches discovery, push subscriptions, outbox | Authorizing cache membership |
-| Private R2 | Photos under cacheId/itemId | Public access or membership decisions |
+| Private R2 | Immutable photos under cacheId/itemId/uploadUUID | Public access or membership decisions |
 
 The Worker derives the cache DO from `/api/caches/{cacheId}/...`; UUID item/request
 IDs need no global locator. Joins carry `{cacheId}.{secret}`, compared in that DO.
@@ -154,6 +154,13 @@ whose stable pending_sync ID becomes the D1 outbox ID and dedupe key via
 snapshot the recipient ID and cache name without emails or invite secrets. Queue
 handoff and actual delivery remain in Feature 6.
 
+Photos reuses the existing nullable `items.photo_path`, so it needs no schema bump.
+Worker uploads use an immutable key, then the DO re-checks live membership/ownership
+and sets the attachment together with old/rejected-key cleanup intents in one local
+transaction. The ordered drain deletes R2 keys idempotently before removing intents.
+The key-layout deviation and pre-finalization crash window are documented in the
+[Photos build guide](build-guide.md#feature-4--photos).
+
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not
 rename a class/namespace casually and mistake a new empty DO for migrated data.
@@ -180,7 +187,7 @@ Replay cannot reset an existing outbox's attempts/claim/sent/failed state.
 
 [Alarms are at-least-once and finite-retry](https://developers.cloudflare.com/durable-objects/api/alarms/index.md).
 The Caches implementation serializes all drains through one per-object promise,
-processes at most 25 D1 effects per drain, and keeps work armed while it remains.
+processes at most 25 D1/R2 effects per drain, and keeps work armed while it remains.
 Registry Cron sweeps 25 caches per tick using a persisted guarded cursor; failures
 on one cache do not block others. `triggers.crons` declares the intended five-minute
 schedule but no production trigger has been installed. Mutations with no external
