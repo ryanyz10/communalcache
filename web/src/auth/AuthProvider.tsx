@@ -1,6 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch, errorMessage, type Me } from '../lib/api'
+import { disablePush } from '../lib/push'
 
 type AuthState = {
   ready: boolean
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   async function refresh() { await queryClient.invalidateQueries({ queryKey: ['me'] }) }
   async function signOut() {
+    await disablePush()
     await apiFetch('/api/auth/sign-out', { body: {} })
     queryClient.setQueryData(['me'], null)
     queryClient.removeQueries({ predicate: query => query.queryKey[0] !== 'me' })

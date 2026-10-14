@@ -1,10 +1,11 @@
 import { createAuth, type DeliveryResult } from './auth'
-import { displayNames, getProfile, listMyCaches, setDisplayName, type Profile } from './db'
+import { deletePush, displayNames, getProfile, listMyCaches, savePush, setDisplayName, type Profile } from './db'
 import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
 import { readPhoto } from './photos'
 import { aggregateRequests, enrichRequests } from './requests'
 import { consumeNotifications, sweepNotifications } from './notifications'
+import { pushSubscription } from './push'
 export { Cache } from './cache'
 
 const authMethods: Record<string, string> = {
@@ -69,8 +70,8 @@ async function dispatch(request: Request, env: Env) {
   const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/requests)?)?$/i)
   const photoRoute = itemRoute?.[3] === '/photo'
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
-  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && !cacheRoute && !itemRoute && !requestRoute) throw new HttpError(404, 'not_found')
-  const methods = requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute) throw new HttpError(404, 'not_found')
+  const methods = path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
@@ -85,6 +86,18 @@ async function dispatch(request: Request, env: Env) {
   }
   if (path === '/api/caches' && method === 'GET') return json((await listMyCaches(env.DB, profile.id)).results)
   try {
+    if (path === '/api/push/subscribe') {
+      const body = await readBody(request)
+      if (method === 'DELETE') {
+        if (typeof body.endpoint !== 'string' || !body.endpoint || body.endpoint.length > 2048) throw new HttpError(400, 'invalid_push_endpoint')
+        await deletePush(env.DB, profile.id, body.endpoint)
+      } else {
+        const subscription = await pushSubscription(body)
+        const result = await savePush(env.DB, profile.id, subscription)
+        if (result.meta.changes === 0) throw new HttpError(409, 'push_limit')
+      }
+      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+    }
     if (path === '/api/requests') {
       const after = new URL(request.url).searchParams.get('after')
       if (after !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(after)) throw new HttpError(400, 'invalid_cursor')
@@ -179,7 +192,7 @@ async function dispatch(request: Request, env: Env) {
     if (error instanceof Error && error.message === 'join_not_pending') throw new HttpError(409, 'join_not_pending')
     if (error instanceof Error && error.message === 'quantity_reserved') throw new HttpError(409, 'quantity_reserved')
     if (error instanceof Error && ['insufficient_stock', 'request_not_pending'].includes(error.message)) throw new HttpError(409, error.message)
-    if (error instanceof Error && ['invalid_request_quantity', 'invalid_reason', 'invalid_decision'].includes(error.message)) throw new HttpError(400, error.message)
+    if (error instanceof Error && ['invalid_request_quantity', 'invalid_reason', 'invalid_decision', 'invalid_push_endpoint', 'invalid_push_keys'].includes(error.message)) throw new HttpError(400, error.message)
     if (error instanceof Error && ['invalid_title', 'invalid_description', 'invalid_is_consumable', 'immutable_is_consumable', 'invalid_quantity', 'invalid_json'].includes(error.message)) throw new HttpError(400, error.message)
     throw error
   }

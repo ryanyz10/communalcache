@@ -47,6 +47,8 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_reason') return 'Give a rejection reason between 1 and 500 characters.'
   if (error.code === 'invalid_photo_type' || error.code === 'invalid_photo') return "Couldn't read that image, try another JPEG, PNG or WebP."
   if (error.code === 'photo_too_large') return 'That photo is too large. Try a smaller image (maximum 5 MB after resizing).'
+  if (error.code === 'invalid_push_endpoint' || error.code === 'invalid_push_keys') return 'This browser returned an unsupported push subscription.'
+  if (error.code === 'push_limit') return 'Notifications are already enabled on three browsers for this account. Disable one before adding another.'
   if (error.status === 404) return 'This cache, item or invite is not available, or you are no longer a member.'
   if (error.status === 401) return 'Your session has expired. Sign in again.'
   return 'Could not complete that request. Please try again.'

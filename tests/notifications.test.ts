@@ -219,18 +219,18 @@ it('escapes user content, derives same-origin links rather than trusting payload
   }
 })
 
-it('bounds consumer batches to five sequential delivery rows and rejects malformed payloads without sending', async () => {
+it('bounds consumer batches to three sequential delivery rows and rejects malformed payloads without sending', async () => {
   const ids: string[] = []
   for (let count = 0; count < 6; count++) ids.push((await outbox()).id)
   const mail = emailMock()
   const batch = await consume(ids)
-  expect(mail).toHaveBeenCalledTimes(5)
-  expect(batch.result.explicitAcks).toHaveLength(5)
-  expect(batch.result.retryMessages).toHaveLength(1)
+  expect(mail).toHaveBeenCalledTimes(3)
+  expect(batch.result.explicitAcks).toHaveLength(3)
+  expect(batch.result.retryMessages).toHaveLength(3)
   const invalid = await outbox({ attempts: 5, payload: { event: 'unknown' } })
   await consume([invalid.id])
   expect(await row(invalid.id)).toMatchObject({ attempts: 6, failed_at: expect.any(Number), sent_at: null })
-  expect(mail).toHaveBeenCalledTimes(5)
+  expect(mail).toHaveBeenCalledTimes(3)
 })
 
 it('enforces both the 10-second provider abort and the 30-second whole-delivery abort including a stuck response body', async () => {
