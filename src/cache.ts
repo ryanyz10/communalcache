@@ -126,9 +126,11 @@ export class Cache extends DurableObject<Env> {
 
   private async rearm() {
     try {
-      if (this.ctx.storage.sql.exec('SELECT 1 FROM pending_sync LIMIT 1').toArray().length && await this.ctx.storage.getAlarm() === null) {
-        await this.ctx.storage.setAlarm(Date.now() + 5_000)
-      }
+      if (!this.ctx.storage.sql.exec('SELECT 1 FROM pending_sync LIMIT 1').toArray().length) return
+      const retry = await this.ctx.storage.get<{ failures: number; retryAt: number }>('sync_retry')
+      const alarm = await this.ctx.storage.getAlarm()
+      const next = Math.max(Date.now() + 5_000, retry?.retryAt ?? 0)
+      if (alarm === null || (retry && alarm < retry.retryAt) || (!retry && alarm > next)) await this.ctx.storage.setAlarm(next)
     } catch {
       // ponytail: a pre-registry cache needs its returned ID/entry-point retry to repair this window.
       console.error('Cache sync alarm scheduling failed')
@@ -423,7 +425,7 @@ export class Cache extends DurableObject<Env> {
   }
 
   private async drainWork() {
-    // ponytail: at most 25 external effects per drain; subsequent alarms keep draining in order.
+    // ponytail: 25 intent rows/drain (up to 50 binding calls); subsequent alarms keep draining in order.
     for (let count = 0; count < 25; count++) {
       const row = this.ctx.storage.sql.exec<{ sequence: number; id: string; kind: string; payload: string; created_at: number }>('SELECT sequence, id, kind, payload, created_at FROM pending_sync ORDER BY sequence LIMIT 1').toArray()[0]
       if (!row) return
@@ -432,15 +434,27 @@ export class Cache extends DurableObject<Env> {
         await this.env.BUCKET.delete(key)
       } else {
         await applyCacheIntent(this.env.DB, row.kind, row.payload, row.id, row.created_at)
+        if (row.kind === 'notification') await this.env.NOTIFICATIONS.send(row.id)
       }
       this.ctx.storage.sql.exec('DELETE FROM pending_sync WHERE sequence = ? AND id = ?', row.sequence, row.id)
     }
   }
 
-  async flushSync() {
+  async flushSync(respectBackoff = false) {
     await this.rearm()
+    if (respectBackoff) {
+      const retry = await this.ctx.storage.get<{ failures: number; retryAt: number }>('sync_retry')
+      if (retry && retry.retryAt > Date.now()) return
+    }
     // Set the shared promise before awaiting: alarms and explicit flushes cannot reorder effects.
-    this.draining ??= this.drainWork().finally(async () => {
+    this.draining ??= this.drainWork().then(async () => {
+      await this.ctx.storage.delete('sync_retry')
+    }, async error => {
+      const previous = await this.ctx.storage.get<{ failures: number }>('sync_retry')
+      const failures = Math.min((previous?.failures ?? 0) + 1, 11)
+      await this.ctx.storage.put('sync_retry', { failures, retryAt: Date.now() + Math.min(5_000 * 2 ** (failures - 1), 3_600_000) })
+      throw error
+    }).finally(async () => {
       await this.rearm()
       this.draining = null
     })

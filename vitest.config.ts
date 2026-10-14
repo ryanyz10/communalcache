@@ -13,6 +13,7 @@ export default defineConfig(async () => ({
             compatibilityFlags: ['nodejs_compat'],
             d1Databases: ['DB'],
             r2Buckets: ['BUCKET'],
+            queueProducers: { NOTIFICATIONS: 'test-notifications' },
             durableObjects: { CACHES: { className: 'Cache', useSQLite: true } },
             bindings: {
               APP_BASE_URL: 'https://communalcache.com',

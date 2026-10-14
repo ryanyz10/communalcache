@@ -4,6 +4,7 @@ import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
 import { readPhoto } from './photos'
 import { aggregateRequests, enrichRequests } from './requests'
+import { consumeNotifications, sweepNotifications } from './notifications'
 export { Cache } from './cache'
 
 const authMethods: Record<string, string> = {
@@ -199,8 +200,13 @@ function cacheChanges(body: Record<string, unknown>) {
 }
 
 export default {
+  async queue(batch: MessageBatch<unknown>, env: Env) {
+    await consumeNotifications(batch, env)
+  },
   async scheduled(_controller: ScheduledController, env: Env) {
-    await sweepCacheSync(env)
+    // Both recovery paths run even if one binding is temporarily unavailable.
+    const results = await Promise.allSettled([sweepCacheSync(env), sweepNotifications(env)])
+    if (results.some(result => result.status === 'rejected')) throw new Error('Scheduled recovery incomplete')
   },
   async fetch(request: Request, env: Env): Promise<Response> {
     try { return await dispatch(request, env) }
