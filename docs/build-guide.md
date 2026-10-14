@@ -57,7 +57,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | --- | --- | --- | --- |
 | — | Foundation port | Implemented; in review (local gates, no deployment) | — |
 | 1 | Caches | Implemented; in review (Cloudflare port, no deployment) | [#2](https://github.com/ryanyz10/communalcache/pull/2) (closed Go reference) |
-| 2 | Joining | Port not started; Go implementation ready for review | [#3](https://github.com/ryanyz10/communalcache/pull/3) |
+| 2 | Joining | Implemented; in review (Cloudflare port, no deployment) | [#3](https://github.com/ryanyz10/communalcache/pull/3) (closed Go reference) |
 | 3 | Items (no photos) | Not started | — |
 | 4 | Photos | Not started | — |
 | 5 | Requests | Not started | — |
