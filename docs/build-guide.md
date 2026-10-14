@@ -70,7 +70,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 4 | Photos | Implemented; in review (private local R2, cleanup recovery; remote buckets pending) | — |
 | 5 | Requests | Implemented; in review (transactional reservations/decisions, bounded discovery; no deployment) | — |
 | 6 | Notifications + email | Implemented; in review (guarded Queue/email delivery + recovery; remote setup pending) | — |
-| 7 | Web push + PWA | Not started | — |
+| 7 | Web push + PWA | Implemented; in review (local crypto/storage/PWA proof; live push/iOS UNVERIFIED) | — |
 | 8 | Member removal and item deletion | Not started | — |
 | 9 | Polish | Not started | — |
 
@@ -430,7 +430,7 @@ The port uses `NOTIFICATIONS` with `communalcache-notifications` (default/produc
 and `communalcache-notifications-staging`; remote queues still need approved creation.
 The existing five-minute Cron independently sweeps 25 registry caches and cursor-pages
 25 old (at least three minutes), expired-claim nonterminal outbox IDs. Queue batches
-are five sequential rows, with six Queue retries, 60-second retry delay and configured
+are now three sequential rows (Push's binding budget), with six Queue retries, 60-second retry delay and configured
 consumer concurrency two. A crashed sixth claim remains eligible regardless of attempts.
 No new UI/API is added; until Push, all recipients use private verified-email lookup.
 
@@ -477,6 +477,30 @@ Worker crypto tests, no subscriptions → email, 410 deletion → same-pass emai
 transient push no escalation, malicious origin/HTTP/userinfo rejection, manual
 302 refusal, two-account reassignment/logout, gesture permission and installed
 iOS delivery. Local fetch tests cannot certify production private-IP restrictions.
+
+The port pins `@block65/webcrypto-web-push@2.0.0`, published 2026-09-03; workerd
+proof independently decrypts its RFC 8291 payload, verifies VAPID ES256/audience,
+and checks the RFC 5869 HKDF vector. The package builds protocol bytes only; the
+app validates URLs/keys on registration and again before sending with manual redirects.
+
+`POST/DELETE /api/push/subscribe` are cookie-authenticated, Origin-protected and
+profile-exempt. A single guarded UPSERT reassigns endpoints and caps each account
+at three browser registrations; registration IDs change on refresh so stale 410
+cleanup cannot delete a newer assignment. Queue batches are reduced to three rows
+to leave binding budget for three browsers plus possible same-pass email fallback.
+The upgrade path for more browsers is paginated delivery state, not unbounded sends.
+
+The dashboard has explicit enable/disable controls; permission is requested only
+from Enable, and iOS must be installed first. Account changes clear an unmatched
+browser registration without requesting permission; logout cleans it before auth
+sign-out. The manifest reuses the existing SVG icon. The service worker displays
+push and opens same-origin paths only; it deliberately has no fetch/cache handler.
+
+**UNVERIFIED:** actual push-provider/browser delivery, installed iOS behavior/icon
+rendering, production CPU/free-tier fit, and complete private-IP/DNS-rebinding egress
+blocking. Local tests prove crypto, policy, channel choice and lifecycle logic, not
+those deployment facts. Set a separate VAPID pair per environment before live proof:
+`VAPID_PUBLIC_KEY` is public runtime config and `VAPID_PRIVATE_KEY` is a Worker secret.
 
 ---
 

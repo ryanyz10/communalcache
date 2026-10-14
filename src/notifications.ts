@@ -1,7 +1,8 @@
 import {
   advanceNotificationCursor, claimOutbox, markOutboxSent, notificationCursor,
-  notificationEmail, recordOutboxFailure, recoverableOutbox, type OutboxRow,
+  notificationEmail, pushSubscriptions, recordOutboxFailure, recoverableOutbox, type OutboxRow,
 } from './db'
+import { sendPush } from './push'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -29,7 +30,7 @@ export function notificationContent(row: OutboxRow, appBaseUrl: string) {
   if (typeof data.quantity === 'number') lines.push(`Quantity: ${data.quantity}`)
   if (typeof data.reason === 'string' && data.reason) lines.push(`Reason: ${data.reason}`)
   return {
-    recipientId: data.recipient_id, subject,
+    recipientId: data.recipient_id, subject, path, pushBody: lines.slice(1).join('\n'),
     text: `${lines.join('\n')}\n\nOpen Communal Cache: ${link}`,
     html: `${lines.map(line => `<p>${escapeHtml(line)}</p>`).join('')}<p><a href="${escapeHtml(link)}">Open Communal Cache</a></p>`,
   }
@@ -46,8 +47,7 @@ async function beforeDeadline<T>(work: Promise<T>, signal: AbortSignal): Promise
   finally { signal.removeEventListener('abort', abort) }
 }
 
-async function sendEmail(env: Env, row: OutboxRow, signal: AbortSignal) {
-  const content = notificationContent(row, env.APP_BASE_URL)
+async function sendEmail(env: Env, content: ReturnType<typeof notificationContent>, signal: AbortSignal) {
   const email = await notificationEmail(env.DB, content.recipientId)
   signal.throwIfAborted()
   if (!email) throw new Error('Notification recipient unavailable')
@@ -62,12 +62,32 @@ async function sendEmail(env: Env, row: OutboxRow, signal: AbortSignal) {
   if (!response.ok) throw new Error('Notification email unavailable')
 }
 
+async function sendNotification(env: Env, row: OutboxRow, signal: AbortSignal) {
+  const content = notificationContent(row, env.APP_BASE_URL)
+  const subscriptions = (await pushSubscriptions(env.DB, content.recipientId)).results
+  signal.throwIfAborted()
+  if (subscriptions.length > 3) throw new Error('Push subscription limit exceeded')
+  let live = false, failed = false
+  for (const subscription of subscriptions) {
+    try {
+      const result = await sendPush(env, subscription, { title: content.subject, body: content.pushBody, path: content.path }, signal)
+      if (result === 'sent') live = true
+    } catch {
+      signal.throwIfAborted()
+      failed = true
+    }
+  }
+  // Email is structural fallback only: a transient/invalid push is never escalated to email.
+  if (failed) throw new Error('Push delivery incomplete')
+  if (!live) await sendEmail(env, content, signal)
+}
+
 export async function deliverNotification(env: Env, id: string): Promise<'ack' | 'retry'> {
   const deadline = AbortSignal.timeout(30_000)
   const token = crypto.randomUUID()
   const row = await beforeDeadline(claimOutbox(env.DB, id, token, Date.now()), deadline)
   if (!row) return 'ack'
-  try { await beforeDeadline(sendEmail(env, row, deadline), deadline) }
+  try { await beforeDeadline(sendNotification(env, row, deadline), deadline) }
   catch {
     const terminal = row.attempts >= 6
     const result = await recordOutboxFailure(env.DB, id, token, Date.now(), terminal)
@@ -78,11 +98,11 @@ export async function deliverNotification(env: Env, id: string): Promise<'ack' |
 }
 
 export async function consumeNotifications(batch: MessageBatch<unknown>, env: Env) {
-  // ponytail: five sequential rows keep provider connections and D1 calls bounded; push adds its own proof later.
+  // ponytail: three rows with up to three browsers each leave room for D1 and provider binding calls.
   for (let index = 0; index < batch.messages.length; index++) {
     const message = batch.messages[index]
     if (typeof message.body !== 'string' || !uuid.test(message.body)) { message.ack(); continue }
-    if (index >= 5) { message.retry({ delaySeconds: 60 }); continue }
+    if (index >= 3) { message.retry({ delaySeconds: 60 }); continue }
     try {
       const result = await deliverNotification(env, message.body)
       if (result === 'ack') message.ack()

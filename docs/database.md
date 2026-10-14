@@ -220,6 +220,15 @@ or Cron eligibility. Email lookup is private; no API exposes another user's emai
 A 30-second delivery deadline covers claim/lookup/provider work (including a stuck
 response body), with a 10-second provider abort and guarded durable outcome recording.
 
+Push reuses `push_subscriptions` from the Foundation schema, without a migration.
+A single guarded UPSERT sets caller ownership, rotates the registration ID and allows
+at most three browser registrations per account under concurrent writes. DELETE is
+caller-scoped. Delivery revalidates endpoint/key data and checks the captured ID/user
+before fetch; 404/410 cleanup deletes only that captured registration, never a newer
+refresh/account assignment. Live registrations mean push; none, or all expired this
+pass, means email now. Transient/redirect/invalid push failures remain push retries,
+never email escalation. Three sequential outbox rows per batch bound the added calls.
+
 The five-minute Cron independently runs registry and outbox recovery. Outbox recovery
 pages 25 IDs older than three minutes with absent/expired claims, then sends one Queue
 batch and advances its guarded cursor. Terminal/live-claim rows are skipped; crashes
