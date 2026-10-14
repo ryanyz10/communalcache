@@ -38,6 +38,7 @@ export function HomePage() {
   return <main className="mx-auto max-w-md px-4 py-8">
     <h1 className="text-2xl font-semibold tracking-tight">Hi, {me.display_name}</h1>
     <p className="mt-2 text-slate-600">Your community's shared things, in one place.</p>
+    <Link to="/requests" className="mt-4 inline-block underline">Your requests</Link>
     <section className="mt-8" aria-labelledby="caches-heading">
       <div className="flex items-center justify-between gap-4">
         <h2 id="caches-heading" className="text-xl font-semibold">Your caches</h2>

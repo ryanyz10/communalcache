@@ -7,6 +7,7 @@ import { CachePage } from './pages/CachePage'
 import { ItemPage, ItemEditorPage } from './pages/ItemPages'
 import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
+import { RequestsPage } from './pages/RequestsPage'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/" element={<HomePage />} />
+            <Route path="/requests" element={<RequestsPage />} />
             <Route path="/caches/:cacheId" element={<CachePage />} />
             <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
             <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
