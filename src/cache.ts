@@ -1,4 +1,17 @@
 import { DurableObject } from 'cloudflare:workers'
+import { applyCacheIntent } from './db'
+
+export type CacheInfo = { id: string; name: string; owner_id: string; invite_token: string; requires_approval: boolean }
+type CacheRow = { id: string; name: string; join_secret: string; requires_approval: number; created_at: number; owner_id: string }
+
+function newSecret() {
+  return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+    .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+}
+
+function cacheInfo(row: CacheRow): CacheInfo {
+  return { id: row.id, name: row.name, owner_id: row.owner_id, invite_token: `${row.id}.${row.join_secret}`, requires_approval: row.requires_approval === 1 }
+}
 
 export function migrateCache(storage: DurableObjectStorage) {
   storage.transactionSync(() => {
@@ -56,22 +69,113 @@ export function migrateCache(storage: DurableObjectStorage) {
 }
 
 export class Cache extends DurableObject<Env> {
+  private draining: Promise<void> | null = null
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
     ctx.blockConcurrencyWhile(async () => { migrateCache(ctx.storage) })
   }
 
-  async schemaVersion() {
-    if (this.ctx.storage.sql.exec('SELECT 1 FROM pending_sync LIMIT 1').toArray().length && await this.ctx.storage.getAlarm() === null) {
-      await this.ctx.storage.setAlarm(Date.now() + 60_000)
+  private async rearm() {
+    try {
+      if (this.ctx.storage.sql.exec('SELECT 1 FROM pending_sync LIMIT 1').toArray().length && await this.ctx.storage.getAlarm() === null) {
+        await this.ctx.storage.setAlarm(Date.now() + 5_000)
+      }
+    } catch {
+      // ponytail: a pre-registry cache needs its returned ID/entry-point retry to repair this window.
+      console.error('Cache sync alarm scheduling failed')
     }
+  }
+
+  private recordIntent(kind: string, payload: unknown) {
+    this.ctx.storage.sql.exec('INSERT INTO pending_sync(id, kind, payload, created_at) VALUES (?, ?, ?, ?)', crypto.randomUUID(), kind, JSON.stringify(payload), Date.now())
+  }
+
+  private readCache(userId: string, ownerOnly = false): CacheRow {
+    const row = this.ctx.storage.sql.exec<CacheRow>(`
+      SELECT c.id, c.name, c.join_secret, c.requires_approval, c.created_at, o.user_id AS owner_id
+      FROM cache_config c JOIN members o ON o.role = 'owner' AND o.status = 'active'
+      JOIN members caller ON caller.user_id = ? AND caller.status = 'active'
+      WHERE c.singleton = 1 AND (? = 0 OR caller.role = 'owner')
+    `, userId, ownerOnly ? 1 : 0).toArray()[0]
+    if (!row) throw new Error('not_found')
+    return row
+  }
+
+  async create(cacheId: string, ownerId: string, name: string, requiresApproval: boolean) {
+    await this.rearm()
+    const result = this.ctx.storage.transactionSync(() => {
+      if (this.ctx.storage.sql.exec('SELECT 1 FROM cache_config').toArray().length) throw new Error('cache_exists')
+      const now = Date.now()
+      this.ctx.storage.sql.exec('INSERT INTO cache_config(singleton, id, name, join_secret, requires_approval, created_at) VALUES (1, ?, ?, ?, ?, ?)', cacheId, name, newSecret(), requiresApproval ? 1 : 0, now)
+      this.ctx.storage.sql.exec("INSERT INTO members(user_id, role, status, created_at) VALUES (?, 'owner', 'active', ?)", ownerId, now)
+      this.recordIntent('registry_upsert', { cache_id: cacheId, name, created_at: now })
+      this.recordIntent('discovery_upsert', { cache_id: cacheId, user_id: ownerId })
+      return cacheInfo(this.readCache(ownerId))
+    })
+    await this.rearm()
+    return result
+  }
+
+  async detail(userId: string) {
+    await this.rearm()
+    const row = this.readCache(userId)
+    const members = this.ctx.storage.sql.exec<{ user_id: string }>("SELECT user_id FROM members WHERE status = 'active' ORDER BY created_at, user_id").toArray()
+    return { ...cacheInfo(row), members }
+  }
+
+  async update(userId: string, changes: { name?: string; requires_approval?: boolean }) {
+    await this.rearm()
+    const result = this.ctx.storage.transactionSync(() => {
+      const row = this.readCache(userId, true)
+      if (changes.name !== undefined) {
+        this.ctx.storage.sql.exec('UPDATE cache_config SET name = ? WHERE singleton = 1', changes.name)
+        this.recordIntent('registry_upsert', { cache_id: row.id, name: changes.name, created_at: row.created_at })
+      }
+      if (changes.requires_approval !== undefined) this.ctx.storage.sql.exec('UPDATE cache_config SET requires_approval = ? WHERE singleton = 1', changes.requires_approval ? 1 : 0)
+      return cacheInfo(this.readCache(userId))
+    })
+    await this.rearm()
+    return result
+  }
+
+  async rotateInvite(userId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      this.readCache(userId, true)
+      this.ctx.storage.sql.exec('UPDATE cache_config SET join_secret = ? WHERE singleton = 1', newSecret())
+      return cacheInfo(this.readCache(userId))
+    })
+  }
+
+  async schemaVersion() {
+    await this.rearm()
     return this.ctx.storage.sql.exec<{ version: number }>('SELECT version FROM schema_version WHERE singleton = 1').one().version
   }
 
-  async alarm() {
-    // Foundation has no producers/consumers yet. Never discard future durable work.
-    if (this.ctx.storage.sql.exec('SELECT 1 FROM pending_sync LIMIT 1').toArray().length) {
-      await this.ctx.storage.setAlarm(Date.now() + 60_000)
+  private async drainWork() {
+    // ponytail: at most 25 D1 effects per drain; subsequent alarms keep draining in order.
+    for (let count = 0; count < 25; count++) {
+      const row = this.ctx.storage.sql.exec<{ sequence: number; id: string; kind: string; payload: string }>('SELECT sequence, id, kind, payload FROM pending_sync ORDER BY sequence LIMIT 1').toArray()[0]
+      if (!row) return
+      await applyCacheIntent(this.env.DB, row.kind, row.payload)
+      this.ctx.storage.sql.exec('DELETE FROM pending_sync WHERE sequence = ? AND id = ?', row.sequence, row.id)
     }
+  }
+
+  async flushSync() {
+    await this.rearm()
+    // Set the shared promise before awaiting: alarms and explicit flushes cannot reorder effects.
+    this.draining ??= this.drainWork().finally(async () => {
+      await this.rearm()
+      this.draining = null
+    })
+    await this.draining
+  }
+
+  async alarm() {
+    try { await this.flushSync() }
+    catch { console.error('Cache sync failed; durable work retained') }
+    finally { await this.rearm() }
   }
 }

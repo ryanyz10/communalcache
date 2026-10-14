@@ -2,16 +2,18 @@
 
 Mobile-first household sharing: React + a TypeScript Cloudflare Worker, one SQLite
 Durable Object per cache and global D1. Foundation implements private cookie-auth
-sessions, six-digit email sign-in codes and display-name onboarding. Caches,
+sessions, six-digit email sign-in codes and display-name onboarding. Caches adds
+creation, live member/owner access, invites/settings and ordered discovery sync;
 joining, private R2 photos and Queue notifications follow in feature order.
 No addresses, holder tracking or loan tracking. Target: https://communalcache.com.
 
 ## Status and docs
 
-Foundation is implemented for review. The `communalcache` D1 database was created
-with approval and its real ID is committed; remote migrations, deployments and
-Resend/domain changes still require separate approval. The legacy Go/Fly/Supabase
-app stays live until an explicitly approved cutover. Its source and deployment files remain reference;
+Foundation and Caches are implemented for review. The `communalcache` D1 database
+was created with approval and its real ID is committed; remote migrations,
+deployments and Resend/domain changes still require separate approval. The legacy
+Go/Fly/Supabase app stays live until an explicitly approved cutover. Its source
+and deployment files remain reference;
 the `web/` SPA now targets the Worker, not the Go auth/config contract.
 
 - [Build guide](docs/build-guide.md): feature order, status, traps and proofs.
@@ -45,7 +47,8 @@ Wrangler serves both API and built SPA at `http://127.0.0.1:8787`. D1 and DO sta
 are local under `.wrangler/`. `wrangler.jsonc` commits the approved `communalcache`
 D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`; this does not make local dev/tests
 remote. Remote migrations and deployments still require explicit approval, as do
-further account/provider changes. No R2/Queue/Cron bindings are provisioned by Foundation.
+further account/provider changes. No R2/Queue resources are provisioned. The intended
+five-minute registry Cron is declared in config only; no production trigger was installed.
 
 For Vite hot reload, set **both** URLs in `.dev.vars` to `http://localhost:5173`,
 run Wrangler and `npm --prefix web run dev` in separate terminals, and open the
@@ -75,6 +78,24 @@ to see navigation resume it. Use `failure@example.test` to see a delivery error
 without losing the invite. Cancel clears the pending invite. Joining's actual
 POST is deferred to Feature 2. **Never deploy or expose this fixture server.**
 
+For the Caches UI walkthrough, cancel the saved invite to reach the dashboard,
+create a cache and immediately open its page. Copy an invite, open the members
+sheet, change owner settings and rotate through the confirmation dialog. The
+fixture API is mocked; the runtime suite separately proves real D1/DO authority.
+Use `UI_FIXTURE_PORT=4174 npm run ui:fixture` if 4173 is occupied, or additionally
+`UI_FIXTURE_DEV=1` to exercise the real Vite source UI before building.
+
+For actual local bindings, `npm run dev -- --port 8788 --inspector-port 9238`
+works around an occupied 8787; change both gitignored URL values to that origin.
+Create/settings return authoritative DO state immediately. Home summaries contain
+only discovery id/name and may lag; refresh after a moment. Invites/ownership never
+come from D1. Sync is capped at 25 effects per drain; Cron sweeps 25 known caches
+per tick. Failed first alarm scheduling retains intents, but registry cannot find
+a brand-new cache until its registry intent succeeds; its returned cache ID and a
+later entry point can repair the gap. A crash before the ID response remains an
+explicit recovery limitation. Duplicate-outbox proof lands with Joining's first
+notification producer, not an unused Caches bridge.
+
 Real email sign-in requires separately approved Resend/domain setup and a local
 provider key. Delivery is awaited with a 10-second abort deadline. Better Auth
 1.7.7 catches callback rejections, so a request-local delivery result maps failures
@@ -92,7 +113,8 @@ CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --d
 
 The suite has a real local Worker/D1/SQLite DO project and a Node UI-unit project.
 It checks migrations, transaction rollback, schema upgrades, alarms, OTP/session/
-CSRF/profile/delivery/concurrency behavior and invite retention. SQL is never
+CSRF/profile/delivery/concurrency behavior, cache authorization, ordered crash
+replay, recovery beyond six failures, bounded sweeps and invite retention. SQL is never
 mocked. Browser-fixture checks do not certify real provider delivery.
 
 `npm run types` regenerates Wrangler environment/runtime declarations without

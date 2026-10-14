@@ -1,9 +1,9 @@
 # D1 and cache Durable Object storage
 
-Foundation implements the local Worker/D1/DO schema and tests; later features add
-cache operations and synchronization. The approved `communalcache` D1 database
-exists and its real ID is committed; remote migrations and deployment still
-require separate approval.
+Foundation supplies the local Worker/D1/DO schema. Caches adds authoritative local
+cache operations, ordered D1 projection sync and the registry recovery sweep. The
+approved `communalcache` D1 database exists and its real ID is committed; remote
+migrations and deployment still require separate approval.
 [plan.md](plan.md) defines semantics; this page explains the mechanics.
 
 ## Two stores, two jobs
@@ -110,6 +110,8 @@ with database name `communalcache`. `0001_auth.sql` is reviewed from the pinned
 schema compiler (`scripts/auth-schema.mjs`); `0002_app.sql` adds discovery, push
 subscriptions and outbox; `0003_otp_identifier_unique.sql` supplies the narrow
 sign-in OTP uniqueness workaround above without changing the generator reference.
+Caches adds `0004_cache_sync_cursor.sql` for the bounded registry sweep; it is
+discovery/recovery metadata, never authorization.
 Auth date columns store adapter-produced ISO strings;
 app timestamps are integer milliseconds. `wrangler.jsonc` commits the approved
 `communalcache` D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`. Tests and default dev
@@ -144,8 +146,9 @@ initialization/upgrades under `ctx.blockConcurrencyWhile`, before handling RPCs.
 Apply each local migration and version bump atomically; failure leaves the previous
 version. Foundation's `src/cache.ts` uses v1 for cache data and v2 for pending_sync;
 constructor upgrade tests persist v1, evict, then instantiate v2 without data loss.
-Tests also inject DDL failure and prove version/DDL rollback. The Foundation alarm
-only preserves/re-arms intents; Feature 1 adds actual ordered sync producers/drains.
+Tests also inject DDL failure and prove version/DDL rollback. Caches now drains
+registry/reverse-index intents in sequence; no outbox or Queue bridge is added
+before Joining produces its first notification.
 
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not
@@ -171,6 +174,13 @@ Replay cannot reset an existing outbox's attempts/claim/sent/failed state.
   Queue handoff, expired messages or claims. Neither uses D1 as authorization.
 
 [Alarms are at-least-once and finite-retry](https://developers.cloudflare.com/durable-objects/api/alarms/index.md).
+The Caches implementation serializes all drains through one per-object promise,
+processes at most 25 D1 effects per drain, and keeps work armed while it remains.
+Registry Cron sweeps 25 caches per tick using a persisted guarded cursor; failures
+on one cache do not block others. `triggers.crons` declares the intended five-minute
+schedule but no production trigger has been installed. Mutations with no external
+effect (approval setting/invite rotation) need no projection intent.
+
 The namespace binding cannot list objects. Management REST listing exists but needs
 account credentials and is not the application's sweep mechanism. A newly created
 cache not yet in the registry has a commit/alarm crash window; entry-point retries
@@ -193,7 +203,12 @@ bindings, real-provider calls or hosted database are needed for invariant tests.
 
 [Migration configuration](https://developers.cloudflare.com/workers/testing/vitest-integration/configuration/index.md#readd1migrationsmigrationspath)
 and [runtime helpers](https://developers.cloudflare.com/workers/testing/vitest-integration/test-apis/index.md#durable-objects)
-are the API references. Tests must distinguish pending work from terminal failure
+are the API references. With the pinned plugin, expected native RPC rejections use
+explicit await/try-catch assertions instead of Vitest `.rejects` (which produced
+spurious unhandled reports). Crash replay uses `abortAllDurableObjects`, then
+reacquires the same named stub; forced teardown invalidates old RPC channels.
+Graceful eviction remains the constructor-upgrade check, not a forced-crash model.
+Tests must distinguish pending work from terminal failure
 and a duplicate external send from a duplicate durable outbox row.
 
 ## Limits and recovery

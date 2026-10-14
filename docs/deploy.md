@@ -20,7 +20,9 @@ SQLite DO binding `CACHES` (class `Cache`) and `ASSETS` (`web/dist`). The approv
 D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1` is committed in `wrangler.jsonc`;
 remote migrations and deployment still need separate approval. Compatibility date
 `2026-09-30` supports RPC/default error serialization; `nodejs_compat` is set.
-R2/Queue/Cron bindings are later features, not provisioned here.
+Caches declares an intended five-minute registry Cron and its scheduled handler;
+no production trigger has been installed. R2/Queue bindings remain later features,
+not provisioned here.
 
 ## Local checks first
 
@@ -145,7 +147,7 @@ never guess the account from whatever login happens to be active locally.
    A healthy `/api/healthz` alone says nothing about pending work delivery.
 
 The port must document its final environment-specific commands before a real
-release. No remote command in this runbook is executed by Foundation.
+release. No remote command in this runbook is executed by Foundation or Caches.
 
 ## Manual smoke and observability
 
