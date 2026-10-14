@@ -8,4 +8,5 @@ export type Item = {
   is_consumable: boolean
   quantity: number | null
   created_at: number
+  photo_version: string | null
 }

@@ -3,11 +3,12 @@ import { applyCacheIntent } from './db'
 
 export type CacheInfo = { id: string; name: string; owner_id: string; invite_token: string; requires_approval: boolean }
 type CacheRow = { id: string; name: string; join_secret: string; requires_approval: number; created_at: number; owner_id: string }
-export type ItemInfo = { id: string; cache_id: string; owner_id: string; title: string; description: string | null; is_consumable: boolean; quantity: number | null; created_at: number }
-type ItemRow = Omit<ItemInfo, 'is_consumable'> & { is_consumable: number }
+export type ItemInfo = { id: string; cache_id: string; owner_id: string; title: string; description: string | null; is_consumable: boolean; quantity: number | null; created_at: number; photo_version: string | null }
+type ItemRow = Omit<ItemInfo, 'is_consumable' | 'photo_version'> & { is_consumable: number; photo_path: string | null }
 
 function itemInfo(row: ItemRow): ItemInfo {
-  return { ...row, is_consumable: row.is_consumable === 1 }
+  const { photo_path, ...item } = row
+  return { ...item, is_consumable: row.is_consumable === 1, photo_version: photo_path?.split('/').at(-1) ?? null }
 }
 
 function itemChanges(body: Record<string, unknown>, consumable: boolean, creating: boolean) {
@@ -240,7 +241,7 @@ export class Cache extends DurableObject<Env> {
 
   private readItem(userId: string, itemId: string, ownerOnly = false): ItemRow {
     const row = this.ctx.storage.sql.exec<ItemRow>(`
-      SELECT i.id, c.id AS cache_id, i.owner_id, i.title, i.description, i.is_consumable, i.quantity, i.created_at
+      SELECT i.id, c.id AS cache_id, i.owner_id, i.title, i.description, i.is_consumable, i.quantity, i.created_at, i.photo_path
       FROM items i JOIN members caller ON caller.user_id = ? AND caller.status = 'active'
       JOIN cache_config c ON c.singleton = 1
       WHERE i.id = ? AND (? = 0 OR i.owner_id = caller.user_id)
@@ -254,7 +255,7 @@ export class Cache extends DurableObject<Env> {
     return this.ctx.storage.transactionSync(() => {
       const cache = this.readCache(userId)
       return this.ctx.storage.sql.exec<ItemRow>(`
-        SELECT id, ? AS cache_id, owner_id, title, description, is_consumable, quantity, created_at
+        SELECT id, ? AS cache_id, owner_id, title, description, is_consumable, quantity, created_at, photo_path
         FROM items ORDER BY created_at DESC, id
       `, cache.id).toArray().map(itemInfo)
     })
@@ -296,17 +297,62 @@ export class Cache extends DurableObject<Env> {
     })
   }
 
+  async photoKey(userId: string, itemId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      const item = this.readItem(userId, itemId)
+      if (!item.photo_path) throw new Error('not_found')
+      return item.photo_path
+    })
+  }
+
+  async photoUploadKey(userId: string, itemId: string) {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      const item = this.readItem(userId, itemId, true)
+      return `${item.cache_id}/${item.id}/${crypto.randomUUID()}`
+    })
+  }
+
+  async finishPhotoUpload(userId: string, itemId: string, key: string, uploaded: boolean) {
+    await this.rearm()
+    const attached = this.ctx.storage.transactionSync(() => {
+      const cacheId = this.ctx.storage.sql.exec<{ id: string }>('SELECT id FROM cache_config WHERE singleton = 1').one().id
+      if (!key.startsWith(`${cacheId}/${itemId}/`) || !/^[0-9a-f-]{36}$/.test(key.slice(`${cacheId}/${itemId}/`.length))) throw new Error('not_found')
+      let item: ItemRow | undefined
+      try { item = this.readItem(userId, itemId, true) }
+      catch (error) { if (!(error instanceof Error) || error.message !== 'not_found') throw error }
+      const current = this.ctx.storage.sql.exec<{ photo_path: string | null }>('SELECT photo_path FROM items WHERE id = ?', itemId).toArray()[0]?.photo_path
+      if (!uploaded || !item) {
+        // An uncertain RPC response must not clean up an attachment that actually committed.
+        if (current !== key) this.recordIntent('r2_delete', { key })
+        return false
+      }
+      if (current === key) return true
+      this.ctx.storage.sql.exec('UPDATE items SET photo_path = ? WHERE id = ?', key, itemId)
+      if (current) this.recordIntent('r2_delete', { key: current })
+      return true
+    })
+    await this.rearm()
+    return attached
+  }
+
   async schemaVersion() {
     await this.rearm()
     return this.ctx.storage.sql.exec<{ version: number }>('SELECT version FROM schema_version WHERE singleton = 1').one().version
   }
 
   private async drainWork() {
-    // ponytail: at most 25 D1 effects per drain; subsequent alarms keep draining in order.
+    // ponytail: at most 25 external effects per drain; subsequent alarms keep draining in order.
     for (let count = 0; count < 25; count++) {
       const row = this.ctx.storage.sql.exec<{ sequence: number; id: string; kind: string; payload: string; created_at: number }>('SELECT sequence, id, kind, payload, created_at FROM pending_sync ORDER BY sequence LIMIT 1').toArray()[0]
       if (!row) return
-      await applyCacheIntent(this.env.DB, row.kind, row.payload, row.id, row.created_at)
+      if (row.kind === 'r2_delete') {
+        const { key } = JSON.parse(row.payload) as { key: string }
+        await this.env.BUCKET.delete(key)
+      } else {
+        await applyCacheIntent(this.env.DB, row.kind, row.payload, row.id, row.created_at)
+      }
       this.ctx.storage.sql.exec('DELETE FROM pending_sync WHERE sequence = ? AND id = ?', row.sequence, row.id)
     }
   }
