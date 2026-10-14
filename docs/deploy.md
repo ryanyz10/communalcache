@@ -233,7 +233,8 @@ setup or auth redirect configuration is required.
 
 Approve and verify `communalcache.com` or its chosen sending subdomain in Resend;
 use the provider's required DNS verification records and wait for verification.
-`EMAIL_FROM` must use that verified domain. Both auth codes and notification
+`EMAIL_FROM` must use that verified domain; Resend verifies `send.communalcache.com`,
+so the sender is `signin@send.communalcache.com`. Both auth codes and notification
 emails use Resend HTTP, but one failing path need not imply the other is broken.
 Domain ownership alone is not sending-domain verification.
 
