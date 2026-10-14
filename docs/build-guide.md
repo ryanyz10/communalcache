@@ -72,7 +72,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 6 | Notifications + email | Implemented; in review (guarded Queue/email delivery + recovery; remote setup pending) | — |
 | 7 | Web push + PWA | Implemented; in review (local crypto/storage/PWA proof; live push/iOS UNVERIFIED) | — |
 | 8 | Member removal and item deletion | Implemented; in review (atomic cascades, durable D1/R2/outbox cleanup; no deployment) | — |
-| 9 | Polish | Not started | — |
+| 9 | Polish | Implemented locally (D1 write budgets, accessible/error states, monitoring/runbook; release proof pending) | — |
 
 ---
 
@@ -573,6 +573,37 @@ crash after R2 put but before DO finalization can still leave an unreferenced ob
 
 Whole completion gates; rate-limit behavior, list/errors and accessible controls;
 claim/sync backlog recovery after repeated failures; projected discovery drift.
+
+The port uses atomic D1 fixed-minute counters because Workers Rate Limiting binding
+account-plan availability remains **UNVERIFIED**. Verified user + route family keys
+span all cache/item IDs: join 10/min, join decisions 30/min, request creation 20/min,
+request decisions 60/min. Origin/auth/profile failures do not count; subsequent
+attempts (including invalid bodies, secrets and authorization failures) do. Rejected
+attempts return JSON 429 with 1–60-second `Retry-After`; reads remain available.
+Four reusable rows per user bound counter storage; user deletion cascades them.
+These are write-abuse budgets, not notification throttling or cache authorization.
+Fixed windows can admit twice a budget across a minute boundary. One guarded D1
+UPSERT prevents concurrent overshoot within a window; a D1 failure fails closed.
+An approved binding is the upgrade path if D1 write cost demands it, with its
+per-location/eventual semantics rather than a promise of global exact accounting.
+
+Existing empty/error states remain, with added stale-list warnings, honest partial
+and paginated empty queues, notification-config retry and photo retry. Native modal
+sheets retain Tab trapping/Escape/return focus, start on Close/Cancel, and keep
+pending confirmations open so failures are not hidden. Removal returns focus to
+the members sheet after its trigger disappears. Dialogs are centered/scrollable;
+visible focus supports forced colors. Labels and high-contrast slate/error text
+remain. Runtime tests cover rate concurrency, additive migration, mixed-case UUID
+routing and secret-free retry telemetry; UI tests cover empty/error/partial states
+and semantic controls. No dependencies or new production resources are added.
+
+Auth/UI copy explicitly says “use the most recent code you requested,” even if an
+older email arrives later. All UUID route captures and DO discovery/sweep names
+are canonicalized to lowercase; invite secrets are untouched. Resend notification
+`Idempotency-Key` is **not** added: installed dependency/repo docs do not establish
+provider support. Delivery remains at-least-once; migration 0003 stays in place.
+README and the deployment runbook document budgets, backlog/CPU monitoring,
+recovery and the separate approval-gated release proof.
 
 After explicit approval, separately verify: Resend sign-in code from the auth
 request, Queue-driven notification email, authorized image stream, installed iOS

@@ -46,9 +46,9 @@ export function HomePage() {
         <button type="button" onClick={()=>void caches.refetch()} disabled={caches.isFetching} className="underline">Refresh</button>
       </div>
       {caches.isPending && <p role="status" className="mt-3">Loading caches…</p>}
-      {caches.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(caches.error)}</p>}
+      {caches.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(caches.error)} Previously loaded caches may be out of date.</p>}
       {caches.data && <>
-        {caches.data.length === 0 && <p className="mt-3 text-slate-600">No caches yet. Create one to start sharing. New entries can take a moment to appear.</p>}
+        {caches.isSuccess && caches.data.length === 0 && <p className="mt-3 text-slate-600">No caches yet. Create one to start sharing. New entries can take a moment to appear.</p>}
         <ul className="mt-3 space-y-3">{caches.data.map(cache=><li key={cache.id}><Link to={`/caches/${cache.id}`} className="block rounded-md border border-slate-300 bg-white p-4 font-medium">{cache.name}</Link></li>)}</ul>
       </>}
     </section>

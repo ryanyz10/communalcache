@@ -47,7 +47,7 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
           value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
       </div>
       {sent && <>
-        <p role="status" className="text-sm text-emerald-700">Check your email. Codes expire in 5 minutes; use the newest code.</p>
+        <p role="status" className="text-sm text-emerald-700">Check your email. Codes expire in 5 minutes; use the most recent code you requested, even if an older email arrives later.</p>
         <div>
           <label htmlFor="code" className="block text-sm font-medium">Six-digit code</label>
           <input id="code" name="code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required

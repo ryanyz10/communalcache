@@ -44,12 +44,12 @@ function DeleteItem({ item }: { item: Item }) {
   })
   return <>
     <button type="button" className="ml-3 mt-6 rounded-md border border-red-300 px-4 py-2 text-red-800" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Delete item</button>
-    <dialog ref={dialog} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="delete-item-heading">
+    <dialog ref={dialog} onCancel={event => { if (remove.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="delete-item-heading">
       <h2 id="delete-item-heading" className="text-xl font-semibold">Delete {item.title}?</h2>
       <p className="mt-3">This permanently removes the item, its photos and request history. Neighbors with pending requests will be notified.</p>
       {remove.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(remove.error)}</p>}
       <div className="mt-6 flex gap-3">
-        <button type="button" disabled={remove.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button>
+        <button type="button" autoFocus disabled={remove.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button>
         <button type="button" disabled={remove.isPending} onClick={() => remove.mutate()} className="rounded-md bg-red-700 px-4 py-2 text-white disabled:opacity-60">{remove.isPending ? 'Deleting…' : 'Confirm deletion'}</button>
       </div>
     </dialog>

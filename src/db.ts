@@ -1,3 +1,13 @@
+export function consumeWriteLimit(db: D1Database, userId: string, route: string, windowStart: number, limit: number) {
+  // The guarded UPSERT is one atomic D1 statement, including concurrent Worker attempts.
+  return db.prepare(`INSERT INTO write_limits(user_id,route,window_start,count) VALUES (?, ?, ?, 1)
+    ON CONFLICT(user_id,route) DO UPDATE SET window_start=excluded.window_start,
+      count=CASE WHEN write_limits.window_start < excluded.window_start THEN 1 ELSE write_limits.count + 1 END
+    WHERE write_limits.window_start < excluded.window_start
+      OR (write_limits.window_start = excluded.window_start AND write_limits.count < ?)`)
+    .bind(userId, route, windowStart, limit).run()
+}
+
 export type Profile = { id: string; email: string; display_name: string | null }
 
 export function getProfile(db: D1Database, userId: string) {

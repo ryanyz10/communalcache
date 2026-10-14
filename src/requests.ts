@@ -15,7 +15,7 @@ export async function aggregateRequests(env: Env, userId: string, after: string 
   const unavailable: string[] = []
   for (let offset = 0; offset < page.length; offset += 5) {
     const results = await Promise.all(page.slice(offset, offset + 5).map(async ({ cache_id }) => {
-      try { return { cache_id, requests: await env.CACHES.get(env.CACHES.idFromName(cache_id)).requestsForMember(userId) } }
+      try { return { cache_id, requests: await env.CACHES.get(env.CACHES.idFromName(cache_id.toLowerCase())).requestsForMember(userId) } }
       catch (error) { return { cache_id, requests: [], unavailable: !(error instanceof Error && error.message === 'not_found') } }
     }))
     for (const result of results) {

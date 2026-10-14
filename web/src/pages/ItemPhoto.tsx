@@ -7,7 +7,7 @@ import { PHOTO_READ_ERROR, resizePhoto, uploadPhoto } from '../lib/photos'
 export function ItemPhoto({ item, thumbnail = false }: { item: Item; thumbnail?: boolean }) {
   const [failed, setFailed] = useState(false)
   if (!item.photo_version) return null
-  if (failed) return <p className="mt-3 text-sm text-slate-600">Photo unavailable. Refresh to try again.</p>
+  if (failed) return <div className="mt-3 text-sm text-slate-600"><p role="status">Photo unavailable. {thumbnail ? 'Open the item or reload to try again.' : ''}</p>{!thumbnail && <button type="button" className="mt-2 underline" onClick={() => setFailed(false)}>Try photo again</button>}</div>
   return <img src={`/api/caches/${item.cache_id}/items/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}`} alt={`Photo of ${item.title}`} loading={thumbnail ? 'lazy' : 'eager'} onError={() => setFailed(true)} className={`mt-3 w-full rounded-lg object-contain ${thumbnail ? 'h-40' : 'max-h-80'}`} />
 }
 

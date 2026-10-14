@@ -41,7 +41,8 @@ export function PushControls({ userId }: { userId: string }) {
     <p className="mt-2 text-sm text-slate-600">Enable for the account you are using. Signing out removes this browser's subscription. Without a live subscription, notifications use email.</p>
     {support.ios && !support.standalone && <p className="mt-3">On iPhone or iPad, tap Share, then Add to Home Screen. Open the installed app and tap Enable notifications.</p>}
     {!support.supported && <p className="mt-3">Push notifications are not supported in this browser. You can still use email notifications.</p>}
-    {config.isError && <p role="alert" className="mt-3 text-red-700">Could not load notification configuration.</p>}
+    {config.isPending && <p role="status" className="mt-3">Loading notification configuration…</p>}
+    {config.isError && <div className="mt-3"><p role="alert" className="text-red-700">Could not load notification configuration.</p><button type="button" disabled={config.isFetching} onClick={() => void config.refetch()} className="mt-2 underline">Try notification configuration again</button></div>}
     {config.isSuccess && !config.data.vapid_public_key && <p className="mt-3 text-slate-600">Push is not configured yet. Email notifications remain available.</p>}
     {hasSubscription && <p className="mt-3 text-sm">This browser has a subscription. Enable for this account to confirm its assignment.</p>}
     <div className="mt-4 flex flex-wrap gap-3">
