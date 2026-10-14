@@ -9,6 +9,18 @@ function newSecret() {
     .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 }
 
+function decodeSecret(secret: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(secret)) return null
+  return Uint8Array.from(atob(secret.replaceAll('-', '+').replaceAll('_', '/') + '='), char => char.charCodeAt(0))
+}
+
+function sameSecret(candidate: string, stored: string) {
+  const left = decodeSecret(candidate)
+  const right = decodeSecret(stored)
+  if (!left || !right) return false
+  return crypto.subtle.timingSafeEqual(left, right)
+}
+
 function cacheInfo(row: CacheRow): CacheInfo {
   return { id: row.id, name: row.name, owner_id: row.owner_id, invite_token: `${row.id}.${row.join_secret}`, requires_approval: row.requires_approval === 1 }
 }
@@ -148,6 +160,53 @@ export class Cache extends DurableObject<Env> {
     })
   }
 
+  async join(userId: string, secret: string) {
+    await this.rearm()
+    const result = this.ctx.storage.transactionSync(() => {
+      const row = this.ctx.storage.sql.exec<CacheRow>(`
+        SELECT c.*, o.user_id AS owner_id FROM cache_config c
+        JOIN members o ON o.role = 'owner' AND o.status = 'active' WHERE c.singleton = 1
+      `).toArray()[0]
+      if (!row || !sameSecret(secret, row.join_secret)) throw new Error('not_found')
+      const existing = this.ctx.storage.sql.exec<{ status: 'active' | 'pending' | 'removed' }>('SELECT status FROM members WHERE user_id = ?', userId).toArray()[0]
+      if (existing?.status === 'removed') throw new Error('member_removed')
+      if (existing) return { cache_id: row.id, name: row.name, status: existing.status }
+      const status = row.requires_approval === 1 ? 'pending' : 'active'
+      this.ctx.storage.sql.exec("INSERT INTO members(user_id, role, status, created_at) VALUES (?, 'member', ?, ?)", userId, status, Date.now())
+      if (status === 'active') this.recordIntent('discovery_upsert', { cache_id: row.id, user_id: userId })
+      else this.recordIntent('notification', { event: 'join_requested', cache_id: row.id, cache_name: row.name, recipient_id: row.owner_id, user_id: userId })
+      return { cache_id: row.id, name: row.name, status }
+    })
+    await this.rearm()
+    return result
+  }
+
+  async joinRequests(userId: string) {
+    await this.rearm()
+    this.readCache(userId, true)
+    return this.ctx.storage.sql.exec<{ user_id: string; created_at: number }>("SELECT user_id, created_at FROM members WHERE status = 'pending' ORDER BY created_at, user_id").toArray()
+  }
+
+  async decideJoin(userId: string, applicantId: string, decision: 'approve' | 'reject') {
+    await this.rearm()
+    const result = this.ctx.storage.transactionSync(() => {
+      const row = this.readCache(userId, true)
+      const pending = this.ctx.storage.sql.exec<{ user_id: string }>("SELECT user_id FROM members WHERE user_id = ? AND status = 'pending'", applicantId).toArray()[0]
+      if (!pending) throw new Error('join_not_pending')
+      // Snapshot the recipient before rejection deletes their membership.
+      this.recordIntent('notification', { event: decision === 'approve' ? 'join_approved' : 'join_rejected', cache_id: row.id, cache_name: row.name, recipient_id: pending.user_id, user_id: pending.user_id })
+      if (decision === 'approve') {
+        this.ctx.storage.sql.exec("UPDATE members SET status = 'active' WHERE user_id = ? AND status = 'pending'", pending.user_id)
+        this.recordIntent('discovery_upsert', { cache_id: row.id, user_id: pending.user_id })
+      } else {
+        this.ctx.storage.sql.exec("DELETE FROM members WHERE user_id = ? AND status = 'pending'", pending.user_id)
+      }
+      return { status: decision === 'approve' ? 'active' : 'rejected' }
+    })
+    await this.rearm()
+    return result
+  }
+
   async schemaVersion() {
     await this.rearm()
     return this.ctx.storage.sql.exec<{ version: number }>('SELECT version FROM schema_version WHERE singleton = 1').one().version
@@ -156,9 +215,9 @@ export class Cache extends DurableObject<Env> {
   private async drainWork() {
     // ponytail: at most 25 D1 effects per drain; subsequent alarms keep draining in order.
     for (let count = 0; count < 25; count++) {
-      const row = this.ctx.storage.sql.exec<{ sequence: number; id: string; kind: string; payload: string }>('SELECT sequence, id, kind, payload FROM pending_sync ORDER BY sequence LIMIT 1').toArray()[0]
+      const row = this.ctx.storage.sql.exec<{ sequence: number; id: string; kind: string; payload: string; created_at: number }>('SELECT sequence, id, kind, payload, created_at FROM pending_sync ORDER BY sequence LIMIT 1').toArray()[0]
       if (!row) return
-      await applyCacheIntent(this.env.DB, row.kind, row.payload)
+      await applyCacheIntent(this.env.DB, row.kind, row.payload, row.id, row.created_at)
       this.ctx.storage.sql.exec('DELETE FROM pending_sync WHERE sequence = ? AND id = ?', row.sequence, row.id)
     }
   }
