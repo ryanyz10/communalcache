@@ -3,6 +3,6 @@ APP_BASE_URL=http://127.0.0.1:8787
 BETTER_AUTH_URL=http://127.0.0.1:8787
 BETTER_AUTH_SECRET=
 RESEND_API_KEY=
-EMAIL_FROM=Communal Cache <signin@communalcache.com>
+EMAIL_FROM=Communal Cache <signin@send.communalcache.com>
 # For Vite development, change BOTH URLs above to http://localhost:5173.
 # Tests/UI fixture mock email; real Resend/domain setup needs approval.
