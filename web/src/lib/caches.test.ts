@@ -18,6 +18,7 @@ function renderPage(owner:boolean, home=false) {
   client.setQueryData(['me'],{id:owner?'owner':'member',display_name:'Neighbor',email:'own@example.test'})
   client.setQueryData(['cache',id],cache)
   client.setQueryData(['caches'],[{id,name:'Tools'}])
+  client.setQueryData(['join-requests',id],[{user_id:'applicant',display_name:'New neighbor',created_at:1}])
   const page=createElement(Routes,null,createElement(Route,{path:home?'/':'/caches/:cacheId',element:createElement(home?HomePage:CachePage)}))
   const tree=createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,{initialEntries:[home?'/':`/caches/${id}`]},page)}))
   const markup=renderToStaticMarkup(tree)
@@ -32,8 +33,13 @@ it('shows owner settings and confirmation controls only to the owner',()=>{
   expect(owner).toContain('Rotate invite')
   expect(owner).toContain('Confirm rotation')
   expect(owner).toContain('Members (1)')
+  expect(owner).toContain('Join requests')
+  expect(owner).toContain('New neighbor')
+  expect(owner).toContain('Approve New neighbor')
+  expect(owner).toContain('Reject New neighbor')
   const member=renderPage(false)
   expect(member).not.toContain('Owner settings')
+  expect(member).not.toContain('Join requests')
   expect(member).not.toContain('>Rotate invite<')
   expect(member).toContain('Copy invite')
   expect(member).toContain(`/join/${cache.invite_token}`)
@@ -54,6 +60,19 @@ it('sends create/settings/rotate bodies without a forged owner or path secret',a
   expect(fetchMock.mock.calls.map(call=>call[0])).toEqual(['/api/caches',`/api/caches/${id}`,`/api/caches/${id}/invite/rotate`])
   expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(cache.invite_token)
   expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('owner_id')
+})
+
+it('sends owner decisions to the selected cache and applicant routes',async()=>{
+  const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>Response.json({status:'active'}))
+  await apiFetch(`/api/caches/${id}/join-requests`)
+  await apiFetch(`/api/caches/${id}/join-requests/applicant/approve`,{body:{}})
+  await apiFetch(`/api/caches/${id}/join-requests/applicant/reject`,{body:{}})
+  expect(fetchMock.mock.calls.map(call=>call[0])).toEqual([
+    `/api/caches/${id}/join-requests`,
+    `/api/caches/${id}/join-requests/applicant/approve`,
+    `/api/caches/${id}/join-requests/applicant/reject`,
+  ])
+  expect(fetchMock.mock.calls.slice(1).every(call=>call[1]?.method==='POST')).toBe(true)
 })
 
 it('distinguishes invalid names and unavailable cache data in the UI',()=>{

@@ -1,9 +1,10 @@
 # D1 and cache Durable Object storage
 
 Foundation supplies the local Worker/D1/DO schema. Caches adds authoritative local
-cache operations, ordered D1 projection sync and the registry recovery sweep. The
-approved `communalcache` D1 database exists and its real ID is committed; remote
-migrations and deployment still require separate approval.
+cache operations, ordered D1 projection sync and the registry recovery sweep.
+Joining adds transactional memberships and notification intents materialized in D1
+outbox. The approved `communalcache` D1 database exists and its real ID is committed;
+remote migrations and deployment still require separate approval.
 [plan.md](plan.md) defines semantics; this page explains the mechanics.
 
 ## Two stores, two jobs
@@ -147,8 +148,11 @@ Apply each local migration and version bump atomically; failure leaves the previ
 version. Foundation's `src/cache.ts` uses v1 for cache data and v2 for pending_sync;
 constructor upgrade tests persist v1, evict, then instantiate v2 without data loss.
 Tests also inject DDL failure and prove version/DDL rollback. Caches now drains
-registry/reverse-index intents in sequence; no outbox or Queue bridge is added
-before Joining produces its first notification.
+registry/reverse-index intents in sequence. Joining produces notification intents
+whose stable pending_sync ID becomes the D1 outbox ID and dedupe key via
+`INSERT OR IGNORE`; replay preserves attempts, claims and terminal state. Payloads
+snapshot the recipient ID and cache name without emails or invite secrets. Queue
+handoff and actual delivery remain in Feature 6.
 
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not
@@ -162,7 +166,8 @@ prefer fixing forward for incompatible migrations.
 
 A mutation writes state plus ordered pending_sync rows locally, then sets an alarm.
 For each pending row, apply its D1/R2 effects idempotently; insert outbox by the
-stable DO-generated ID, send that ID to Queue, then delete the local pending row.
+stable DO-generated ID, then delete the local pending row. Feature 6 will add
+Queue handoff/recovery; Joining only persists undelivered outbox rows.
 Replay cannot reset an existing outbox's attempts/claim/sent/failed state.
 
 - One ordered bounded drain per DO, even if alarm and `flushSync` overlap.

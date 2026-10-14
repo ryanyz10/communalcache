@@ -62,9 +62,9 @@ async function dispatch(request: Request, env: Env) {
       vapid_public_key: env.VAPID_PUBLIC_KEY,
     })
   }
-  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate)?$/i)
+  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
   if (path !== '/api/me' && path !== '/api/caches' && !cacheRoute) throw new HttpError(404, 'not_found')
-  const methods = path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  const methods = path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(401, 'unauthorized')
@@ -86,7 +86,22 @@ async function dispatch(request: Request, env: Env) {
       return json(await env.CACHES.get(env.CACHES.idFromName(id)).create(id, profile.id, changes.name, changes.requires_approval ?? false), 201)
     }
     const stub = env.CACHES.get(env.CACHES.idFromName(cacheRoute![1]))
-    if (cacheRoute![2]) {
+    const action = cacheRoute![2]
+    if (action === '/join') {
+      const body = await readBody(request)
+      if (typeof body.secret !== 'string') throw new HttpError(400, 'invalid_secret')
+      return json(await stub.join(profile.id, body.secret))
+    }
+    if (action === '/join-requests') {
+      const requests = await stub.joinRequests(profile.id)
+      const names = await displayNames(env.DB, requests.map(member => member.user_id))
+      return json(requests.map(member => ({ ...member, display_name: names.get(member.user_id) ?? null })))
+    }
+    if (cacheRoute![3]) {
+      if (request.body) await readBody(request)
+      return json(await stub.decideJoin(profile.id, cacheRoute![3], cacheRoute![4] as 'approve' | 'reject'))
+    }
+    if (action === '/invite/rotate') {
       if (request.body) await readBody(request)
       return json(await stub.rotateInvite(profile.id))
     }
@@ -98,6 +113,8 @@ async function dispatch(request: Request, env: Env) {
     // RPC recreates Error objects; use only the stable messages defined by cache RPCs.
     if (error instanceof Error && error.message === 'not_found') throw new HttpError(404, 'not_found')
     if (error instanceof Error && error.message === 'cache_exists') throw new HttpError(409, 'cache_exists')
+    if (error instanceof Error && error.message === 'member_removed') throw new HttpError(403, 'member_removed')
+    if (error instanceof Error && error.message === 'join_not_pending') throw new HttpError(409, 'join_not_pending')
     throw error
   }
 }

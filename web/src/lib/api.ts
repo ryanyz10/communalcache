@@ -34,7 +34,9 @@ export function errorMessage(error: unknown) {
   if (['INVALID_OTP', 'OTP_EXPIRED', 'TOO_MANY_ATTEMPTS', 'invalid_otp'].includes(error.code)) return 'That code is invalid or expired. Request a new code and use the newest email.'
   if (error.code === 'invalid_display_name') return 'Choose a name between 1 and 60 characters.'
   if (error.code === 'invalid_name') return 'Use a cache name between 1 and 60 characters.'
-  if (error.status === 404) return 'This cache is not available, or you are no longer a member.'
+  if (error.code === 'member_removed') return 'You were removed from this cache and cannot rejoin with an invite.'
+  if (error.code === 'join_not_pending') return 'This join request has already been decided. The list has been refreshed.'
+  if (error.status === 404) return 'This cache or invite is not available, or you are no longer a member.'
   if (error.status === 401) return 'Your session has expired. Sign in again.'
   return 'Could not complete that request. Please try again.'
 }
