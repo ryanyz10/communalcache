@@ -87,7 +87,7 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
             from: env.EMAIL_FROM,
             to: [email],
             subject: 'Your Communal Cache sign-in code',
-            text: `Your sign-in code is ${otp}. It expires in 5 minutes. Use the newest code if you requested another.`,
+            text: `Your sign-in code is ${otp}. It expires in 5 minutes. Use the most recent code you requested, even if an older email arrives later.`,
           }),
         })
         await response.body?.cancel()

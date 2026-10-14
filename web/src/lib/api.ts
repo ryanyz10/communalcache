@@ -1,10 +1,12 @@
 export class ApiError extends Error {
   status: number
   code: string
-  constructor(status: number, code: string) {
+  retryAfter?: number
+  constructor(status: number, code: string, retryAfter?: number) {
     super(code)
     this.status = status
     this.code = code
+    this.retryAfter = retryAfter
   }
 }
 
@@ -21,7 +23,8 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({})) as { error?: string; code?: string }
-    throw new ApiError(res.status, data.error ?? data.code ?? 'request_failed')
+    const retryAfter = Number(res.headers.get('Retry-After'))
+    throw new ApiError(res.status, data.error ?? data.code ?? 'request_failed', Number.isInteger(retryAfter) && retryAfter > 0 && retryAfter <= 60 ? retryAfter : undefined)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -29,9 +32,9 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
 
 export function errorMessage(error: unknown) {
   if (!(error instanceof ApiError)) return 'Could not connect. Please try again.'
-  if (error.status === 429) return 'Too many tries. Please wait a minute and try again.'
+  if (error.status === 429) return error.retryAfter ? `Too many tries. Please wait ${error.retryAfter} seconds and try again.` : 'Too many tries. Please wait a minute and try again.'
   if (error.code === 'email_unavailable') return 'Could not send the code. Your invite is saved; please try again.'
-  if (['INVALID_OTP', 'OTP_EXPIRED', 'TOO_MANY_ATTEMPTS', 'invalid_otp'].includes(error.code)) return 'That code is invalid or expired. Request a new code and use the newest email.'
+  if (['INVALID_OTP', 'OTP_EXPIRED', 'TOO_MANY_ATTEMPTS', 'invalid_otp'].includes(error.code)) return 'That code is invalid or expired. Use the most recent code you requested, or request a new one.'
   if (error.code === 'invalid_display_name') return 'Choose a name between 1 and 60 characters.'
   if (error.code === 'invalid_name') return 'Use a cache name between 1 and 60 characters.'
   if (error.code === 'member_removed') return 'You were removed from this cache and cannot rejoin with an invite.'

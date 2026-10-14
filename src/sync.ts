@@ -5,7 +5,7 @@ export async function sweepCacheSync(env: Env) {
   const page = await registryPage(env.DB, cursor)
   // ponytail: 25 sequential DO calls per Cron; durable cursor continues next tick.
   for (const cache of page.results) {
-    try { await env.CACHES.get(env.CACHES.idFromName(cache.id)).flushSync(true) }
+    try { await env.CACHES.get(env.CACHES.idFromName(cache.id.toLowerCase())).flushSync(true) }
     catch { console.error('Registry sync sweep could not flush a cache') }
   }
   const next = page.results.length === 25 ? page.results.at(-1)!.id : null

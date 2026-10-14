@@ -118,6 +118,12 @@ Caches adds `0004_cache_sync_cursor.sql` for the bounded registry sweep; it is
 discovery/recovery metadata, never authorization. Notifications adds
 `0005_notification_sync_cursor.sql` so bounded outbox recovery pages cannot starve
 later IDs behind repeatedly crashed claims; this cursor is not delivery state.
+Polish adds `0006_write_limits.sql`: at most four reusable fixed-minute counters
+per verified user, keyed by join/request route family (not cache/item IDs). A single
+guarded UPSERT admits and increments atomically; changing a window reuses the row.
+This is an abuse budget, not D1 cache authorization. User deletion cascades counters;
+there is no time-window garbage sweep or in-memory bucket. See the
+[Polish guide](build-guide.md#feature-9--polish) for limits and boundary behavior.
 Auth date columns store adapter-produced ISO strings;
 app timestamps are integer milliseconds. `wrangler.jsonc` commits the approved
 `communalcache` D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`. Tests and default dev

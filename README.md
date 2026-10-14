@@ -4,12 +4,14 @@ Mobile-first household sharing: React + a TypeScript Cloudflare Worker, one SQLi
 Durable Object per cache and global D1. Foundation implements private cookie-auth
 sessions, six-digit email sign-in codes and display-name onboarding. Caches adds
 creation, live member/owner access, invites/settings and ordered discovery sync;
-joining, private R2 photos and Queue notifications follow in feature order.
+joining, items/private R2 photos, transactional requests, Queue email/push,
+member removal/item deletion and everyday UX polish are implemented locally.
 No addresses, holder tracking or loan tracking. Target: https://communalcache.com.
 
 ## Status and docs
 
-Foundation and Caches are implemented for review. The `communalcache` D1 database
+The Foundation → Polish Cloudflare feature stack is implemented for review;
+local gates are not release/provider proof. The `communalcache` D1 database
 was created with approval and its real ID is committed; remote migrations,
 deployments and Resend/domain changes still require separate approval. The legacy
 Go/Fly/Supabase app stays live until an explicitly approved cutover. Its source
@@ -81,8 +83,8 @@ Open `http://127.0.0.1:4173/join/11111111-1111-4111-8111-111111111111.aaaaaaaaaa
 Use a test email and the public fixture code `123456`, then choose a name. The
 invite stays on the same page and in sessionStorage; reload it or open `/login`
 to see navigation resume it. Use `failure@example.test` to see a delivery error
-without losing the invite. Cancel clears the pending invite. Joining's actual
-POST is deferred to Feature 2. **Never deploy or expose this fixture server.**
+without losing the invite. Cancel clears the pending invite. The fixture does not grant real membership; actual body-only join/approval is proved
+against local DO storage in the runtime suite. **Never deploy or expose this fixture server.**
 
 For the Caches UI walkthrough, cancel the saved invite to reach the dashboard,
 create a cache and immediately open its page. Copy an invite, open the members
@@ -125,8 +127,8 @@ come from D1. Sync is capped at 25 intent rows per drain; Cron sweeps 25 known c
 per tick. Failed first alarm scheduling retains intents, but registry cannot find
 a brand-new cache until its registry intent succeeds; its returned cache ID and a
 later entry point can repair the gap. A crash before the ID response remains an
-explicit recovery limitation. Duplicate-outbox proof lands with Joining's first
-notification producer, not an unused Caches bridge.
+explicit recovery limitation. Stable outbox IDs and replay are proved with Joining/request events in the runtime
+suite, independently of this mock UI.
 
 Real email sign-in requires separately approved Resend/domain setup and a local
 provider key. Delivery is awaited with a 10-second abort deadline. Better Auth
@@ -180,14 +182,73 @@ private-IP/DNS-rebinding blocking remain **UNVERIFIED**. The strict service-orig
 allowlist and manual redirects are application controls, not proof of platform
 SSRF immunity. No VAPID/provider/account changes were performed by this feature.
 
+## Write budgets and everyday UX
+
+Joins and request writes use verified-user + route-family D1 counters, shared across
+all cache/item IDs. Limits per fixed minute: join 10, join decisions 30, request
+creation 20, request decisions 60. Failed attempts count after Origin/auth/profile
+checks; 429 returns bounded `Retry-After` and the UI tells you how long to wait.
+Reads and notification delivery are not throttled by these write budgets. Counters
+reuse four rows/user, not one row per URL/window; concurrent guarded UPSERTs cannot
+overshoot within a window, but a minute boundary can admit two windows' budgets.
+Workers Rate Limiting binding plan availability remains **UNVERIFIED**, so no
+account-plan assumption or per-isolate memory limit is used. D1 failure fails
+closed; one D1 write per admitted attempt adds cost to measure before release.
+
+Lists show loading/empty/error states and cached-list failures explicitly warn of
+staleness; partial/paginated request queues never claim to be complete. Refresh,
+notification-config retry and photo retry are explicit actions, not silent
+mutation retries. Native modal sheets are centered and scroll within small screens,
+trap keyboard focus, start on Close/Cancel and return focus on dismissal. Confirmations
+cannot be dismissed while their mutation is pending, so failures stay visible.
+Forms are labeled; focus rings support forced colors. Sign-in copy says to use
+the most recent code **requested**, even if an older email arrives later.
+
+## Resource budgets and monitoring
+
+Local proof does not establish Free-plan fit. Before an approved release, measure
+Worker CPU p50/p95/p99 and resource-limit errors separately for OTP sign-in,
+request fan-out and push encryption; HTTP Free CPU is 10 ms/invocation. Compare
+D1 rows read/written, DO duration/storage, Queue operations/retries/retention and
+R2 operations against [sourced ceilings](docs/plan.md#verified-platform-facts).
+A paid plan, Rate Limiting binding or provider setup needs explicit approval.
+
+Current bounded work:
+
+| Path | Budget / continuation |
+| --- | --- |
+| DO sync drain | 25 iterations, up to 50 D1/Queue/R2 binding calls; alarm continues |
+| R2 item cleanup | 100 keys/page, relist after deletion; intent remains until empty |
+| Registry / outbox Cron | 25 caches and 25 recoverable IDs per five-minute tick; durable cursors |
+| Requests aggregation | 25 discovered caches/page, 5 concurrent RPCs, explicit next cursor/unavailable IDs |
+| Queue consumer | 3 sequential rows/batch, up to 3 browser registrations/user; 10s provider / 30s row deadline |
+| Write abuse counters | 1 atomic D1 statement/attempt; 4 reusable rows/user |
+
+Observe backlog age, not just `/api/healthz`. Failed DO drains log only
+`cache_sync_failed`, retry count/time and oldest pending age (no payload/secret).
+Observed notification failures log `notification_delivery_failed`, outbox UUID,
+claim attempts and terminal status. Auth/provider error bodies, codes, cookies,
+emails, invite secrets and push keys must never be logged. See the
+[monitoring/recovery runbook](docs/deploy.md#backlog-and-budget-triage) for
+payload-free D1 queries, suggested signals and replay precautions.
+
+Release proof remains separate and approval-gated: auth email, Queue notification
+email, authorized photos, installed iOS push, alarm/Queue/Cron recovery,
+migration-compatible update and rollback. Legacy production stays live; no remote
+resource, account, secret, deploy or cutover operation is included in Polish.
+
 ## Validation
 
 ```bash
 npx --no-install tsc --noEmit
 npx --no-install vitest run
 (cd web && npx --no-install tsc --noEmit && npm run build)
+# Cheap source-only check while editing (the root web tsconfig only has references):
+(cd web && npx --no-install tsc --noEmit -p tsconfig.app.json)
 CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local
 CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run -e staging
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run -e production
 ```
 
 The suite has a real local Worker/D1/SQLite DO project and a Node UI-unit project.

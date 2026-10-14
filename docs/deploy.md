@@ -329,6 +329,73 @@ oldest pending-sync/outbox ages and discovery drift. Never log OTPs, session coo
 auth/link tokens, invite secrets, push credentials or emails as debug payloads. Testing locally does not prove
 production fetch private-IP restrictions; those remain UNVERIFIED.
 
+### Backlog and budget triage
+
+Start with Worker CPU percentiles/resource-limit errors by route, D1 rows read and
+written, DO duration/storage, Queue backlog/retry/retention and R2 operations.
+Measure OTP hashing/session reads, five-way request fan-out and push encryption
+under representative approved staging load; local timings are not a production
+CPU benchmark. Free HTTP CPU is 10 ms, D1 writes 100,000 rows/day, Queues 10,000
+operations/day with 24-hour retention; use the plan's sourced limits rather than
+assuming these independent budgets fit together. Typical Queue write/read/delete
+already costs three operations per notification, before replay/recovery. Rate
+counters add one D1 statement/attempt and four rows/user. Rejected fixed-window
+attempts do not update a counter. The Workers Rate Limiting binding is a possible
+upgrade only after plan availability/approval, not a promised global quota.
+
+Read-only diagnostics, containing no email or notification payload:
+
+```sql
+SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_pending_at
+FROM outbox WHERE sent_at IS NULL AND failed_at IS NULL;
+SELECT COUNT(*) AS expired_claims
+FROM outbox WHERE sent_at IS NULL AND failed_at IS NULL
+  AND claim_until IS NOT NULL AND claim_until <= unixepoch() * 1000;
+SELECT kind, COUNT(*) AS terminal_failures FROM outbox
+WHERE failed_at IS NOT NULL GROUP BY kind;
+SELECT route, COUNT(*) AS active_counters, SUM(count) AS admitted_attempts
+FROM write_limits WHERE window_start >= unixepoch() * 1000 - 60000 GROUP BY route;
+```
+
+Use approved dashboard/read-only D1 tools in the explicitly selected environment;
+remote reads still require approval. Never dump `outbox.payload`, auth tables or
+push credentials. Counts over reusable counters show the current minute, not a
+historical usage meter. Track Worker 429 responses separately for rejected attempts.
+
+`cache_sync_failed` logs contain oldest pending age, capped consecutive-failure
+count and next retry time; they do not enumerate caches or report healthy objects'
+backlog. `notification_delivery_failed` contains outbox UUID, claim attempts and
+whether an observed failure became terminal. Neither logs provider responses or
+recipient data. For private DO backlog diagnosis, use approved per-object tools;
+do not expose an HTTP diagnostics endpoint or treat D1 discovery as permission.
+
+Suggested initial alerts (tune to measured workload): resource-limit errors or CPU
+p95 near the selected plan ceiling; any new terminal outbox failures; increasing
+Queue age/retries; oldest nonterminal outbox above 15 minutes; repeated DO sync
+failures or pending age above two hours (backoff reaches one hour). A 25-entry cursor
+page every five minutes means large registries/outboxes need multiple ticks; this
+is bounded recovery, not an immediate global sweep guarantee. Missing discovery
+rows have no aggregate detector; compare a known authoritative cache page with its
+home entry to diagnose drift, never grant access from the index.
+
+Recovery order: verify bindings/provider availability and errors; restore the
+approved dependency; let alarms/Queue/Cron replay stable IDs, and confirm backlog
+age falls and discovery converges. Failed DO drains keep ordered work and persisted
+backoff; registry Cron respects it. Expired outbox claims remain eligible even past
+six attempts. Terminal `failed_at` rows do not auto-retry: inspect the cause and
+get separate approval for an explicit replay/data repair. Do not delete intents,
+reset attempt/claim counters, clear terminal flags or recreate a DO namespace to
+make metrics look healthy. Provider acceptance before terminal recording can
+still duplicate mail; Resend idempotency headers are not enabled without repo/
+installed documentation proving the contract.
+
+Record the approved environment, revision, provider/browser receipts and before/
+after backlog/CPU measurements for each release smoke item. Prove a compatible
+Worker update and a staging fix-forward/revert drill before production promotion;
+rollback cannot undo schema migrations. Keep the OTP migration 0003 until a reviewed
+Better Auth upgrade proves the same resend/late-restore behavior. None of these
+remote measurements, provider sends or rollback actions were performed by Polish.
+
 ## Rollback and cutover
 
 A previous Worker version must understand the schemas left by the new one. Code
