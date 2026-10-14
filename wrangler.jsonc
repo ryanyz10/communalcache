@@ -26,5 +26,49 @@
     "bindings": [{"name": "CACHES", "class_name": "Cache"}]
   },
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["Cache"]}],
-  "triggers": { "crons": ["*/5 * * * *"] }
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "env": {
+    "staging": {
+      "name": "communalcache-staging",
+      "workers_dev": true,
+      "vars": {
+        "APP_BASE_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
+        "BETTER_AUTH_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
+        "EMAIL_FROM": "Communal Cache <signin@communalcache.com>",
+        "VAPID_PUBLIC_KEY": ""
+      },
+      "d1_databases": [{
+        "binding": "DB",
+        "database_name": "communalcache-staging",
+        "database_id": "480fe3bd-a463-456d-8dfb-bc80235a5486",
+        "migrations_dir": "migrations/d1"
+      }],
+      "durable_objects": {
+        "bindings": [{"name": "CACHES", "class_name": "Cache"}]
+      },
+      "triggers": { "crons": ["*/5 * * * *"] }
+    },
+    "production": {
+      "name": "communalcache",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [{"pattern": "communalcache.com", "custom_domain": true}],
+      "vars": {
+        "APP_BASE_URL": "https://communalcache.com",
+        "BETTER_AUTH_URL": "https://communalcache.com",
+        "EMAIL_FROM": "Communal Cache <signin@communalcache.com>",
+        "VAPID_PUBLIC_KEY": ""
+      },
+      "d1_databases": [{
+        "binding": "DB",
+        "database_name": "communalcache",
+        "database_id": "b4257b89-22d6-40f1-b250-ccd1985bf1d1",
+        "migrations_dir": "migrations/d1"
+      }],
+      "durable_objects": {
+        "bindings": [{"name": "CACHES", "class_name": "Cache"}]
+      },
+      "triggers": { "crons": ["*/5 * * * *"] }
+    }
+  }
 }
