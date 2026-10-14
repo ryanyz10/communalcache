@@ -1,8 +1,10 @@
 # D1 and cache Durable Object storage
 
-This is the target storage design. The Foundation port has not created its Worker
-package/config/migrations yet; this docs change does not migrate any data or touch
-production. [plan.md](plan.md) defines semantics; this page explains the mechanics.
+Foundation implements the local Worker/D1/DO schema and tests; later features add
+cache operations and synchronization. The approved `communalcache` D1 database
+exists and its real ID is committed; remote migrations and deployment still
+require separate approval.
+[plan.md](plan.md) defines semantics; this page explains the mechanics.
 
 ## Two stores, two jobs
 
@@ -60,6 +62,20 @@ is database, not per-isolate memory. Foundation tests must prove concurrent OTP
 redemption, attempt budgets and counter behavior against local D1; documented
 adapter support is not a project-level concurrency guarantee.
 
+`0003_otp_identifier_unique.sql` adds a partial UNIQUE index for the plugin's exact
+`sign-in-otp-` prefix (case-sensitive GLOB), the only exposed OTP type. It first
+keeps the newest duplicate by `createdAt`, breaking same-millisecond ties by
+insertion `rowid`; unrelated verification namespaces are unchanged. This makes
+1.7.7's resend conflict handler replace the old row and prevents late wrong-code
+restoration from resurrecting it. The sign-in request's `onAPIError` callback maps
+only D1's exact `verification.identifier` unique-conflict diagnostic to 400
+`INVALID_OTP`; unrelated database errors remain failures. This workaround tracks
+upstream [#10437](https://github.com/better-auth/better-auth/issues/10437),
+[#11105](https://github.com/better-auth/better-auth/issues/11105) and
+[fix PR #10443](https://github.com/better-auth/better-auth/pull/10443). Retire it only
+after a reviewed pinned upgrade supplies the same storage/restore guarantee.
+Tests cover wrong-code/resend overlap and overlapping resends with equal timestamps.
+
 ## Local transactions
 
 Each cache check-then-write is one synchronous local transaction:
@@ -89,23 +105,30 @@ Supabase/Postgres must retain its protections until separately approved retireme
 
 ## D1 migrations
 
-The Foundation port adds a separate SQLite migration directory and configures it
-on the D1 binding. Do not point Wrangler at the existing PostgreSQL migrations.
+Foundation uses SQLite migrations in `migrations/d1/`, configured on binding `DB`
+with database name `communalcache`. `0001_auth.sql` is reviewed from the pinned
+schema compiler (`scripts/auth-schema.mjs`); `0002_app.sql` adds discovery, push
+subscriptions and outbox; `0003_otp_identifier_unique.sql` supplies the narrow
+sign-in OTP uniqueness workaround above without changing the generator reference.
+Auth date columns store adapter-produced ISO strings;
+app timestamps are integer milliseconds. `wrangler.jsonc` commits the approved
+`communalcache` D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`. Tests and default dev
+bindings remain local; remote migrations and deployment require explicit approval.
+Never point Wrangler at the legacy PostgreSQL migrations in `internal/db/migrations/`.
 Wrangler records applied files in `d1_migrations`, not a custom boot-time ledger.
 [Official migration reference](https://developers.cloudflare.com/d1/reference/migrations/index.md).
 
-After tooling exists, local-only commands are:
+Local-only commands (disable fallback to the legacy Go `.env`) are:
 
 ```bash
-npx --no-install wrangler d1 migrations create communalcache init
-npx --no-install wrangler d1 migrations list communalcache --local
-npx --no-install wrangler d1 migrations apply communalcache --local
-npx --no-install wrangler dev
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations list communalcache --local
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local
+npm run dev
 ```
 
-Create only writes a local migration file; list/apply explicitly select local D1.
+Create new migration files in `migrations/d1/`; list/apply explicitly select local D1.
 [Wrangler documents local/remote selection](https://developers.cloudflare.com/workers/wrangler/commands/d1/index.md#d1-migrations-apply).
-The database name/binding must match the future Wrangler configuration. There is
+The database name/binding must match `wrangler.jsonc`. There is
 no DATABASE_URL or TEST_DATABASE_URL for the port. Never use remote bindings in tests.
 
 D1's documented binding is auto-commit; `batch()` is an atomic SQL batch with
@@ -119,7 +142,10 @@ unchanged while deciding. Do not rely on cross-statement `changes()` behavior
 Each DO has its own private schema and version number. Its constructor runs schema
 initialization/upgrades under `ctx.blockConcurrencyWhile`, before handling RPCs.
 Apply each local migration and version bump atomically; failure leaves the previous
-version. Tests cover both a fresh object and an older persisted schema.
+version. Foundation's `src/cache.ts` uses v1 for cache data and v2 for pending_sync;
+constructor upgrade tests persist v1, evict, then instantiate v2 without data loss.
+Tests also inject DDL failure and prove version/DDL rollback. The Foundation alarm
+only preserves/re-arms intents; Feature 1 adds actual ordered sync producers/drains.
 
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not
