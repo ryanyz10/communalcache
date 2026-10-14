@@ -56,7 +56,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | # | Feature | Cloudflare status | Reference PR |
 | --- | --- | --- | --- |
 | — | Foundation port | Implemented; in review (local gates, no deployment) | — |
-| 1 | Caches | Port not started; Go implementation ready for review | [#2](https://github.com/ryanyz10/communalcache/pull/2) |
+| 1 | Caches | Implemented; in review (Cloudflare port, no deployment) | [#2](https://github.com/ryanyz10/communalcache/pull/2) (closed Go reference) |
 | 2 | Joining | Port not started; Go implementation ready for review | [#3](https://github.com/ryanyz10/communalcache/pull/3) |
 | 3 | Items (no photos) | Not started | — |
 | 4 | Photos | Not started | — |
@@ -193,8 +193,16 @@ copy invite, member sheet and owner settings. No join/removal yet.
 Auth matrix: non-member/pending/removed/active/owner; settings and rotate owner-only.
 Creation returns an immediately readable cache while home discovery lags. Inject
 sync crashes at each boundary, replay twice, and fail beyond six alarm retries;
-show no duplicate outbox ID or reordered projection, entry-point re-arm and Cron
-flush. Open/create/copy/rotate through the UI.
+show unique stable intent IDs, no duplicate registry/my_caches rows or reordered
+projection, entry-point re-arm and cursor-bounded Cron flush. Open/create/copy/rotate
+through the UI. Duplicate-outbox-ID proof belongs to Feature 2, the first actual
+notification producer; Caches has no notification recipient/event to materialize.
+
+The port drains at most 25 D1 effects per DO flush and sweeps at most 25 known
+caches per Cron tick, with a D1 cursor. A failed first alarm schedule preserves
+committed state/intents and still returns the cache ID; a later entry point
+re-arms it. Registry Cron cannot discover a pre-registry object. A process crash
+before the client receives that ID remains the documented creation-recovery window.
 
 ---
 
@@ -229,8 +237,10 @@ UI: `/join/:token` through login/name onboarding, active/pending result, owner q
 
 Open/gated joins, idempotent join replay, removed denial, secret rotation/mismatch,
 owner-only decisions and cross-cache 404s. Rejection then rejoin works; thrown
-transaction creates neither state nor intent. Assert recipient IDs. Logged-out
-invite → email code on the same page → name → join POST body resumes correctly.
+transaction creates neither state nor intent. Assert recipient IDs and prove stable
+notification intent/outbox IDs cannot duplicate on replay (the first notification
+producer, moved from Feature 1). Logged-out invite → email code on the same page
+→ name → join POST body resumes correctly.
 
 ---
 

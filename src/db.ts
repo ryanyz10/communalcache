@@ -9,3 +9,43 @@ export async function setDisplayName(db: D1Database, userId: string, name: strin
     .bind(name, new Date().toISOString(), userId).run()
   return getProfile(db, userId)
 }
+
+export function listMyCaches(db: D1Database, userId: string) {
+  return db.prepare('SELECT c.id, c.name FROM caches c JOIN my_caches m ON m.cache_id = c.id WHERE m.user_id = ? ORDER BY c.created_at DESC, c.id')
+    .bind(userId).all<{ id: string; name: string }>()
+}
+
+export async function displayNames(db: D1Database, userIds: string[]) {
+  // Bound pages keep each query small; no email is selected for public enrichment.
+  const names = new Map<string, string | null>()
+  for (let offset = 0; offset < userIds.length; offset += 100) {
+    const ids = userIds.slice(offset, offset + 100)
+    const rows = await db.prepare(`SELECT id, display_name FROM user WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all<{ id: string; display_name: string | null }>()
+    for (const row of rows.results) names.set(row.id, row.display_name)
+  }
+  return names
+}
+
+export async function applyCacheIntent(db: D1Database, kind: string, payload: string) {
+  const data = JSON.parse(payload) as { cache_id: string; name: string; created_at: number; user_id: string }
+  let result: D1Result
+  if (kind === 'registry_upsert') {
+    result = await db.prepare('INSERT INTO caches(id, name, created_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name')
+      .bind(data.cache_id, data.name, data.created_at).run()
+  } else if (kind === 'discovery_upsert') {
+    result = await db.prepare('INSERT OR IGNORE INTO my_caches(user_id, cache_id) VALUES (?, ?)').bind(data.user_id, data.cache_id).run()
+  } else { throw new Error('Unsupported cache sync intent') }
+  if (!result.success) throw new Error('Cache projection sync failed')
+}
+
+export function syncCursor(db: D1Database) {
+  return db.prepare('SELECT cache_id FROM cache_sync_cursor WHERE singleton = 1').first<string | null>('cache_id')
+}
+
+export function registryPage(db: D1Database, cursor: string | null) {
+  return db.prepare('SELECT id FROM caches WHERE (? IS NULL OR id > ?) ORDER BY id LIMIT 25').bind(cursor, cursor).all<{ id: string }>()
+}
+
+export function advanceSyncCursor(db: D1Database, previous: string | null, next: string | null) {
+  return db.prepare('UPDATE cache_sync_cursor SET cache_id = ? WHERE singleton = 1 AND cache_id IS ?').bind(next, previous).run()
+}
