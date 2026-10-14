@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheDetail, CacheInfo } from '../lib/caches'
 import { OnboardingPage } from './OnboardingPage'
+import { JoinRequests } from './JoinRequests'
 
 function OwnerSettings({cache}:{cache:CacheDetail}) {
   const queryClient=useQueryClient()
@@ -68,7 +69,7 @@ export function CachePage() {
     <button type="button" className="mt-4 rounded-md border border-slate-300 px-4 py-2" onClick={()=>membersDialog.current?.showModal()}>Members ({cache.members.length})</button>
     <section className="mt-8" aria-labelledby="invite-heading">
       <h2 id="invite-heading" className="text-xl font-semibold">Share an invite</h2>
-      <p className="mt-2 text-slate-600">Share only with people you trust. Joining comes in the next feature.</p>
+      <p className="mt-2 text-slate-600">Share only with people you trust.</p>
       <label htmlFor="invite-link" className="mt-3 block text-sm font-medium">Invite link</label>
       <input id="invite-link" type="text" readOnly value={invite} onFocus={event=>event.currentTarget.select()} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
       <button type="button" className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-white" onClick={()=>void copyInvite()}>Copy invite</button>
@@ -77,6 +78,7 @@ export function CachePage() {
       {rotationStatus && <p role="status" className="mt-3 text-emerald-700">{rotationStatus}</p>}
     </section>
     <section className="mt-8" aria-labelledby="items-heading"><h2 id="items-heading" className="text-xl font-semibold">Shared things</h2><p className="mt-2 text-slate-600">Adding and browsing items comes in the Items feature.</p></section>
+    {owner && <JoinRequests cacheId={cache.id} />}
     {owner && <OwnerSettings cache={cache} />}
     <dialog ref={membersDialog} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="members-heading">
       <h2 id="members-heading" className="text-xl font-semibold">Members</h2>

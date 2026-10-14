@@ -45,6 +45,13 @@ local `/api/healthz`, `/api/config`, SPA deep links and API 404s under
 bindings. See [README.md](../README.md) for local `.dev.vars`, Vite origins and the
 provider-free UI fixture; legacy `.env` must not feed Worker bindings.
 
+The separate deploy-pipeline PR adds secret-free CI on every PR base plus
+master/production pushes and dry-runs for both named Wrangler environments.
+After the one-time setup in [deploy.md](deploy.md#pipeline), successful master push
+CI releases staging; `git push origin master:production` runs production CI before
+release. No real deployment or GitHub Environment/secret setup is performed by
+that PR. Future features must keep all three bundle checks green.
+
 For legacy Go-only reference validation, existing `make test`, `make vet`, gofmt
 and frontend commands still apply to that code. Do not mistake them for Worker/DO
 validation. Do not run legacy database tests against hosted Postgres.
@@ -56,8 +63,9 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | # | Feature | Cloudflare status | Reference PR |
 | --- | --- | --- | --- |
 | — | Foundation port | Implemented; in review (local gates, no deployment) | — |
+| — | Deploy pipeline | Implemented; in review (CI → staging, fast-forward production; setup pending) | — |
 | 1 | Caches | Implemented; in review (Cloudflare port, no deployment) | [#2](https://github.com/ryanyz10/communalcache/pull/2) (closed Go reference) |
-| 2 | Joining | Port not started; Go implementation ready for review | [#3](https://github.com/ryanyz10/communalcache/pull/3) |
+| 2 | Joining | Implemented; in review (Cloudflare port, no deployment) | [#3](https://github.com/ryanyz10/communalcache/pull/3) (closed Go reference) |
 | 3 | Items (no photos) | Not started | — |
 | 4 | Photos | Not started | — |
 | 5 | Requests | Not started | — |
