@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
@@ -28,6 +28,34 @@ export function ItemList({ cacheId }: { cacheId: string }) {
   </section>
 }
 
+function DeleteItem({ item }: { item: Item }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const client = useQueryClient()
+  const navigate = useNavigate()
+  const remove = useMutation({
+    mutationFn: () => apiFetch<void>(`/api/caches/${item.cache_id}/items/${item.id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      dialog.current?.close()
+      client.removeQueries({ queryKey: ['item', item.cache_id, item.id] })
+      client.removeQueries({ queryKey: ['item-requests', item.cache_id, item.id] })
+      await Promise.all([client.invalidateQueries({ queryKey: ['items', item.cache_id] }), client.invalidateQueries({ queryKey: ['requests'] })])
+      navigate(`/caches/${item.cache_id}`)
+    },
+  })
+  return <>
+    <button type="button" className="ml-3 mt-6 rounded-md border border-red-300 px-4 py-2 text-red-800" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Delete item</button>
+    <dialog ref={dialog} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="delete-item-heading">
+      <h2 id="delete-item-heading" className="text-xl font-semibold">Delete {item.title}?</h2>
+      <p className="mt-3">This permanently removes the item, its photos and request history. Neighbors with pending requests will be notified.</p>
+      {remove.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(remove.error)}</p>}
+      <div className="mt-6 flex gap-3">
+        <button type="button" disabled={remove.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button>
+        <button type="button" disabled={remove.isPending} onClick={() => remove.mutate()} className="rounded-md bg-red-700 px-4 py-2 text-white disabled:opacity-60">{remove.isPending ? 'Deleting…' : 'Confirm deletion'}</button>
+      </div>
+    </dialog>
+  </>
+}
+
 export function ItemPage() {
   const { cacheId = '', itemId = '' } = useParams()
   const { me } = useAuth()
@@ -46,6 +74,7 @@ export function ItemPage() {
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
       {me.id === query.data.owner_id && <>
         <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="mt-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-white">Edit item</Link>
+        <DeleteItem item={query.data} />
         <PhotoUpload item={query.data} />
       </>}
       <ItemRequests item={query.data} />
