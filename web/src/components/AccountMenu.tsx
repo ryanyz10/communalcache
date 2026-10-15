@@ -3,9 +3,10 @@ import { Link, useLocation } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { errorMessage } from '../lib/api'
 import { accountMenuLabel, bindAccountMenu } from '../lib/accountMenu'
+import { Avatar } from './Avatar'
 
 export function AccountMenu({ name, count }: { name: string; count: number }) {
-  const { signOut } = useAuth()
+  const { signOut, me } = useAuth()
   const { pathname, key } = useLocation()
   const previousLocation = useRef(key)
   const root = useRef<HTMLDivElement>(null)
@@ -31,7 +32,7 @@ export function AccountMenu({ name, count }: { name: string; count: number }) {
   const badge = count > 0 && <span aria-hidden="true" className="min-w-[18px] rounded-full bg-red-700 px-[5px] text-center text-[11px] leading-[18px] font-semibold text-white">{count}</span>
   return <div ref={root} className="relative">
     <button ref={trigger} type="button" aria-label={accountMenuLabel(count)} aria-haspopup="menu" aria-expanded={open} aria-controls="account-menu" onClick={() => { if (open) close(); else setOpen(true) }} onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true) } }} className={`flex min-h-11 items-center gap-1.5 rounded-full border py-[3px] pr-2 pl-[3px] lg:gap-2 lg:pr-2.5 ${open ? 'border-slate-300 bg-slate-100' : 'border-slate-200 bg-white'}`}>
-      <span aria-hidden="true" className="flex size-[30px] items-center justify-center rounded-full bg-slate-900 text-[13px] font-semibold text-white">{Array.from(name.trim())[0]?.toUpperCase() ?? '?'}</span>
+      <Avatar userId={me?.id ?? ''} name={name} photoVersion={me?.profile_photo_version} size={30} />
       <span className="hidden lg:inline lg:max-w-[240px] lg:truncate lg:font-medium">{name}</span>{badge}
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </button>

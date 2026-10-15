@@ -12,7 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-export type Me = { id: string; email: string; display_name: string | null }
+export type Me = { id: string; email: string; display_name: string | null; profile_photo_version?: string | null }
 
 type ApiOptions = { method?: string; body?: unknown }
 

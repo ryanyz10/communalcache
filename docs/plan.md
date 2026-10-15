@@ -462,6 +462,8 @@ Planned shared routes below use direct D1 guards, not DO routing. Existing
 cache-local compatibility routes must not remain a second stock authority.
 
 - GET /api/config, /api/healthz; GET/PATCH /api/me; approved /api/auth/*.
+- GET/POST/DELETE /api/me/photo; GET /api/users/{userId}/photo (self or shared-active
+  cache visibility only; not a public user lookup).
 - GET/POST /api/caches; GET/PATCH /api/caches/{cacheId}.
 - POST /api/caches/{cacheId}/invite/rotate and /join (body {secret}).
 - GET /api/caches/{cacheId}/join-requests; POST .../{userId}/approve|reject.
@@ -491,7 +493,8 @@ behavior from an architecture change.
 These decisions extend the settled D1 architecture; they do not replace its
 membership/attachment checks, shared stock, guarded token batches, durable outbox
 or private storage. Plans foundation and limits on existing endpoints are now
-implemented for review (readiness 1–2); the remaining features are not implemented.
+implemented for review (readiness 1–2), followed by private profile photos
+(readiness 3). The remaining features are not implemented.
 No plan UI, billing, provider setup or release approval is included.
 [Build-guide readiness rows](build-guide.md#production-readiness-build-order)
 order each future feature and its proof. Nothing below authorizes merging draft
@@ -527,7 +530,7 @@ printing auth email. No remote assignment is run by this feature PR.
 | Items you own, shared or not | 100 | 100 | User plan |
 | Open requests you have made | 20 | 20 | User plan |
 | Current photos per item | 1, at the current 5 MB actual-byte cap | 1 in this phase | Photo policy, not an upgrade perk |
-| Current profile photo | 1 | 1 | Seeded only; endpoint/guard follows in readiness 3 |
+| Current profile photo | 1 | 1 | User plan; one current user_photos pointer |
 
 Open requests means `status='pending'`; approval/rejection closes them, not a
 holder/return lifecycle. One canonical item counts once regardless of cache
@@ -555,13 +558,15 @@ classify failed guards; they never authorize a later write/retry. A plan change 
 deletes/detaches existing canonical data; growth while at/over a cap is guarded.
 Current item-photo finalization rechecks photos_per_item after R2 I/O; replacing
 the single current pointer is allowed. A rejected upload retains durable cleanup.
-Profile_photos is seeded for the later profile-photo feature, not a new endpoint.
+Profile-photo finalization applies profile_photos in the same guarded post-I/O
+batch; replacing its current pointer does not consume another slot.
 
 ### Profile photo and private shared-cache visibility
 
 Account supports upload, replace and remove of one optional profile photo, with
 initials fallback. Store immutable private R2 keys as
-`users/{userId}/{uploadUUID}`; keep the current pointer in D1. Reuse the item-photo
+`users/{userId}/{uploadUUID}`; keep the current pointer/token in the app-owned
+`user_photos` D1 table, not Better Auth's user output. Reuse the item-photo
 actual-byte cap, image sniffing, upload/finalization recheck and durable cleanup
 pattern, not public URLs. Only the authenticated user may change their photo.
 
@@ -569,6 +574,12 @@ A reader may stream a profile photo only if they are its owner **or share at
 least one currently active cache membership with that owner**, checked in one
 D1 statement before R2 streaming. Pending, removed and left memberships do not
 qualify. Approval/history/contact access alone is not a profile-photo grant.
+Avatar enrichment exposes nullable profile_photo_version (or owner/requester
+photo versions), never raw R2 keys or another user's email. The enrichment query applies the same current
+self/shared-active predicate; historical request-party access alone gives no photo
+flag. The shared avatar component uses a same-origin user-photo route and initials
+on absent, denied or failed images. Metadata is not a cached permission grant:
+streaming rechecks current membership in D1 on every request.
 Use same-origin cookie-authenticated, private/no-store responses with no public
 bucket, signed URL or browser bearer. Removal from one cache still permits access
 if a different shared active cache remains; losing the last shared cache denies
@@ -576,7 +587,9 @@ the next read. An already authorized in-flight stream is not recalled.
 
 Replacement/removal and necessary R2 cleanup intents commit atomically in D1;
 R2 I/O remains external and idempotently retryable. Extend cleanup scope explicitly
-for `users/` keys; never fabricate an item ID or let item-prefix cleanup touch a
+for `users/` keys: profile intents have scope=profile, item_id=NULL and exact-key
+kind only. Existing item intents retain scope=item; claims protect both kinds of
+current pointer. Never fabricate an item ID or let item-prefix cleanup touch a
 profile key. Rejected/uncertain finalization must preserve a currently referenced
 key. Retain the existing honest put-before-finalization orphan-window limitation.
 

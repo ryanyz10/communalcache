@@ -6,6 +6,7 @@ export type Item = {
   cache_id: string | null
   owner_id: string
   owner_name: string | null
+  owner_photo_version?: string | null
   title: string
   description: string | null
   is_consumable: boolean

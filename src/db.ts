@@ -12,10 +12,77 @@ export function consumeWriteLimit(db: D1Database, userId: string, route: string,
     .bind(userId, route, windowStart, limit).run()
 }
 
-export type Profile = { id: string; email: string; display_name: string | null }
+export type Profile = { id: string; email: string; display_name: string | null; profile_photo_version?: string | null }
 
-export function getProfile(db: D1Database, userId: string) {
-  return db.prepare('SELECT id, email, display_name FROM user WHERE id = ?').bind(userId).first<Profile>()
+const profilePhotoAccess = `u.id=? OR EXISTS(SELECT 1 FROM memberships owner
+  JOIN memberships caller ON caller.cache_id=owner.cache_id AND caller.user_id=? AND caller.status='active'
+  JOIN caches c ON c.id=owner.cache_id AND c.join_secret IS NOT NULL
+  WHERE owner.user_id=u.id AND owner.status='active')`
+
+function photoVersion(key: string | null) { return key?.split('/').at(-1) ?? null }
+
+export async function getProfile(db: D1Database, userId: string) {
+  const row = await db.prepare(`SELECT u.id,u.email,u.display_name,p.photo_path FROM user u
+    LEFT JOIN user_photos p ON p.user_id=u.id WHERE u.id=?`).bind(userId)
+    .first<{id:string;email:string;display_name:string|null;photo_path:string|null}>()
+  if (!row) return null
+  const {photo_path,...profile} = row
+  return {...profile,profile_photo_version:photoVersion(photo_path)}
+}
+
+async function profilePhotoVersions(db: D1Database, readerId: string, userIds: string[]) {
+  if (!userIds.length) return new Map<string,string|null>()
+  const rows = await db.prepare(`SELECT u.id,p.photo_path FROM user u JOIN user_photos p ON p.user_id=u.id
+    WHERE u.id IN(SELECT value FROM json_each(?)) AND (${profilePhotoAccess})`)
+    .bind(JSON.stringify([...new Set(userIds)]),readerId,readerId).all<{id:string;photo_path:string}>()
+  return new Map(rows.results.map(row=>[row.id,photoVersion(row.photo_path)]))
+}
+
+export async function profilePhotoKey(db: D1Database, ownerId: string, readerId: string) {
+  const key = await db.prepare(`SELECT p.photo_path FROM user u JOIN user_photos p ON p.user_id=u.id
+    WHERE u.id=? AND (${profilePhotoAccess})`).bind(ownerId,readerId,readerId).first<string>('photo_path')
+  if (!key) throw new HttpError(404,'not_found')
+  return key
+}
+
+export async function finishProfilePhoto(db: D1Database, userId: string, key: string, uploaded: boolean) {
+  const prefix = `users/${userId}/`
+  if (!key.startsWith(prefix) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key.slice(prefix.length))) throw new HttpError(404,'not_found')
+  const token = crypto.randomUUID(), now = Date.now()
+  const [marked,_cleanup,_photo,quota] = await db.batch([
+    db.prepare(`INSERT INTO user_photos(user_id,photo_path,operation_token)
+      SELECT u.id,?,? FROM user u JOIN plan_limits l ON l.plan=u.plan WHERE u.id=? AND ?=1 AND l.profile_photos>0
+      AND NOT EXISTS(SELECT 1 FROM r2_cleanup WHERE (kind='exact' AND target=?) OR (kind='prefix' AND substr(?,1,length(target))=target))
+      ON CONFLICT(user_id) DO UPDATE SET operation_token=excluded.operation_token`).bind(key,token,userId,uploaded?1:0,key,key),
+    db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at,scope)
+      SELECT ?,user_id,NULL,'exact',photo_path,?,'profile' FROM user_photos WHERE user_id=? AND operation_token=? AND photo_path<>?
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),now,userId,token,key),
+    db.prepare('UPDATE user_photos SET photo_path=? WHERE user_id=? AND operation_token=?').bind(key,userId,token),
+    db.prepare(`SELECT l.profile_photos AS maximum FROM user u LEFT JOIN plan_limits l ON l.plan=u.plan
+      WHERE u.id=? AND ?=1`).bind(userId,uploaded?1:0),
+  ])
+  if (marked.meta.changes === 0) {
+    await db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at,scope)
+      SELECT ?,?,NULL,'exact',?,?,'profile' WHERE NOT EXISTS(SELECT 1 FROM user_photos WHERE photo_path=?)
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),userId,key,now,key).run()
+    const row = quota.results[0] as {maximum:number|null} | undefined
+    if (row) checkQuota('profile_photos',0,row.maximum)
+  }
+  return marked.meta.changes>0
+}
+
+export async function removeProfilePhoto(db: D1Database, userId: string) {
+  const token = crypto.randomUUID(), now = Date.now()
+  const [_marked,_cleanup,_photo,user] = await db.batch([
+    db.prepare(`UPDATE user_photos SET operation_token=? WHERE user_id=?
+      AND EXISTS(SELECT 1 FROM user WHERE id=user_photos.user_id)`).bind(token,userId),
+    db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at,scope)
+      SELECT ?,user_id,NULL,'exact',photo_path,?,'profile' FROM user_photos WHERE user_id=? AND operation_token=?
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),now,userId,token),
+    db.prepare('DELETE FROM user_photos WHERE user_id=? AND operation_token=?').bind(userId,token),
+    db.prepare('SELECT id FROM user WHERE id=?').bind(userId),
+  ])
+  if (!user.results.length) throw new HttpError(404,'not_found')
 }
 
 export async function setDisplayName(db: D1Database, userId: string, name: string) {
@@ -178,7 +245,9 @@ export async function cacheDetail(db: D1Database, cacheId: string, userId: strin
       WHERE m.cache_id=? AND m.status='active' ORDER BY m.created_at,m.user_id`).bind(userId, cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  return { ...cacheInfo(cache.results[0] as CacheRow), members: members.results as { user_id: string; display_name: string | null }[] }
+  const rows = members.results as {user_id:string;display_name:string|null}[]
+  const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.user_id))
+  return {...cacheInfo(cache.results[0] as CacheRow),members:rows.map(row=>({...row,profile_photo_version:photos.get(row.user_id) ?? null}))}
 }
 
 export async function updateCache(db: D1Database, cacheId: string, userId: string, changes: { name?: string; requires_approval?: boolean }, rotate = false) {
@@ -203,7 +272,9 @@ export async function cacheJoinRequests(db: D1Database, cacheId: string, userId:
       WHERE m.cache_id=? AND m.status='pending' ORDER BY m.created_at,m.user_id`).bind(userId, cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  return applicants.results as { user_id: string; created_at: number; display_name: string | null }[]
+  const rows = applicants.results as {user_id:string;created_at:number;display_name:string|null}[]
+  const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.user_id))
+  return rows.map(row=>({...row,profile_photo_version:photos.get(row.user_id) ?? null}))
 }
 
 export async function joinCache(db: D1Database, cacheId: string, userId: string, secret: string) {
@@ -316,7 +387,8 @@ function libraryItemInfo(row: LibraryRow) {
 
 export async function libraryItems(db: D1Database, userId: string) {
   const rows = await db.prepare(`${libraryRead} ORDER BY library.created_at DESC,library.id DESC`).bind(userId).all<LibraryRow>()
-  return rows.results.map(libraryItemInfo)
+  const photos = await profilePhotoVersions(db,userId,[userId])
+  return rows.results.map(row=>({...libraryItemInfo(row),owner_photo_version:photos.get(row.owner_id) ?? null}))
 }
 
 export async function libraryPage(db: D1Database, userId: string, after: string | null) {
@@ -329,7 +401,8 @@ export async function libraryPage(db: D1Database, userId: string, after: string 
   const rows = (await db.prepare(`${libraryRead}
     WHERE (? IS NULL OR library.created_at<? OR (library.created_at=? AND library.id<?))
     ORDER BY library.created_at DESC,library.id DESC LIMIT 26`).bind(userId,time,time,time,id).all<LibraryRow>()).results
-  const items = rows.slice(0,25).map(libraryItemInfo), last = items.at(-1)
+  const photos = await profilePhotoVersions(db,userId,[userId])
+  const items = rows.slice(0,25).map(row=>({...libraryItemInfo(row),owner_photo_version:photos.get(row.owner_id) ?? null})), last = items.at(-1)
   return { items, next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
 }
 
@@ -339,7 +412,9 @@ export async function cacheItems(db: D1Database, cacheId: string, userId: string
     db.prepare(`${itemRead} WHERE ${itemAccess} ORDER BY i.created_at DESC,i.id`).bind(cacheId, userId, userId, cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  return (items.results as ItemRow[]).map(row => itemInfo(row, cacheId))
+  const rows = items.results as ItemRow[]
+  const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.owner_id))
+  return rows.map(row=>({...itemInfo(row,cacheId),owner_photo_version:photos.get(row.owner_id) ?? null}))
 }
 
 export async function readItem(db: D1Database, itemId: string, userId: string, cacheId: string | null = null, ownerOnly = false) {
@@ -350,10 +425,15 @@ export async function readItem(db: D1Database, itemId: string, userId: string, c
 }
 
 export async function itemDetail(db: D1Database, itemId: string, userId: string, cacheId: string | null = null) {
-  if (cacheId !== null) return itemInfo(await readItem(db, itemId, userId, cacheId), cacheId)
-  const row = await db.prepare(`${libraryRead} WHERE library.id=?`).bind(userId,itemId).first<LibraryRow>()
-  if (!row) throw new HttpError(404, 'not_found')
-  return libraryItemInfo(row)
+  let item
+  if (cacheId !== null) item = itemInfo(await readItem(db,itemId,userId,cacheId),cacheId)
+  else {
+    const row = await db.prepare(`${libraryRead} WHERE library.id=?`).bind(userId,itemId).first<LibraryRow>()
+    if (!row) throw new HttpError(404,'not_found')
+    item = libraryItemInfo(row)
+  }
+  const photos = await profilePhotoVersions(db,userId,[item.owner_id])
+  return {...item,owner_photo_version:photos.get(item.owner_id) ?? null}
 }
 
 export async function createItem(db: D1Database, userId: string, changes: ItemChanges, cacheId: string | null = null) {
@@ -413,8 +493,14 @@ export async function updateItem(db: D1Database, itemId: string, userId: string,
 export type D1Request = {
   id: string; item_id: string; cache_id: string; cache_name: string; item_title: string
   owner_id: string; owner_name: string | null; requester_id: string; requester_name: string | null
+  owner_photo_version?: string | null; requester_photo_version?: string | null
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
   decided_at: number | null; created_at: number
+}
+
+async function requestPhotos(db: D1Database, readerId: string, rows: D1Request[]) {
+  const photos = await profilePhotoVersions(db,readerId,rows.flatMap(row=>[row.owner_id,row.requester_id]))
+  return rows.map(row=>({...row,owner_photo_version:photos.get(row.owner_id) ?? null,requester_photo_version:photos.get(row.requester_id) ?? null}))
 }
 
 const requestRead = `SELECT r.id AS id,r.item_id,r.cache_id,c.name AS cache_name,i.title AS item_title,
@@ -460,7 +546,7 @@ export async function createRequest(db: D1Database, itemId: string, cacheId: str
     checkQuota('open_requests',row.used,row.maximum)
     throw new HttpError(409,'insufficient_stock')
   }
-  return { request: result.results[0] as D1Request, notificationId: token }
+  return {request:(await requestPhotos(db,userId,result.results as D1Request[]))[0],notificationId:token}
 }
 
 export async function itemRequests(db: D1Database, itemId: string, cacheId: string, userId: string) {
@@ -471,7 +557,7 @@ export async function itemRequests(db: D1Database, itemId: string, cacheId: stri
       .bind(itemId,cacheId,cacheId,userId,userId,cacheId,userId,userId),
   ])
   if (!item.results.length) throw new HttpError(404,'not_found')
-  return requests.results as D1Request[]
+  return requestPhotos(db,userId,requests.results as D1Request[])
 }
 
 export async function decideRequest(db: D1Database, requestId: string, userId: string, action: 'approve' | 'reject', input: DecisionInput, cacheId: string | null = null) {
@@ -504,7 +590,7 @@ export async function decideRequest(db: D1Database, requestId: string, userId: s
     if (markLentOut && request.quantity !== null) throw new HttpError(400,'invalid_lent_out')
     throw new HttpError(409,'insufficient_stock')
   }
-  return { request: result.results[0] as D1Request, notificationId: token }
+  return {request:(await requestPhotos(db,userId,result.results as D1Request[]))[0],notificationId:token}
 }
 
 export async function requestsPage(db: D1Database, userId: string, after: string | null) {
@@ -518,7 +604,7 @@ export async function requestsPage(db: D1Database, userId: string, after: string
   const rows = (await db.prepare(`${requestRead} WHERE i.owner_id=? AND ${cursor}
     UNION ${requestRead} WHERE r.requester_id=? AND ${cursor} ORDER BY created_at DESC,id DESC LIMIT 26`)
     .bind(userId,time,time,time,id,userId,time,time,time,id).all<D1Request>()).results
-  const requests = rows.slice(0,25), last = requests.at(-1)
+  const requests = await requestPhotos(db,userId,rows.slice(0,25)), last = requests.at(-1)
   return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
 }
 
@@ -636,7 +722,7 @@ export async function finishItemPhoto(db: D1Database, itemId: string, userId: st
   return marked.meta.changes > 0
 }
 
-export type CleanupRow = { id: string; owner_id: string; item_id: string; kind: 'exact' | 'prefix'; target: string; created_at: number }
+export type CleanupRow = { id: string; owner_id: string; item_id: string | null; scope: 'item' | 'profile'; kind: 'exact' | 'prefix'; target: string; created_at: number }
 
 export function cleanupCursor(db: D1Database) {
   return db.prepare('SELECT cleanup_id FROM r2_cleanup_cursor WHERE singleton=1').first<string | null>('cleanup_id')
@@ -650,7 +736,9 @@ export async function claimCleanup(db: D1Database, id: string, token: string, no
   const result = await db.prepare(`UPDATE r2_cleanup SET claim_token=?,claim_until=? WHERE id=? AND (claim_until IS NULL OR claim_until<=?)
     AND NOT EXISTS(SELECT 1 FROM items WHERE (r2_cleanup.kind='exact' AND photo_path=r2_cleanup.target)
       OR (r2_cleanup.kind='prefix' AND substr(photo_path,1,length(r2_cleanup.target))=r2_cleanup.target))
-    RETURNING id,owner_id,item_id,kind,target,created_at`).bind(token, now + 90_000, id, now).all<CleanupRow>()
+    AND NOT EXISTS(SELECT 1 FROM user_photos WHERE (r2_cleanup.kind='exact' AND photo_path=r2_cleanup.target)
+      OR (r2_cleanup.kind='prefix' AND substr(photo_path,1,length(r2_cleanup.target))=r2_cleanup.target))
+    RETURNING id,owner_id,item_id,kind,target,created_at,scope`).bind(token,now+90_000,id,now).all<CleanupRow>()
   return result.meta.changes > 0 ? result.results[0] : null
 }
 

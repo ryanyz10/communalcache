@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { JoinRequest } from '../lib/joining'
+import { Avatar } from '../components/Avatar'
 
 export function JoinRequests({ cacheId }: { cacheId: string }) {
   const queryClient = useQueryClient()
@@ -21,6 +22,7 @@ export function JoinRequests({ cacheId }: { cacheId: string }) {
     {decide.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(decide.error)}</p>}
     {decide.isSuccess && <p role="status" className="mt-3 text-emerald-700">Join request decided.</p>}
     {!!query.data?.length && <ul className="cc-list lg:border-0">{query.data.map(request => <li key={request.user_id} className="cc-row flex-wrap">
+      <Avatar userId={request.user_id} name={request.display_name ?? 'Neighbor'} photoVersion={request.profile_photo_version} />
       <div className="min-w-0 flex-1"><p className="break-words font-semibold">{request.display_name ?? 'Neighbor'}</p>
       <p className="text-sm text-slate-600">Requested {new Date(request.created_at).toLocaleDateString()}</p></div>
       <div className="flex gap-1.5">
