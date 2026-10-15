@@ -13,6 +13,14 @@
   .cc-switch::after { content: ''; @apply absolute top-[3px] left-[3px] h-[18px] w-[18px] rounded-full bg-white; }
   .cc-switch:checked::after { transform: translateX(16px); }
   .cc-sheet { @apply w-full max-w-md rounded-t-2xl bg-white px-4 pt-3 pb-6 text-slate-900; }
+  .cc-auth { @apply mx-auto flex min-h-[max(640px,100dvh)] w-full max-w-md flex-col px-5 pt-10 pb-7; background: radial-gradient(120% 60% at 50% 0%, #e0e7ff 0%, #f8fafc 60%); }
+  .cc-auth-heading { @apply mt-5 text-[28px] leading-[34px] font-bold tracking-[-.03em]; }
+  .cc-auth-card { @apply rounded-2xl border border-slate-200 bg-white p-5 shadow-xs; }
+  .cc-auth-primary, .cc-auth-secondary { @apply flex min-h-[50px] w-full items-center justify-center rounded-xl px-4 py-3 text-center font-semibold disabled:opacity-60; }
+  .cc-auth-primary { @apply bg-slate-900 text-white; }
+  .cc-auth-secondary { @apply border border-slate-300 bg-white text-slate-900; }
+  .cc-auth-text { @apply flex min-h-11 items-center justify-center px-2 py-2 text-center text-[15px] font-medium text-blue-800 disabled:opacity-60; }
+  .cc-auth-input { @apply mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3; }
 }
 
 .cc-sheet { margin: auto auto 0; }
@@ -24,6 +32,10 @@
 :focus-visible {
   outline: 3px solid #2563eb;
   outline-offset: 3px;
+}
+
+.cc-code-input:focus-visible {
+  outline: none;
 }
 
 .cc-list a:focus-visible, .cc-list button:focus-visible {
@@ -38,6 +50,7 @@ dialog {
 
 @media (forced-colors: active) {
   :focus-visible { outline-color: Highlight; }
+  [data-code-box][data-active="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
 }
 
 dialog::backdrop {

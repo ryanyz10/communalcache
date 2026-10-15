@@ -4,6 +4,8 @@ import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { destinationAfterLogin } from '../lib/pendingJoin'
 import { sendSignInEmail } from '../lib/magicLinks'
+import { AuthScreen, BrandMark, MailIcon } from '../components/AuthScreen'
+import { CodeInput } from '../components/CodeInput'
 
 export function LoginForm({ inviteToken }: { inviteToken?: string }) {
   const { refresh } = useAuth()
@@ -38,36 +40,42 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
     finally { setPending(false) }
   }
 
-  return <main className="mx-auto max-w-md px-4 py-12">
-    <h1 className="text-2xl font-semibold tracking-tight">Communal Cache</h1>
-    <p className="mt-2 text-slate-600">Sign in with an email link, or use a six-digit code instead. Your email is private; neighbors see only your chosen name.</p>
-    {inviteToken && <p className="mt-3 text-slate-600">Your invite stays in this tab while you sign in. Open the link in this tab to keep it, or use a code here.</p>}
-    <form className="mt-8 space-y-4" onSubmit={onSubmit}>
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium">Email</label>
-        <input ref={emailInput} id="email" name="email" type="email" autoComplete="email" required readOnly={!!sent} disabled={pending}
-          value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
-      </div>
-      {sent === 'link' && <p role="status" className="text-sm text-emerald-700">Check your email for a sign-in link, then press Continue on the page it opens. It expires in 5 minutes; use the newest link if you requested another.</p>}
-      {sent === 'code' && <>
-        <p role="status" className="text-sm text-emerald-700">Check your email. Codes expire in 5 minutes; use the most recent code you requested, even if an older email arrives later.</p>
-        <div>
-          <label htmlFor="code" className="block text-sm font-medium">Six-digit code</label>
-          <input id="code" name="code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required
-            value={code} onChange={event => setCode(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
+  return <AuthScreen>
+    {!sent ? <header>
+      <BrandMark />
+      <h1 className="cc-auth-heading">{inviteToken ? "You're invited" : <>Share more,<br />buy less.</>}</h1>
+      <p className="mt-2 text-slate-600">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : 'Borrow and lend with your neighbors on Communal Cache.'}</p>
+    </header> : <header className="mt-10 text-center">
+      <div aria-hidden="true" className="mx-auto flex size-16 items-center justify-center rounded-full bg-blue-100 text-blue-800">{sent === 'link' ? <MailIcon /> : <span className="text-[22px] font-bold">123</span>}</div>
+      <h1 className="cc-auth-heading">{sent === 'link' ? 'Check your email' : 'Enter your code'}</h1>
+      <p role="status" className="mt-2 text-slate-600">{sent === 'link' ? 'We sent a sign-in link to' : 'Sent to'}<br /><strong className="break-all text-slate-900">{email.trim()}</strong></p>
+    </header>}
+    {inviteToken && <aside className="mt-6 flex items-center gap-3 rounded-[14px] border border-indigo-200 bg-white p-3.5" aria-label="Saved invite">
+      <div aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800"><MailIcon /></div>
+      <div className="text-sm"><p className="font-semibold">Invite saved in this tab</p><p className="text-slate-600">Open the link in this same tab to keep it, or use a code here.</p></div>
+    </aside>}
+    <form className={inviteToken && !sent ? 'mt-4' : 'mt-8'} onSubmit={onSubmit}>
+      <div className="cc-auth-card">
+        <div className={sent ? 'sr-only' : undefined} aria-hidden={sent ? true : undefined}>
+          <label htmlFor="email" className="block text-sm font-medium">Email</label>
+          <input ref={emailInput} id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required readOnly={!!sent} disabled={pending} tabIndex={sent ? -1 : undefined}
+            value={email} onChange={event => setEmail(event.target.value)} className="cc-auth-input" />
         </div>
-      </>}
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <button type="submit" disabled={pending} className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60">
-        {pending ? 'Please wait…' : sent === 'code' ? 'Sign in' : sent === 'link' ? 'Send a new link' : 'Email me a sign-in link'}
-      </button>
-      <div className="flex flex-wrap gap-4">
-        <button type="button" disabled={pending} onClick={() => void sendEmail('code')} className="underline">{sent === 'code' ? 'Send a new code' : 'Email me a code instead'}</button>
-        {sent === 'code' && <button type="button" disabled={pending} onClick={() => void sendEmail('link')} className="underline">Email me a sign-in link instead</button>}
-        {sent && <button type="button" disabled={pending} onClick={() => { setSent(null); setCode(''); setError(null); emailInput.current?.focus() }} className="underline">Change email</button>}
+        {sent === 'link' && <div><p>Open the email and tap <b>Continue</b> on the page it opens. The link works for 5 minutes.</p><p className="mt-2 text-xs text-slate-600">Use the newest link if you requested another.</p></div>}
+        {sent === 'code' && <CodeInput value={code} onChange={setCode} />}
+        {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
+        <button type="submit" disabled={pending} className={`${sent === 'link' ? 'cc-auth-secondary' : 'cc-auth-primary'} mt-4`}>
+          {pending ? 'Please wait…' : sent === 'code' ? 'Sign in' : sent === 'link' ? 'Resend link' : 'Email me a sign-in link'}
+        </button>
+        <div className={sent === 'code' ? 'mt-2 flex flex-wrap justify-between gap-x-2' : 'mt-2'}>
+          <button type="button" disabled={pending} onClick={() => void sendEmail('code')} className={`cc-auth-text ${sent === 'code' ? '' : 'w-full'}`}>{sent === 'code' ? 'Resend code' : 'Use a 6-digit code instead'}</button>
+          {sent === 'code' && <button type="button" disabled={pending} onClick={() => void sendEmail('link')} className="cc-auth-text">Email a link instead</button>}
+        </div>
       </div>
+      {sent && <button type="button" disabled={pending} onClick={() => { setSent(null); setCode(''); setError(null); emailInput.current?.focus() }} className="cc-auth-text mt-4 w-full text-slate-600">Wrong email? Change it</button>}
     </form>
-  </main>
+    {!sent && !inviteToken && <p className="mt-6 text-center text-[13px] leading-[18px] text-slate-600">Your email stays private. Neighbors only see the name you choose.</p>}
+  </AuthScreen>
 }
 
 export function LoginPage() {
