@@ -95,10 +95,14 @@ Intended production URL is https://communalcache.com; provisioning needs approva
    terminal writes require AND sent_at IS NULL AND failed_at IS NULL, plus current
    claim ownership. Only an observed failure writes failed_at; a crashed last
    claim remains recoverable. Delivery is at-least-once.
-9. **No endpoint returns another user's email.** App `GET /api/me` returns only
-   your own authenticated Better Auth user email. Auth endpoints may return only
-   the caller's session/user; no admin/list-users or public user lookup. D1 auth
-   rows keep emails for login/delivery; public name enrichment never selects email.
+9. **Never expose another user's authentication email.** App `GET /api/me` and
+   auth endpoints return only the caller's own auth user/session email. The approved
+   future contact feature may return a separately user-chosen contact email only
+   to the two parties of an approved request while both are active in that
+   request's cache, guarded in the same SQL statement. Never select, infer or
+   prefill contact from the auth email field. Admin shows names/IDs and scoped
+   operational metadata only, never auth/contact emails or raw private payloads;
+   public name enrichment never selects email.
 10. **Push URLs are untrusted.** Strict push origins, HTTPS, no userinfo/nonstandard
     ports, `redirect: 'manual'` at send. Private-IP blocking by Workers is UNVERIFIED;
     there is no fetch DNS/dial hook for the old resolved-IP guard.
@@ -111,6 +115,11 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     with a guarded item/ownership re-check after R2 I/O; immutable keys are
     ownerId/itemId/uploadUUID. Detach/removal alone never deletes a shared photo.
     Same-origin cookies suffice; no public bucket, signed URL or bearer/blob route.
+    The approved future profile photo uses `users/{userId}/{uploadUUID}`: owner-only
+    mutation; reads require self or a cache where caller and photo owner are both
+    active, checked in one D1 statement before private/no-store R2 streaming.
+    Pointer changes and explicit user-photo cleanup intents commit together; use
+    initials fallback and never pass user keys through item-prefix cleanup.
 13. **Cookie auth requires app CSRF protection.** HttpOnly/Secure/SameSite=Lax
     production cookies, exact Better Auth trustedOrigins and Origin checks on app
     mutations; reject missing/null/foreign origins. Auth guards do not cover unrelated
@@ -119,6 +128,37 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     rotate on resend; persistent database rate-limit storage, never per-isolate
     memory. Auth email awaits Resend from the request, not notification Queue.
     Magic-link landing pages never auto-verify; explicit Continue triggers the POST.
+15. **Approved plan/quotas target: one limits source, same-write enforcement.**
+    Future user/cache plan columns default `free`; one `plan_limits` table keyed
+    by `free` and internal `higher` controls limits inside the same guarded write
+    or fresh-token batch. No client/per-isolate/hard-coded route quota or previous
+    entitlement read across an await. Free caps apply to every account: 3 owned
+    caches, 2 new/day, 20 cache memberships, 30 members/cache (higher: 100), 100 owned
+    items, 20 pending outgoing requests, 1 current item photo at the current cap
+    and 1 profile photo. Unspecified higher values need approval before building.
+    No plan UI, upgrades or billing; before admin exists, assignments are exact
+    owner-approved manual D1 commands only, never automatic. No silent data loss
+    on downgrade; quota errors must clearly say limit reached.
+16. **Approved contact target: private parties, validated destinations.** One
+    optional contact per user: sms/whatsapp/signal/messenger/instagram/chosen email.
+    Another user's value/link requires approved request + caller party + both
+    parties active in that request cache in one SQL statement. Shared different
+    caches, admins and retained history after membership loss do not grant it.
+    Server validates by kind and builds only the specified sms/wa.me/signal.me/
+    m.me/instagram.com/mailto destinations; never trust a supplied URL or scheme.
+    Keep contacts off public/admin/outbox/push/log payloads. Owner preview, platform
+    icon and accessible Message button; nudge when missing. Optional approval
+    message starts empty, never prefilled. No chat, email relay or SMS auth/service.
+17. **Owner setup is not authorization or release approval.** Turnstile email-send/
+    cache-create protection needs Worker siteverify; Google linking requires
+    verified email through Better Auth; Apple remains deferred. Future `/admin`
+    and all backing APIs require Access + Worker-verified JWT + current allowlisted
+    app user ID, including alternate-host calls; fail closed, no privacy bypass.
+    Suspension must be enforced server-side. Tips stay hidden until configured:
+    hosted link only, no webhooks/app records/unlocks. Provisioning, secrets, Bot
+    Fight Mode and provider setup remain separately owner-approved. Final parity/
+    cleanup → independent security review → explicit revision/environment release
+    approval gates must run again when a deferred setup feature later ships.
 
 ### Architecture changes from PR #29
 
@@ -152,6 +192,11 @@ weaken them while Fly/Supabase is live.
   1.7.7 was published 2026-09-30, checked 2026-10-08. Keep React/TypeScript/Vite,
   React Router, TanStack Query and Tailwind. No Resend SDK. Better Auth needs
   nodejs_compat for AsyncLocalStorage. Deprecated vitest-pool-workers is not used.
+- Approved cozy theme follows round-6 mocks: boxes on Home, houses in a cache;
+  sunny/evening via prefers-color-scheme, reduced-motion respected, decorative
+  strip aria-hidden with accessible lists/controls intact. Open-box-with-cat mark
+  keeps the Home accessible name; SVG/32px favicon, 180px apple touch and 192/512
+  maskable manifest assets. No per-plan theme UI.
 - `ponytail:` comments name intentional ceilings and upgrade paths. Comments
   explain constraints the code cannot show, not what the next line does.
 - Keep code readable cold: straight-line functions, guard clauses, no abstractions,
