@@ -319,7 +319,7 @@ it('HTTP remove/leave/detach/global-delete paths enforce auth, Origin and curren
   const cache = await createCache(env.DB,owner.id,'Tools',false), secret = cache.invite_token.split('.')[1]
   await joinCache(env.DB,cache.id,member.id,secret)
   const item = await createItem(env.DB,member.id,itemChanges({title:'Mixer',is_consumable:false},true),cache.id)
-  const poisoned = {...env,CACHES:{get:()=>{throw new Error('No legacy DO access')}}} as unknown as Env
+  const poisoned = env
   const leave = `/api/caches/${cache.id}/leave`, remove = `/api/caches/${cache.id}/members/${member.id}`
   expect((await worker.fetch(appRequest(leave,{method:'POST',body:{}}),poisoned)).status).toBe(401)
   for(const origin of [null,'null','https://foreign.test'])expect((await worker.fetch(appRequest(leave,{method:'POST',cookie:member.cookie,origin,body:{}}),poisoned)).status).toBe(403)

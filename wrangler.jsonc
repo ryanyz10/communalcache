@@ -23,10 +23,10 @@
     "migrations_dir": "migrations/d1"
   }],
   "r2_buckets": [{"binding": "BUCKET", "bucket_name": "communalcache-photos"}],
-  "durable_objects": {
-    "bindings": [{"name": "CACHES", "class_name": "Cache"}]
-  },
-  "migrations": [{"tag": "v1", "new_sqlite_classes": ["Cache"]}],
+  "migrations": [
+    {"tag": "v1", "new_sqlite_classes": ["Cache"]},
+    {"tag": "v2-retire-cache", "deleted_classes": ["Cache"]}
+  ],
   "queues": {
     "producers": [{"binding": "NOTIFICATIONS", "queue": "communalcache-notifications"}],
     "consumers": [{"queue": "communalcache-notifications", "max_batch_size": 3, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
@@ -49,9 +49,6 @@
         "migrations_dir": "migrations/d1"
       }],
       "r2_buckets": [{"binding": "BUCKET", "bucket_name": "communalcache-photos-staging"}],
-      "durable_objects": {
-        "bindings": [{"name": "CACHES", "class_name": "Cache"}]
-      },
       "queues": {
         "producers": [{"binding": "NOTIFICATIONS", "queue": "communalcache-notifications-staging"}],
         "consumers": [{"queue": "communalcache-notifications-staging", "max_batch_size": 3, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
@@ -76,9 +73,6 @@
         "migrations_dir": "migrations/d1"
       }],
       "r2_buckets": [{"binding": "BUCKET", "bucket_name": "communalcache-photos"}],
-      "durable_objects": {
-        "bindings": [{"name": "CACHES", "class_name": "Cache"}]
-      },
       "queues": {
         "producers": [{"binding": "NOTIFICATIONS", "queue": "communalcache-notifications"}],
         "consumers": [{"queue": "communalcache-notifications", "max_batch_size": 3, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]

@@ -5,27 +5,30 @@ Queue/Cron**, with Cron also draining durable R2 cleanup intents. No Cache/Owner
 Durable Objects or discovery/projection sync in the target. PR #29's Owner model
 is superseded; its shared-item/Lent out/private-photo product decisions remain.
 
-**This docs-only PR changes no code, bindings, config, packages or migrations and
-runs no Cloudflare commands.** Current Cache DO deployment configuration remains
-until D1 PR 7. Deleting the class and resetting staging each require explicit
-approval; neither is implied by the architecture decision. Legacy Fly/Supabase
-stays live until separately approved cutover/decommissioning.
+**Draft PR 7 warning: merging deploys a `deleted_classes` migration that
+permanently deletes all Cache DO data on staging (and later production). Explicit
+owner approval is required. Do not merge or mark ready without it.** The staging
+test-data reset is **not included** and needs separate approval. This work prepares
+code/config/migrations and runs local tests/dry-runs only; no remote migration,
+class deletion, resource operation or reset has run. Legacy Fly/Supabase stays live
+until separately approved cutover/decommissioning.
 
-## Target versus current deployment
+## Prepared code versus deployed state
 
 | Target | Current configuration / transition |
 | --- | --- |
-| DB: canonical caches, memberships, items, attachments, stock, requests, auth, outbox/push | Current DB holds auth/discovery/outbox; Cache DOs still hold cache-local app rows. Port by D1 PRs 2–6, not dual-writing stock. |
-| Private BUCKET: ownerId/itemId/uploadUUID photos | Current cache-key photos need approved mapping/reset; never become public. |
+| DB: canonical caches, memberships, items, attachments, stock, requests, auth, outbox/push | All app routes use guarded D1 after PRs 2–6. Draft migration 0011 drops only unused my_caches/cache_sync_cursor; no canonical-data reset. |
+| Private BUCKET: ownerId/itemId/uploadUUID photos | Owner-scoped photo/cleanup code is implemented. Historical cache-key bytes are not deleted by this PR and need approved disposition separately. |
 | NOTIFICATIONS Queue and bounded outbox Cron | Keep claims/retry/terminal policy; producers insert outbox atomically with state, not DO pending_sync. |
-| Durable r2_cleanup + bounded Cron | Replace DO R2 intents; external R2 is not in the D1 transaction. |
-| No Cache/Owner classes, alarms or registry sweeps | Retire Cache in PR 7 via approved deleted_classes migration; never add the superseded Owner namespace. |
+| Durable r2_cleanup + bounded Cron | Implemented independent guarded cleanup; external R2 is not in the D1 transaction. |
+| No Cache/Owner classes, alarms or registry sweeps | Draft PR 7 removes code/bindings and appends v2-retire-cache; no class deletion has been deployed. Never add the superseded Owner namespace. |
 
-Current wrangler.jsonc commits the approved production D1 communalcache ID
-b4257b89-22d6-40f1-b250-ccd1985bf1d1, CACHES/Cache SQLite binding and ASSETS web/dist.
-Compatibility date 2026-09-30 and nodejs_compat are unchanged by this spec. Current
-five-minute Cron still runs registry/outbox work; target removes registry work and
-adds bounded cleanup. No trigger/resource success is inferred from a config entry.
+Prepared wrangler.jsonc retains the approved production D1 communalcache ID
+b4257b89-22d6-40f1-b250-ccd1985bf1d1 and ASSETS web/dist. It removes all active object
+bindings while retaining v1 history and appending `v2-retire-cache` for `Cache`.
+Compatibility date 2026-09-30 and nodejs_compat are unchanged. The five-minute Cron
+runs only outbox rescue and R2 cleanup, independently; no registry work remains.
+Config/local checks are not evidence of applied migration or live resource state.
 
 Better Auth runs in the Worker with D1 sessions and link-only primary mail plus
 explicit code-only fallback; auth awaits Resend independently of Queue-delivered
@@ -36,7 +39,7 @@ Remote migrations/deploy/provider/resource/secret operations require approval.
 
 No account is needed for local invariant tests. Gitignored .dev.vars, local test
 bindings and disabled legacy .env fallback; never wrangler dev --remote for tests.
-Example implementation gates (**not Cloudflare commands run by this docs PR**):
+Local gates (dry-run validates bundles only, never authorizes deletion/deploy):
 
 ```bash
 npx --no-install tsc --noEmit
@@ -51,13 +54,14 @@ npm run dev
 
 Empty/upgrade D1 migrations, real concurrent SQL races and injected batch rollback
 are feature gates. Target harness uses @cloudflare/vitest-plugin,
-readD1Migrations/applyD1Migrations; no target DO helpers. Existing DO suite proves
-current code only until ported. Smoke health/config, SPA deep links and JSON API
+readD1Migrations/applyD1Migrations; no object binding/helpers. The suite proves
+canonical D1 behavior and populated retirement upgrade preservation, not remote
+class deletion. Smoke health/config, SPA deep links and JSON API
 errors. A dry-run validates bundle/bindings, not live deploy/data/provider success.
 
 ## Pipeline
 
-Existing pipeline configuration is unchanged by this spec. Personal Cloudflare
+Release pipeline behavior is unchanged by this retirement draft. Personal Cloudflare
 account be6051e1d082f9e206faca4c784d43e5, public SHA-pinned actions, committed npm
 lockfiles/Wrangler; no organization workflows/registry/secrets. Review privileged
 workflow edits separately. Finish approved setup before enabling releases.
@@ -73,8 +77,9 @@ communalcache-staging (480fe3bd-a463-456d-8dfb-bc80235a5486).
 Production: https://communalcache.com, D1
 communalcache (b4257b89-22d6-40f1-b250-ccd1985bf1d1); production workers.dev/version
 preview URLs disabled. Each environment has distinct Worker/bindings/secrets.
-Current self-bound Cache namespaces remain until approved retirement; target needs
-only D1/R2/Queue/assets and Cron. R2/Queue config is not proof of provisioning.
+Previously deployed self-bound Cache namespaces remain until an approved deploy
+applies the inherited class deletion. Prepared code needs only D1/R2/Queue/assets
+and Cron. R2/Queue config is not proof of provisioning.
 
 Deploy jobs serialize per environment, cancel-in-progress false; a running
 migration/deploy is not interrupted by a newer push. GitHub keeps only one pending
@@ -94,7 +99,9 @@ run. Staging resolves current master **when its job starts**, before build:
 Migration failure prevents deploy; deploy failure does not undo applied migrations.
 Keep additive/backward-compatible schemas while old Workers may run. No artifact
 from untrusted PR CI is deployed. A docs merge still uses the existing approved
-pipeline policy; opening the PR performs no release.
+pipeline policy; opening the draft PR performs no release. **Merging this draft
+would make the successful master-push staging job apply the destructive class
+deletion. Draft status is a review warning, not a technical deployment gate.**
 
 ### One-time setup and approval boundaries
 
@@ -144,32 +151,53 @@ export/restore requires separate approval and known outbox/cleanup replay effect
 
 ### Environment inheritance and DO retirement
 
-Current config facts with pinned Wrangler 4.145.0: vars, d1_databases and
-current durable_objects.bindings are not inherited and are repeated per named
-environment. assets and DO migrations **are inherited**; append shared migration
-history rather than duplicating/replacing v1. Self-bindings without script_name
-attach to each distinct Worker. Cron triggers inherit in this version but are
-explicit per environment. CI checks default/staging/production independently.
-Auth URLs must equal each environment's exact origin; secrets stay independent.
+With pinned Wrangler 4.145.0, vars and d1_databases are non-inherited and stay
+explicit per named environment. Assets and class migrations **are inherited**.
+Draft PR 7 removes the active binding blocks from default/staging/production and
+preserves/appends shared history:
 
-Target PR 7 removes active DO bindings/class usage and appends **deleted_classes**
-for Cache in that class history. **This destroys Durable Object data. Get explicit
-human approval for each intended environment before applying/deploying it.** See
-[Cloudflare class migration reference](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/index.md).
-Do not rewrite applied history, rename into a new empty namespace or assume code
-rollback restores DOs. Never add Owner DOs from the superseded spec.
+```json
+"migrations": [
+  { "tag": "v1", "new_sqlite_classes": ["Cache"] },
+  { "tag": "v2-retire-cache", "deleted_classes": ["Cache"] }
+]
+```
+
+The class is actually named `Cache`; it is no longer exported in prepared code.
+No superseded Owner namespace is introduced. Cron stays explicit per environment;
+CI dry-runs all three. Auth origins/secrets remain environment-specific.
+
+**Deploying v2-retire-cache permanently deletes the Cache namespace's data in the
+selected environment. Explicit owner approval is required before merge/deploy.**
+The default/production config shares the production resource identity; a default
+remote deploy is destructive too. No remote command or class deletion has run.
+Keep applied history; code rollback cannot restore deleted data.
+[Cloudflare class lifecycle reference](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)
+still supports the legacy migrations flow used by this pinned configuration;
+this PR does not switch to the newer exports flow.
 
 Staging test-data reset needs its own explicit approval: inventory target D1/DO/
 R2/outbox/push state, record backup/recovery procedure and exact scope, reconcile or
 reset approved test data and prove the direct-D1 app afterward. No new-stack
 production data exists yet; reset is not authority to touch legacy production.
-No such command/config/migration/data operation runs in this docs PR.
+This draft includes the reviewed deletion config and D1 table-drop migration,
+but no reset or remote operation. Before approval, inventory existing Cache
+namespaces, any undelivered legacy intents, D1/outbox/push and private R2 bytes;
+record backup/recovery and explicit keep/export/discard decisions. Do not discard
+legacy work just because the new D1 producer is active.
+
+Migration 0011 preserves canonical state and drops only obsolete discovery/cursor
+tables. The pipeline migrates D1 before deploying the Worker. A previous Worker
+may briefly report a scheduled registry error during that gap; its independent
+outbox and cleanup recovery still run. Reverting to code that requires the dropped
+tables is not a compatible rollback. Prefer fix-forward; restoring any schema/data
+requires an approved recovery plan.
 
 Existing action pins (resolved 2026-10-14) remain: checkout v7.0.1
 3d3c42e5aac5ba805825da76410c181273ba90b1 (2026-07-20), setup-node v7.0.0
 820762786026740c76f36085b0efc47a31fe5020 (2026-07-14); newer v7.1.0 was <7 days old.
 Actions Node 24-capable hosted runner; app/tooling Node 22.23.1 locally validated.
-No version/tooling/config change in this spec.
+No dependency or workflow release-policy change is included in this draft.
 
 ## Provider and secret setup (approval required)
 
@@ -319,8 +347,8 @@ Never dump outbox payloads/auth rows/push credentials, emails, invite secrets,
 tokens or cookies. Current-minute write counters are not historical usage meters;
 track rejected 429s separately. Existing notification_delivery_failed logs only ID,
 claim attempts and terminal outcome, not provider/recipient payload. Target cleanup
-telemetry must be similarly secret-free. Current cache_sync_failed logging is
-historical and retires with DO sync, not a target alert/recovery dependency.
+telemetry uses only cleanup ID and backlog age. Historical cache_sync_failed
+logging and registry recovery are removed; they are not target alert dependencies.
 
 Initial alerts (tune to measured workload): CPU/resource ceiling pressure, rising
 D1 query latency/rows/storage, new terminal outbox failures, Queue age/retries,
@@ -351,6 +379,6 @@ photos, outbox/cleanup and notification recovery at a controlled write boundary.
 
 Keep Fly/Supabase live until separately approved cutover, then obtain separate
 decommissioning approval. No automatic dual write, teardown, provider change,
-legacy migration or staging reset in this spec PR. Code rollback does not undo
+legacy migration or staging reset in this retirement draft. Code rollback does not undo
 D1 migration or restore deleted DO data; use compatible fix-forward/revert or an
 explicitly approved recovery plan.
