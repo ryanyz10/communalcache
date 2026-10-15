@@ -58,7 +58,7 @@ first merge enables automatic staging deployment.
 | Workflow | Trigger and gate | Target |
 | --- | --- | --- |
 | `ci.yml` / CI | Every pull request, regardless of base; push to `master`/`production`; reusable `workflow_call` | Local tests, build and default/staging/production dry-runs only; no provider secrets |
-| `main.yml` / Staging | Successful CI completion for a **push** to this repository's `master`, never a PR CI run | Check out that CI run's `head_sha`, build, migrate staging D1, deploy staging |
+| `main.yml` / Staging | Successful CI completion for a **push** to this repository's `master`, never a PR CI run | Resolve current master; deploy the triggering SHA if current, otherwise the current tip only after its latest push CI passed; check out that resolved SHA, build, migrate staging D1, deploy staging |
 | `production.yml` / Production | Push to `production`; deployment needs its own reusable CI job to pass | Check out the promoted SHA, build, migrate production D1, deploy production |
 
 Staging is `https://communalcache-staging.ryanyz10-be6.workers.dev`, using D1
@@ -71,13 +71,28 @@ itself added no Queue/R2; the later Photos/Notifications features declare those
 bindings, whose remote resources still require approval before release.
 
 Both deploy jobs serialize per environment with `cancel-in-progress: false`; a
-running migration/deploy is not interrupted by a newer push. GitHub can coalesce
-pending runs, so this does not promise a deployment of every intermediate commit.
-Immediately before migration/deploy, a read-only GitHub head check skips a
-superseded master/promotion SHA; CI completion/reviewer wait order cannot otherwise
-be assumed to equal commit order. A failed migration prevents the deploy command.
-If deploy fails after migrations succeed, the schema remains migrated: changes
-must stay backward compatible. No artifact from an untrusted PR run is consumed.
+running migration/deploy is not interrupted by a newer push. GitHub keeps only one
+pending run per concurrency group: an older commit's later-finishing CI can replace
+the newest commit's pending Staging run. Staging therefore resolves current master
+**when its job starts**, before checkout/install/build:
+
+- If the current tip is the triggering SHA, that successful push CI is its gate.
+- Otherwise, query the latest `CI` run for the current SHA, repository, `master`
+  branch and `push` event. Deploy that current tip only when its CI is completed
+  with `success`, even if an older commit's CI triggered this Staging run.
+- If CI is queued/running/waiting, skip; its eventual successful completion triggers
+  another Staging run. If it failed/cancelled or no matching CI exists, skip with
+  that state in the log. GitHub API errors fail the resolver rather than deploying.
+
+Only an eligible resolved SHA is checked out and built; skipped runs do not install,
+build, migrate or deploy. Staging uses the automatic token's `contents: read` and
+`actions: read` permissions for these read-only checks, with no credentials persisted
+in checkout. Master can advance while a job builds; later eligible jobs resolve the
+new tip again. This converges on the latest CI-passed tip, not every intermediate
+commit. Production retains its immediate pre-deploy superseded-promotion check.
+A failed migration prevents deployment. If deploy fails after migrations succeed,
+the schema remains migrated: changes must stay backward compatible. No artifact
+from an untrusted PR run is consumed.
 
 ### One-time setup before the first merge
 
@@ -93,8 +108,9 @@ These are operator setup instructions, **not commands executed by this PR**.
    migration capabilities; production also needs authorization for the
    `communalcache.com` custom domain/zone. Do not use an organization token or a
    Global API Key. The account ID is plain workflow configuration, not a secret.
-   `GH_TOKEN` is automatically the job's read-only GitHub token for the stale-head
-   check; do not provision another GitHub secret or grant write permissions.
+   `GH_TOKEN` is automatically the job's read-only GitHub token for branch/CI target
+   resolution (Staging) or the stale-head check (Production); do not provision
+   another GitHub secret or grant write permissions.
 3. Bootstrap the two named Workers' required runtime secrets after approval.
    Staging needs its **own independently generated** `BETTER_AUTH_SECRET`; never
    reuse production's. Store values interactively, not on argv, in git or in CI
