@@ -90,10 +90,17 @@ choose a name. The invite stays in this tab's sessionStorage; reload it or open
 without losing the invite. Cancel clears the pending invite. The fixture does not grant real membership; actual body-only join/approval is proved
 against local DO storage in the runtime suite. **Never deploy or expose this fixture server.**
 
-For the Caches UI walkthrough, cancel the saved invite to reach the dashboard,
-create a cache and immediately open its page. Copy an invite, open the members
-sheet, change owner settings and rotate through the confirmation dialog. The
-fixture API is mocked; the runtime suite separately proves real D1/DO authority.
+For the Caches UI walkthrough, cancel the saved invite to reach **Your caches**.
+**+ New cache** opens a named bottom sheet on mobile (centered dialog on desktop);
+create and immediately open the cache. **Invite** uses the native share sheet when
+available, otherwise copies the link. The gear opens `/caches/:id/settings` for
+members/invites and owner join decisions, reset-link confirmation and cache settings.
+The pinned header links to `/requests` and `/account`; Account holds your own name/
+email, notification toggle and sign out. Home previews up to three first-page
+requests (pending incoming first), and its header badge is first-page pending
+incoming only. Discovery currently supplies names, not item/member counts; no
+invented counts or Your items section are displayed. The fixture API is mocked;
+the runtime suite separately proves real D1/DO authority.
 For Items, use **Add item** from a cache: create a reusable item without stock or
 check Consumable and set stock (including zero). Open the item, edit its title,
 description or stock, and return to the cache list. Type is fixed after creation;
@@ -114,7 +121,7 @@ The real aggregate loads 25 discovered caches per page with **Load more caches**
 and explicitly warns if some caches could not be loaded. There is no cancellation
 or handoff/return tracking.
 
-The cache owner's members sheet has **Remove** confirmation dialogs for non-owner
+The cache owner's settings page has **Remove** confirmation dialogs for non-owner
 members. Removal immediately blocks cache data (404), keeps the invite route's
 removed-member 403, deletes the member's items and rejects their pending requests
 on surviving items. Item deletion notifies pending requesters. D1/R2/notification
@@ -126,7 +133,7 @@ Use `UI_FIXTURE_PORT=4174 npm run ui:fixture` if 4173 is occupied, or additional
 For actual local bindings, `npm run dev -- --port 8788 --inspector-port 9238`
 works around an occupied 8787; change both gitignored URL values to that origin.
 Create/settings return authoritative DO state immediately. Home summaries contain
-only discovery id/name and may lag; refresh after a moment. Invites/ownership never
+only discovery id/name and may lag; revisit the page after a moment. Invites/ownership never
 come from D1. Sync is capped at 25 intent rows per drain; Cron sweeps 25 known caches
 per tick. Failed first alarm scheduling retains intents, but registry cannot find
 a brand-new cache until its registry intent succeeds; its returned cache ID and a
@@ -187,9 +194,9 @@ smoke, use a fresh isolated `--persist-to` directory with no queued work.
 
 ### Web push and installation
 
-The dashboard has **Enable notifications** and **Disable notifications** controls.
-Permission is requested only after Enable is pressed. On iPhone/iPad, use Share →
-Add to Home Screen, open the installed app, then enable. At most three browsers
+Account has a **Push notifications** toggle under **Notifications on this device**.
+Permission is requested only when explicitly turning it on. On iPhone/iPad, use
+Share → Add to Home Screen, open the installed app, then turn notifications on. At most three browsers
 can register for one account. Logout deletes the caller's server registration,
 unsubscribes locally and closes displayed notifications before signing out.
 An unmatched previous-account browser registration is cleared without auto-enabling
@@ -226,8 +233,8 @@ account-plan assumption or per-isolate memory limit is used. D1 failure fails
 closed; one D1 write per admitted attempt adds cost to measure before release.
 
 Lists show loading/empty/error states and cached-list failures explicitly warn of
-staleness; partial/paginated request queues never claim to be complete. Refresh,
-notification-config retry and photo retry are explicit actions, not silent
+staleness; partial/paginated request queues never claim to be complete. Error
+retries, notification-config retry and photo retry are explicit actions, not silent
 mutation retries. Native modal sheets are centered and scroll within small screens,
 trap keyboard focus, start on Close/Cancel and return focus on dismissal. Confirmations
 cannot be dismissed while their mutation is pending, so failures stay visible.
