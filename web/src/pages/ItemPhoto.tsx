@@ -7,10 +7,10 @@ import { invalidateRequestViews } from '../lib/requests'
 
 export function ItemPhoto({ item, thumbnail = false }: { item: Item; thumbnail?: boolean }) {
   const [failed, setFailed] = useState(false)
-  if (thumbnail && (!item.photo_version || failed)) return <span role={failed ? 'img' : undefined} aria-label={failed ? 'Photo unavailable' : undefined} aria-hidden={!failed || undefined} className="size-11 shrink-0 rounded-lg bg-linear-to-br from-slate-300 to-slate-200 lg:block lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none" />
-  if (!item.photo_version) return <span aria-hidden="true" className="hidden lg:block lg:aspect-[4/3] lg:w-full lg:rounded-[14px] lg:bg-linear-to-br lg:from-slate-300 lg:to-slate-200" />
+  if (thumbnail && (!item.photo_version || failed)) return <span role={failed ? 'img' : undefined} aria-label={failed ? 'Photo unavailable' : undefined} aria-hidden={!failed || undefined} className="cc-item-photo size-11 shrink-0 rounded-lg bg-linear-to-br from-slate-300 to-slate-200 lg:block lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none" />
+  if (!item.photo_version) return <span aria-hidden="true" className="cc-item-photo hidden lg:block lg:aspect-[4/3] lg:w-full lg:rounded-[14px] lg:bg-linear-to-br lg:from-slate-300 lg:to-slate-200" />
   if (failed) return <div className="mt-3 text-sm text-slate-600"><p role="status">Photo unavailable. {thumbnail ? 'Open the item or reload to try again.' : ''}</p>{!thumbnail && <button type="button" className="mt-2 underline" onClick={() => setFailed(false)}>Try photo again</button>}</div>
-  return <img src={`${item.cache_id ? `/api/caches/${item.cache_id}/items` : '/api/me/items'}/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}`} alt={`Photo of ${item.title}`} loading={thumbnail ? 'lazy' : 'eager'} onError={() => setFailed(true)} className={thumbnail ? 'size-11 shrink-0 rounded-lg object-cover lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none' : 'mt-3 max-h-80 w-full rounded-lg object-contain lg:mt-0 lg:aspect-[4/3] lg:max-h-none lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white'} />
+  return <img src={`${item.cache_id ? `/api/caches/${item.cache_id}/items` : '/api/me/items'}/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}`} alt={`Photo of ${item.title}`} loading={thumbnail ? 'lazy' : 'eager'} onError={() => setFailed(true)} className={thumbnail ? 'cc-item-photo size-11 shrink-0 rounded-lg object-cover lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none' : 'cc-item-photo mt-3 max-h-80 w-full rounded-lg object-contain lg:mt-0 lg:aspect-[4/3] lg:max-h-none lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white'} />
 }
 
 export function PhotoUpload({ item }: { item: Item }) {

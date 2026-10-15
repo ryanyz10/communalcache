@@ -14,8 +14,8 @@ export function AuthScreen({ children }: { children: ReactNode }) {
       </ul></div>
       <PixelHorizon tall kind="boxes" entries={['Share','Borrow','Lend'].map(name=>({id:name,name}))} />
     </section>
-    <div className="contents lg:flex lg:min-h-dvh lg:items-center lg:justify-center lg:bg-white lg:px-12 lg:py-16">
-      <div className="contents lg:flex lg:w-full lg:max-w-[440px] lg:flex-col">{children}</div>
+    <div className="cc-auth-pane contents lg:flex lg:min-h-dvh lg:items-center lg:justify-center lg:bg-white lg:px-12 lg:py-16">
+      <div className="cc-auth-form contents lg:flex lg:w-full lg:flex-col">{children}</div>
     </div>
   </main>
 }

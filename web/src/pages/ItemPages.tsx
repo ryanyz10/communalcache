@@ -23,7 +23,7 @@ export function ItemList({ cacheId, onAdd }: { cacheId: string; onAdd?: () => vo
     </div>
     {query.isPending && <p role="status" className="mt-4">Loading items…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try items again</button></div>}
-    {query.isSuccess && (query.data.length ? <ul className="cc-list mt-3 lg:mt-0 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{query.data.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0 lg:border-0">
+    {query.isSuccess && (query.data.length ? <ul className="cc-list cc-card-grid mt-3 lg:mt-0 lg:grid lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{query.data.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0 lg:border-0">
       <Link to={`/caches/${cacheId}/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:block lg:h-full lg:overflow-hidden lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-0">
         <ItemPhoto key={item.photo_version} item={item} thumbnail />
         <div className="min-w-0 flex-1 lg:px-3.5 lg:py-3"><h3 className="break-words font-semibold">{item.title}</h3>
@@ -90,16 +90,16 @@ export function ItemPage() {
   const back = cacheId ? `/caches/${cacheId}` : '/items'
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
+  return <main className="cc-page">
     <WideBreadcrumbs><Link to="/">Home</Link><span aria-hidden="true">›</span><Link to={back}>{cacheId ? 'Cache' : 'Your items'}</Link>{query.data && <><span aria-hidden="true">›</span><span>{query.data.title}</span></>}</WideBreadcrumbs>
     <Link to={back} className="text-sm underline lg:hidden">‹ {cacheId ? 'Back to cache' : 'Your items'}</Link>
     {query.isPending && <p role="status" className="mt-4">Loading item…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try again</button></div>}
-    {query.isSuccess && <div className="contents lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-10">
+    {query.isSuccess && <div className="cc-item-layout contents lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-10">
       <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight lg:col-start-2 lg:row-start-1 lg:mt-0 lg:text-[28px] lg:font-bold">{query.data.title}</h1>
       <p className="mt-2 flex items-center gap-2 text-slate-600 lg:col-start-2 lg:row-start-2"><Avatar userId={query.data.owner_id} name={query.data.owner_name ?? 'Member'} photoVersion={query.data.owner_photo_version} size={28} /><span>Shared by {query.data.owner_name ?? 'Member'}</span></p>
-      <div className="contents lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:block"><ItemPhoto key={query.data.photo_version} item={query.data} /></div>
-      <div className="contents lg:col-start-2 lg:row-start-3 lg:block">
+      <div className="cc-item-media contents lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:block"><ItemPhoto key={query.data.photo_version} item={query.data} /></div>
+      <div className="cc-item-details contents lg:col-start-2 lg:row-start-3 lg:block">
       <p className="mt-4">{query.data.is_consumable ? `${query.data.quantity} in stock` : 'Reusable · no stock quantity'}</p>
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
       {me.id === query.data.owner_id && <>
@@ -128,7 +128,7 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   if (editing && item.isSuccess && item.data.owner_id !== me.id) return <Navigate to={back} replace />
   const error = (cacheId ? cache.error : null) ?? (editing ? item.error : null)
   const pending = (!!cacheId && cache.isPending) || (editing && item.isPending)
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page">
     <Link to={back} className="text-sm underline">‹ {cacheId ? 'Back to cache' : 'Your items'}</Link>
     <h1 className="mt-4 text-2xl font-semibold tracking-tight">{editing ? 'Edit item' : cacheId ? 'Add an item' : 'New item'}</h1>
     {pending && <p role="status" className="mt-4">Loading…</p>}

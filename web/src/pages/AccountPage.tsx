@@ -26,9 +26,9 @@ export function AccountPage() {
     setPending(true); setError('')
     try { await signOut() } catch (error) { setError(errorMessage(error)) } finally { setPending(false) }
   }
-  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
+  return <main className="cc-page">
     <h1 className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Account</h1>
-    <div className="contents lg:mt-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
+    <div className="cc-account-layout contents lg:mt-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
     <section className="mt-6 lg:mt-0 lg:min-w-0" aria-labelledby="profile-heading">
       <h2 id="profile-heading" className="cc-section-title lg:mb-2 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Profile</h2>
       <p className="hidden lg:mb-3 lg:block lg:text-sm lg:text-slate-600">What neighbors see.</p>

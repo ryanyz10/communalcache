@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { CacheLink } from './CacheLink'
 import { bindWalker } from '../lib/motion'
 import { artHash, BOX, FURS, HOUSE, LOAF, MARK_COLORS, OPEN_BOX, ROOFS, TREE, WALK, WALLS } from '../lib/pixelArt'
@@ -48,19 +48,51 @@ function WalkingCat({ seed }: { seed: number }) {
 type HorizonProps = { kind: 'boxes'|'houses'; entries: {id:string;name:string;to?:string}[]; tall?: boolean }
 export function PixelHorizon({ kind, entries, tall = false }: HorizonProps) {
   return <div className="cc-horizon" aria-hidden="true">
-    <HorizonScene kind={kind} entries={entries} />
-    <HorizonScene kind={kind} entries={entries} tall={tall} desktop />
+    <div className="cc-phone-scene"><HorizonScene kind={kind} entries={entries} /></div>
+    <FluidHorizon kind={kind} entries={entries} tall={tall} />
     <WalkingCat seed={entries.length} />
   </div>
 }
 
-function HorizonScene({ kind, entries, tall = false, desktop = false }: HorizonProps & { desktop?: boolean }) {
-  const width = Math.max(440, entries.length * 40)
-  return <svg className={desktop ? 'cc-horizon-desktop' : 'cc-horizon-phone'} width="100%" height="96" viewBox={desktop ? `0 ${tall ? -100 : 0} ${width} ${tall ? 196 : 96}` : undefined} style={{minWidth:desktop ? tall ? 0 : width*2 : Math.max(280,entries.length*40)}} focusable="false" data-horizon={kind}>
-      {desktop && tall && <g><rect className="cc-sky-sun" x={width-64} y="-55" width="18" height="18" fill="var(--cc-sun)" /><path className="cc-sky-clouds" d="M28-24h24v6H28zM40-30h10v6H40zM160-50h28v6h-28zM168-56h12v6h-12z" fill="var(--cc-cloud)" /></g>}
-      {Array.from({length:24},(_,index)=><svg key={index} x={`${index*100/24}%`} y={68-(index%3)*4} width="5%" height="28" overflow="visible"><rect width="100%" height="28" fill={index%2?'var(--cc-hill)':'var(--cc-hill2)'} /></svg>)}
+function FluidHorizon({ kind, entries, tall }: HorizonProps) {
+  const scene = useRef<HTMLDivElement>(null), pattern = `terrain-${useId()}`
+  const [px, setPx] = useState(3)
+  useLayoutEffect(() => {
+    if (!scene.current) return
+    function measure() { if (scene.current) setPx(parseInt(getComputedStyle(scene.current).getPropertyValue('--cc-pixel')) || 3) }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(scene.current)
+    return () => observer.disconnect()
+  }, [])
+  return <div ref={scene} className={`cc-horizon-fluid ${tall ? 'cc-horizon-tall' : ''}`} data-horizon={kind}>
+    {tall && <svg className="cc-horizon-sky" width="100%" height="100%" focusable="false" shapeRendering="crispEdges">
+      <rect className="cc-sky-sun" x="78%" y="22%" width={8*px} height={8*px} fill="var(--cc-sun)" />
+      <g className="cc-sky-clouds" fill="var(--cc-cloud)"><svg x="12%" y="38%" width={16*px} height={6*px}><rect y={2*px} width={16*px} height={4*px} /><rect x={4*px} width={8*px} height={2*px} /></svg><svg x="45%" y="17%" width={18*px} height={6*px}><rect y={2*px} width={18*px} height={4*px} /><rect x={5*px} width={8*px} height={2*px} /></svg></g>
+    </svg>}
+    <svg className="cc-horizon-terrain" width="100%" height={20*px} focusable="false" shapeRendering="crispEdges">
+      <defs><pattern id={pattern} patternUnits="userSpaceOnUse" width={72*px} height={20*px}>
+        {Array.from({length:6},(_,index)=><rect key={index} x={index*12*px} y={(8+(index%3)*2)*px} width={12*px} height={(7-(index%3)*2)*px} fill={index%2?'var(--cc-hill)':'var(--cc-hill2)'} />)}
+        <g transform={`translate(${54*px} ${8*px})`}><Pixels rows={TREE} px={px} colors={{g:'var(--cc-hill2)',G:'var(--cc-grass-dark)',t:'#6b4a2f'}} /></g>
+      </pattern></defs>
+      <rect width="100%" height={15*px} fill={`url(#${pattern})`} />
+      <rect y={15*px} width="100%" height={5*px} fill="var(--cc-grass)" /><rect y={15*px} width="100%" height={px} fill="var(--cc-grass-dark)" />
+    </svg>
+    <div className="cc-horizon-objects">{entries.map(entry=>{
+      const hash=artHash(entry.name), fur=FURS[(hash>>>7)%FURS.length]
+      const art=kind==='boxes' ? <CacheDrawing name={entry.name} loaf={hash%2===0} coat={fur} /> : <><g transform="translate(0 6)"><Pixels rows={HOUSE} colors={{r:ROOFS[hash%ROOFS.length],R:'var(--cc-box-line)',w:WALLS[(hash>>>3)%WALLS.length],k:'var(--cc-glass)',D:ROOFS[(hash>>>5)%ROOFS.length]}} /></g>{hash%3===0 && <g transform="translate(28 20)"><LoafCat fur={fur} seed={hash} /></g>}</>
+      return <svg key={entry.id} className={kind==='boxes'?'cc-horizon-box':'cc-horizon-house'} viewBox={kind==='boxes'?'0 0 30 30':'0 0 44 30'} focusable="false" shapeRendering="crispEdges">
+        {entry.to ? <CacheLink to={entry.to} tabIndex={-1}><rect width={kind==='boxes'?30:44} height="30" fill="transparent" />{art}</CacheLink> : art}
+      </svg>
+    })}</div>
+  </div>
+}
+
+function HorizonScene({ kind, entries }: HorizonProps) {
+  return <svg className="cc-horizon-phone" width="100%" height="96" style={{minWidth:Math.max(280,entries.length*40)}} focusable="false" data-horizon={kind}>
+      <g className="cc-phone-terrain">{Array.from({length:24},(_,index)=><svg key={index} x={`${index*100/24}%`} y={68-(index%3)*4} width="5%" height="28" overflow="visible"><rect width="100%" height="28" fill={index%2?'var(--cc-hill)':'var(--cc-hill2)'} /></svg>)}
       {[0,1,2].map(index=><svg key={index} x={`${(index+0.5)*100/3}%`} y="69" width="16" height="16" overflow="visible"><Pixels rows={TREE} colors={{g:'var(--cc-hill2)',G:'var(--cc-grass-dark)',t:'#6b4a2f'}} /></svg>)}
-      <path d="M0 86h10000v10H0z" fill="var(--cc-grass)" /><path d="M0 86h10000v2H0z" fill="var(--cc-grass-dark)" />
+      <path d="M0 86h10000v10H0z" fill="var(--cc-grass)" /><path d="M0 86h10000v2H0z" fill="var(--cc-grass-dark)" /></g>
       {entries.map((entry,index)=>{
         const hash=artHash(entry.name), fur=FURS[(hash>>>7)%FURS.length]
         const art=kind==='boxes' ? <g transform="translate(-4 -10)"><CacheDrawing name={entry.name} loaf={hash%2===0} coat={fur} /></g> : <><Pixels rows={HOUSE} colors={{r:ROOFS[hash%ROOFS.length],R:'var(--cc-box-line)',w:WALLS[(hash>>>3)%WALLS.length],k:'var(--cc-glass)',D:ROOFS[(hash>>>5)%ROOFS.length]}} />{hash%3===0 && <g transform="translate(28 14)"><LoafCat fur={fur} seed={hash} /></g>}</>
