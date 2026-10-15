@@ -101,6 +101,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 4 | Contact after approval | Implemented; in review: 0014 app-owned user_contacts, validated server-built links, request-scoped approved-party/both-active SQL reveal, Account editor/preview and request buttons/nudges. Optional private approval message starts empty, max 500 code points, atomic with decision/outbox; never auth-email fallback. Inline platform glyphs need official brand assets before release. |
 | Readiness 5 | Cozy theme and app identity | Implemented; in review: round-6 sunny/evening CSS tokens via prefers-color-scheme, 2px Home boxes/cache-member houses, decorative reduced-motion cat, open-box/cat Home mark and reproducible SVG/32/180/192/512 icon set. Phone/wide fixture comparisons cover key screens in both palettes; native installed-PWA/device proof remains separate. No API, plan UI or dependency changes. |
 | Readiness 5a | Desktop cozy pass | Implemented; in review: 1200px desktop content, width-scaled pixel scenes/taller sign-in illustration, cache members sidebar, outgoing request column and two-column Account. Original phone geometry/classes retained below 1024px; native-viewport screenshot receipts in the PR body. No API/dependency changes. |
+| Readiness 5b | Cozy motion | Implemented; in review: shared 400ms stepped cache opening for horizon/cards and Enter, one two-frame integer-pixel walker with edge pauses/turns, idle blink/ear/sky motion, small card lift, 140ms route opacity fade and sheet entrance. Reduced motion skips all animation/navigation delay; hidden tabs suspend motion. No API/dependency changes; recordings stay in the PR body. |
 | Readiness 6 | Turnstile and bot setup | not started — needs owner setup; email sends + cache creation, Worker siteverify; Bot Fight Mode zone toggle separately approved |
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
@@ -517,6 +518,17 @@ are extended, not replaced: content/header align at 1200px, cache cards remain a
 columns, outgoing Requests occupy the right column and Account uses two columns.
 Native-viewport screenshot receipts and proof limits are recorded in the PR body. The walking cat stops under
 prefers-reduced-motion; information and controls never depend on it.
+
+Cozy motion shares one `CacheLink` path for cards and horizon shortcuts: a 400ms
+stepped lid/open-box/cat sequence precedes navigation. Modified/new-tab clicks keep
+native behavior; a timer, not animationend, guarantees navigation. Reduced motion
+or a hidden tab skips the delay, including preference/visibility changes mid-open.
+A single visible walker per horizon uses integer-pixel transforms, two leg frames,
+edge pauses and turns; RAF stops while hidden/reduced. Idle blink/ear/sky CSS and
+sheet entrances run only for no-preference, with hidden-tab CSS pause. Route fades
+only opacity for 140ms, and cancels on reduced motion. `motion.test.ts` proves
+policy/navigation/timer cleanup, walker travel/pause/turn/resume and static fallback;
+local pointer/horizon/Enter/reduced recordings are linked in the feature PR.
 
 `node scripts/make-icons.mjs` regenerates the committed icons using only Node
 built-ins and the app's shared OPEN_BOX sprite. Maskable artwork lies inside the
