@@ -57,7 +57,7 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
     {inviteHint && !inviteToken && <aside className="mt-6 rounded-xl border border-slate-200 bg-white p-4 text-sm" role="note">{landingCopy.inviteNote}</aside>}
     {inviteToken && <aside className="mt-6 flex items-center gap-3 rounded-[14px] border border-indigo-200 bg-white p-3.5" aria-label="Saved invite">
       <div aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800"><MailIcon /></div>
-      <div className="text-sm"><p className="font-semibold">Invite saved in this tab</p><p className="text-slate-600">Open the link in this same tab to keep it, or use a code here.</p></div>
+      <div className="text-sm"><p className="font-semibold">Invite saved on this browser</p><p className="text-slate-600">Your sign-in link will bring you back here. A saved invite lasts up to 1 hour.</p></div>
     </aside>}
     <form className={inviteToken && !sent ? 'mt-4 lg:mt-6' : 'mt-8 lg:mt-6'} onSubmit={onSubmit}>
       <div className="cc-auth-card lg:border-0 lg:p-0 lg:shadow-none">

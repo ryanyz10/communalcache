@@ -1,11 +1,23 @@
 import { apiFetch } from './api'
-import { stashJoinToken } from './pendingJoin'
+import { isInvitePath } from '../../../shared/invites'
+import { destinationAfterLogin, peekJoinToken, stashJoinToken } from './pendingJoin'
 
 export function sendSignInEmail(email: string, mode: 'link' | 'code', inviteToken?: string) {
   if (inviteToken) stashJoinToken(inviteToken)
-  // Invites remain in this tab's sessionStorage, never in callbacks or mail.
-  return mode === 'link' ? apiFetch('/api/auth/sign-in/magic-link', { body: { email: email.trim() } })
+  const token = peekJoinToken()
+  return mode === 'link' ? apiFetch('/api/auth/sign-in/magic-link', { body: { email: email.trim(), ...(token ? {callbackURL:`/join/${token}`} : {}) } })
     : apiFetch('/api/auth/email-otp/send-verification-otp', { body: { email: email.trim(), type: 'sign-in' } })
+}
+
+export function magicLinkDestination(callbackUrl: string, origin: string) {
+  let path = '/'
+  try {
+    const callback = new URL(callbackUrl,origin)
+    if (callback.origin === origin && !callback.username && !callback.password) path = callback.pathname + callback.search + callback.hash
+  } catch { /* A malformed callback cannot navigate outside the app. */ }
+  const destination = destinationAfterLogin(path)
+  if (destination !== '/') return destination
+  return isInvitePath(path) ? '/' : path
 }
 
 export function readMagicLink(hash: string) {

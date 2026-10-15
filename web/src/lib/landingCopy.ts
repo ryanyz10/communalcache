@@ -6,7 +6,7 @@ export const landingCopy = {
   signIn: 'Sign in',
   getStarted: 'Get started, it’s free',
   invite: 'I have an invite link',
-  inviteNote: 'Open the invite link someone sent you to join their cache. You can sign in here first, then open that link.',
+  inviteNote: 'Open the invite link someone sent you, or sign in and choose Join with an invite on Home to paste it.',
   howHeading: 'How it works',
   steps: [
     { title: 'Start or join a cache', body: 'A cache is a shared cupboard for your street, club or group of friends. Join one with an invite link.' },

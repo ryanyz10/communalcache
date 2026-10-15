@@ -5,6 +5,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { inviteDestination } from '../shared/invites.ts'
 
 const dist = fileURLToPath(new URL('../web/dist/', import.meta.url))
 const users = new Map()
@@ -61,9 +62,14 @@ const server = createServer(async (request, response) => {
     response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
     response.end(JSON.stringify(value))
   }
+  if (path === '/__fixture/magic-link-fresh-tab') {
+    response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
+    response.end(`<!doctype html><meta name="referrer" content="no-referrer"><title>Fresh-tab fixture</title><script>sessionStorage.removeItem('cc_pending_join');${url.searchParams.get('storage')==='none'?"localStorage.removeItem('cc_pending_join');":''}location.replace(${JSON.stringify(lastMagicLink||'/login')});</script>`)
+    return
+  }
   if (path === '/__fixture/magic-link') {
     response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
-    response.end(`<!doctype html><html lang="en"><meta name="referrer" content="no-referrer"><title>Mock sign-in email</title><main><h1>Mock sign-in email</h1>${lastMagicLink ? `<a href="${lastMagicLink}">Open latest fixture sign-in link</a>` : '<p>Request a link from the login page first.</p>'}</main></html>`)
+    response.end(`<!doctype html><html lang="en"><meta name="referrer" content="no-referrer"><title>Mock sign-in email</title><main><h1>Mock sign-in email</h1>${lastMagicLink ? `<p><a href="${lastMagicLink}">Open latest fixture sign-in link</a></p><p><a href="/__fixture/magic-link-fresh-tab">Simulate a fresh tab (no session invite)</a></p><p><a href="/__fixture/magic-link-fresh-tab?storage=none">Open with both invite stores empty</a></p>` : '<p>Request a link from the login page first.</p>'}</main></html>`)
     return
   }
   if (path.startsWith('/api/')) {
@@ -89,8 +95,9 @@ const server = createServer(async (request, response) => {
       if (body.email === 'failure@example.test') { json({error:'email_unavailable'},502); return }
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
       const token = [...randomBytes(32)].map(byte => alphabet[byte % alphabet.length]).join('')
-      magicLinks.set(token,{email:body.email,expiresAt:Date.now()+300000})
-      lastMagicLink = `http://${request.headers.host}/auth/link#token=${token}`
+      const callback=inviteDestination(body.callbackURL)??'/'
+      magicLinks.set(token,{email:body.email,callback,expiresAt:Date.now()+300000})
+      lastMagicLink = `http://${request.headers.host}/auth/link#${new URLSearchParams({token,callbackURL:callback})}`
       json({status:true})
       return
     }
@@ -101,7 +108,7 @@ const server = createServer(async (request, response) => {
       me = users.get(link.email) ?? {id:randomUUID(),email:link.email,display_name:null}
       users.set(link.email,me)
       response.setHeader('Set-Cookie',`ui_fixture=${me.id}; HttpOnly; SameSite=Lax; Path=/`)
-      json({success:true,callback_url:`http://${request.headers.host}/`})
+      json({success:true,callback_url:`http://${request.headers.host}${link.callback}`})
       return
     }
     if (path === '/api/auth/email-otp/send-verification-otp') {
@@ -233,6 +240,13 @@ const server = createServer(async (request, response) => {
         caches.set(id,cache)
         json(cache,201)
         return
+      }
+      const joinRoute=path.match(/^\/api\/caches\/([^/]+)\/join$/)
+      if (joinRoute && request.method==='POST') {
+        const cache=caches.get(joinRoute[1])
+        if (!cache || body.secret!==cache.invite_token.split('.')[1]) {json({error:'not_found'},404);return}
+        if (!cache.requires_approval && !cache.members?.some(member=>member.user_id===me.id)) (cache.members??=[]).push({user_id:me.id,display_name:me.display_name})
+        json({cache_id:cache.id,name:cache.name,status:cache.requires_approval?'pending':'active'});return
       }
       if (path.endsWith('/join-requests') && request.method==='GET') { json([]); return }
       const memberRoute=path.match(/^\/api\/caches\/([^/]+)\/members\/([^/]+)$/)
