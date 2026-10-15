@@ -35,9 +35,10 @@ spec PR. Keep legacy Fly/Supabase live until separately approved cutover.
   not SQL. Deprecated vitest-pool-workers is not the dependency.
 - **Rollout gate:** port each route to one authority only; disable old cache-local
   write/compatibility paths rather than dual-write shared stock. Old removal/delete
-  routes must not operate against partially ported data. New destructive/shared
-  paths remain gated until PR 5's race/cascade proof. Leave inactive DO deployment
-  configuration until separately approved retirement; do not add Owner DOs.
+  routes must not operate against partially ported data. Request paths reopen in
+  PR 4 after guarded stock/membership race proofs; destructive paths remain gated
+  until PR 5's complete cascade proof. Leave inactive DO deployment configuration
+  until separately approved retirement; do not add Owner DOs.
 
 ## Completion gates
 
@@ -88,7 +89,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | D1 1 | Single-D1 specification | This docs-only PR; no implementation/migration/resource changes |
 | D1 2 | Caches / membership / joining | Implemented; in review: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
 | D1 3 | Shared items / attachments / photos | Implemented; in review: 0008 canonical items/attachments/cleanup, own-library APIs, retained atomic cache create+attach and scoped PATCH/photo routes, restored item UI. Requests/destruction remain gated; library/add-sheet/checkbox screens stay PR 6. |
-| D1 4 | Requests / shared stock / Lent out / notifications | Planned; guarded INSERT and token-gated decision batches, direct Requests queries |
+| D1 4 | Requests / shared stock / Lent out / notifications | Implemented; in review: 0009 requests, all-cache reservation guards, atomic token-gated decisions/outbox, direct party pagination, Lent out toggle/approval checkbox. Request APIs/screens reopen after race proofs; every destructive route stays gated for PR 5. |
 | D1 5 | Removal / detach / deletion / races | Planned; atomic cascades/snapshots and immediate membership enforcement |
 | D1 6 | Library / add sheet / checkboxes / items board | Planned; items board 1a–1d and user flows, supersedes #28 |
 | D1 7 | Retire Durable Objects / staging reset | Planned; destructive deleted_classes migration and reset each need explicit approval |
@@ -203,8 +204,39 @@ effects; injected failure rolls back stock/decision/flag/outbox. Note Unicode
 bounds, unavailable create 409, pending still decidable, checkbox atomicity;
 cache queue vs party-history privacy and no emails. Competing outbox claims,
 crashed sixth claim recovery, stale terminal writes, post-commit enqueue crash,
-Cron fair pagination and Queue duplicates. Keep shared routes staged/gated until
-PR 5 demonstrates destructive races, not just happy-path stock tests.
+Cron fair pagination and Queue duplicates. Open request routes after these proofs;
+keep removal/detach/delete gated until PR 5 demonstrates their complete cascades.
+
+**Approved PR 4 rollout clarification:** request APIs/screens reopen now, rather
+than waiting for PR 5. Membership-race tests may mutate local D1 membership directly
+to prove the next request is refused; this is not a destructive endpoint or proof
+of PR 5's rejection/detachment cascade. A request that committed before that raw
+membership change remains reserved until its proper cascade/decision, never
+silently freed by a projection or partial removal.
+
+Migration 0009 adds requests with quantity/status/decided_at constraints, indexes,
+a fresh creation_token witness and decision_token. A zero-row create cannot reuse
+an existing request ID to manufacture an outbox row. Bound-number integer equality
+plus schema checks validate quantities without assuming parameter typeof() matches
+JavaScript integer values. Request/decision state and recipient snapshots commit
+atomically; enqueue remains post-commit and recoverable through the existing outbox.
+
+Enable GET/POST /api/caches/{cacheId}/items/{itemId}/requests, canonical POST
+/api/me/requests/{requestId}/approve|reject and guarded cache-context decision
+routes. GET /api/requests directly queries owner/requester parties with stable
+created_at/UUID cursors (25 rows/page), not cache RPC fan-out; the compatibility
+unavailable_cache_ids field is always empty. Party history never grants cache,
+item/photo or decision access. Cache queues expose only that cache's pending
+requesters, plus party-owned decided rows. Item available_quantity is calculated
+from ALL-cache pending reservations without returning other caches' identities.
+
+Minimal owner Lent out/note controls and the reusable approval checkbox ship now.
+A checked approval sets the flag and optional note in the decision batch; omitted
+note preserves it, explicit null/blank clears it. Unchecked approval preserves the
+existing flag/note. Unicode validation remains 200 code points. Requests use the
+server's shared available_quantity, not a sum of the visible cache queue; edits,
+decisions and availability changes invalidate item/request views across caches.
+No holder/return lifecycle or cancellation status is added.
 
 ### PR 5 — Removal, detach, deletion and race tests
 
@@ -234,7 +266,7 @@ constraint failure anywhere → complete rollback; owner cannot leave/be removed
 wrong member/cache/owner 404; delete snapshots every pending recipient before FK
 cascade; library/other attachments/photos survive cache loss. Bound statement/
 row work within measured platform limits; fail safely rather than splitting the
-atomic invariant. Only now enable destructive/shared paths; close old aliases too.
+atomic invariant. Only now enable destructive paths; close unsafe old aliases too.
 
 ### PR 6 — Screens: library, add sheet, checkboxes and items board
 

@@ -162,5 +162,6 @@ it('reopens current cache item screens and private library/attach APIs with cook
   expect((await worker.fetch(appRequest(`/api/me/items/${item.id}`,{method:'PATCH',cookie:owner.cookie,body:{quantity:2}}),poisoned)).status).toBe(200)
   expect((await itemDetail(env.DB,item.id,owner.id,other.id)).quantity).toBe(2)
   await expect(itemDetail(env.DB,item.id,stranger,info.id)).rejects.toMatchObject({status:404})
-  for (const [path,method] of [[`${base}/${item.id}`,'DELETE'],[`/api/me/items/${item.id}`,'DELETE'],[attach,'DELETE'],[`${base}/${item.id}/requests`,'GET'],['/api/requests','GET']]) expect((await worker.fetch(appRequest(path,{method,cookie:owner.cookie}),poisoned)).status).toBe(503)
+  for (const [path,method] of [[`${base}/${item.id}`,'DELETE'],[`/api/me/items/${item.id}`,'DELETE'],[attach,'DELETE']]) expect((await worker.fetch(appRequest(path,{method,cookie:owner.cookie}),poisoned)).status).toBe(503)
+  for (const path of [`${base}/${item.id}/requests`,'/api/requests']) expect((await worker.fetch(appRequest(path,{cookie:owner.cookie}),poisoned)).status).toBe(200)
 })

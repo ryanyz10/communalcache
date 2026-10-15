@@ -21,11 +21,11 @@ export function pendingIncomingCount(rows: ItemRequest[], userId: string) {
   return rows.filter(row => row.owner_id === userId && row.status === 'pending').length
 }
 
-export function invalidateRequestViews(client: QueryClient, cacheId: string, itemId: string) {
+export function invalidateRequestViews(client: QueryClient) {
   return Promise.all([
-    client.invalidateQueries({ queryKey: ['item-requests', cacheId, itemId] }),
+    client.invalidateQueries({ queryKey: ['item-requests'] }),
     client.invalidateQueries({ queryKey: ['requests'] }),
-    client.invalidateQueries({ queryKey: ['item', cacheId, itemId] }),
-    client.invalidateQueries({ queryKey: ['items', cacheId] }),
+    client.invalidateQueries({ queryKey: ['item'] }),
+    client.invalidateQueries({ queryKey: ['items'] }),
   ])
 }
