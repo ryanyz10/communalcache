@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
-import { createExecutionContext, createMessageBatch, createScheduledController, evictDurableObject, getQueueResult, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
+import { createExecutionContext, createMessageBatch, createScheduledController, getQueueResult } from 'cloudflare:test'
 import worker from '../src/index'
 import { claimOutbox, createCache, decideCacheJoin, joinCache, markOutboxSent, recordOutboxFailure } from '../src/db'
 import { deliverNotification, notificationContent, sweepNotifications } from '../src/notifications'
@@ -35,12 +35,6 @@ async function consume(ids: unknown[]) {
 async function row(id: string) {
   return env.DB.prepare('SELECT attempts,claim_token,claim_until,sent_at,failed_at FROM outbox WHERE id = ?').bind(id)
     .first<{ attempts: number; claim_token: string | null; claim_until: number | null; sent_at: number | null; failed_at: number | null }>()
-}
-async function failure(call: PromiseLike<unknown>, message: string) {
-  let error: unknown
-  try { await call } catch (caught) { error = caught }
-  expect(error).toBeInstanceOf(Error)
-  expect((error as Error).message).toContain(message)
 }
 
 it('competing consumers acquire one guarded claim and only one sends; duplicate, missing and invalid Queue IDs ack safely', async () => {
@@ -153,31 +147,6 @@ it('retries an accepted email whose durable success write failed, allowing at-le
   expect(await row(event.id)).toMatchObject({ sent_at: expect.any(Number), failed_at: null, attempts: 2 })
 })
 
-it('persists intent→D1→real Queue in order and replays both Queue-send and post-send deletion crashes with stable IDs', async () => {
-  const owner = await user(), applicant = await user(), cacheId = crypto.randomUUID()
-  const stub = env.CACHES.get(env.CACHES.idFromName(cacheId))
-  const cache = await stub.create(cacheId, owner, 'Pantry', true)
-  await stub.join(applicant, cache.invite_token.split('.')[1])
-  const intent = await runInDurableObject(stub, (_instance, state) => state.storage.sql.exec<{ id: string }>("SELECT id FROM pending_sync WHERE kind='notification'").one().id)
-  expect(await row(intent)).toBeNull()
-  const send = vi.spyOn(env.NOTIFICATIONS, 'send').mockRejectedValue(new Error('injected Queue failure'))
-  await failure(stub.flushSync(), 'injected Queue failure')
-  expect(await row(intent)).toMatchObject({ attempts: 0, sent_at: null, failed_at: null })
-  await runInDurableObject(stub, (_instance, state) => { expect(state.storage.sql.exec('SELECT id FROM pending_sync').one().id).toBe(intent) })
-  send.mockRestore()
-  const original = env.NOTIFICATIONS.send.bind(env.NOTIFICATIONS)
-  const replayed = vi.spyOn(env.NOTIFICATIONS, 'send').mockImplementation((body, options) => original(body, options))
-  await runInDurableObject(stub, (_instance, state) => { state.storage.sql.exec("CREATE TRIGGER fail_delete BEFORE DELETE ON pending_sync WHEN OLD.kind='notification' BEGIN SELECT RAISE(ABORT, 'injected post-Queue crash'); END") })
-  await failure(stub.flushSync(), 'injected post-Queue crash')
-  await runInDurableObject(stub, (_instance, state) => { state.storage.sql.exec('DROP TRIGGER fail_delete') })
-  await stub.flushSync()
-  expect(replayed.mock.calls.map(call => call[0])).toEqual([intent, intent])
-  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM outbox WHERE id=?').bind(intent).first('n')).toBe(1)
-  const mail = emailMock()
-  await consume([intent, intent])
-  expect(mail).toHaveBeenCalledOnce()
-})
-
 it('cursor-pages old expired nonterminal work, excludes live claims/terminal/recent rows and retains the cursor when Queue send fails', async () => {
   const ids = Array.from({ length: 27 }, () => crypto.randomUUID()).sort()
   for (const id of ids) await outbox({ id, attempts: 100 })
@@ -260,29 +229,6 @@ it('enforces both the 10-second provider abort and the 30-second whole-delivery 
   expect(await row(event.id)).toMatchObject({ attempts: 2, failed_at: null, claim_token: null })
 })
 
-it('persists exponential sync backoff through eviction and entry points, lets Cron respect it, and resumes after recovery', async () => {
-  const owner = await user(), cacheId = crypto.randomUUID(), stub = env.CACHES.get(env.CACHES.idFromName(cacheId))
-  await stub.create(cacheId, owner, 'Pantry', false)
-  await stub.flushSync()
-  await stub.update(owner, { name: 'New pantry' })
-  await env.DB.exec("CREATE TRIGGER fail_registry BEFORE INSERT ON caches BEGIN SELECT RAISE(ABORT, 'injected persistent sync failure'); END")
-  for (let failureCount = 0; failureCount < 11; failureCount++) expect(await runDurableObjectAlarm(stub)).toBe(true)
-  const retry = await runInDurableObject(stub, async (_instance, state) => {
-    const value = await state.storage.get<{ failures: number; retryAt: number }>('sync_retry')
-    expect(value?.failures).toBe(11)
-    expect((await state.storage.getAlarm())! - Date.now()).toBeGreaterThan(3_590_000)
-    return value!
-  })
-  await evictDurableObject(stub)
-  await stub.detail(owner)
-  await worker.scheduled(createScheduledController(), env)
-  await runInDurableObject(stub, async (_instance, state) => { expect(await state.storage.get('sync_retry')).toEqual(retry); expect((await state.storage.getAlarm())!).toBeGreaterThanOrEqual(retry.retryAt) })
-  await env.DB.exec('DROP TRIGGER fail_registry')
-  await stub.flushSync()
-  await runInDurableObject(stub, async (_instance, state) => { expect(await state.storage.get('sync_retry')).toBeUndefined() })
-  expect(await env.DB.prepare('SELECT name FROM caches WHERE id=?').bind(cacheId).first('name')).toBe('New pantry')
-})
-
 it('rejects unavailable recipients and provider redirects as observed failures without following them', async () => {
   const event = await outbox(), mail = emailMock(302)
   await env.DB.prepare('UPDATE user SET emailVerified=0 WHERE id=?').bind(event.recipient).run()
@@ -296,13 +242,24 @@ it('rejects unavailable recipients and provider redirects as observed failures w
   expect(await row(event.id)).toMatchObject({ attempts: 3, sent_at: expect.any(Number), failed_at: null })
 })
 
-it('runs notification recovery even when the registry recovery cursor fails', async () => {
+it('runs notification recovery even when the photo cleanup cursor fails', async () => {
   const event = await outbox()
   const send = env.NOTIFICATIONS.sendBatch.bind(env.NOTIFICATIONS)
   const queued = vi.spyOn(env.NOTIFICATIONS, 'sendBatch').mockImplementation(messages => send(messages))
-  await env.DB.exec("CREATE TRIGGER fail_cursor BEFORE UPDATE ON cache_sync_cursor BEGIN SELECT RAISE(ABORT, 'injected registry cursor failure'); END")
+  await env.DB.exec("CREATE TRIGGER fail_cursor BEFORE UPDATE ON r2_cleanup_cursor BEGIN SELECT RAISE(ABORT, 'injected cleanup cursor failure'); END")
   await expect(worker.scheduled(createScheduledController(), env)).rejects.toThrow('Scheduled recovery incomplete')
   expect(queued).toHaveBeenCalledWith([{ body: event.id }])
+})
+
+it('runs photo cleanup even when the notification recovery cursor fails', async () => {
+  const owner = crypto.randomUUID(), item = crypto.randomUUID(), id = crypto.randomUUID()
+  const key = `${owner}/${item}/${crypto.randomUUID()}`
+  await env.BUCKET.put(key, 'known orphan')
+  await env.DB.prepare("INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at) VALUES (?,?,?,'exact',?,1)").bind(id,owner,item,key).run()
+  await env.DB.exec("CREATE TRIGGER fail_cursor BEFORE UPDATE ON notification_sync_cursor BEGIN SELECT RAISE(ABORT, 'injected notification cursor failure'); END")
+  await expect(worker.scheduled(createScheduledController(), env)).rejects.toThrow('Scheduled recovery incomplete')
+  expect(await env.BUCKET.head(key)).toBeNull()
+  expect(await env.DB.prepare('SELECT id FROM r2_cleanup WHERE id=?').bind(id).first()).toBeNull()
 })
 
 it('keeps recipient emails off app APIs while delivering through private auth-row lookup', async () => {

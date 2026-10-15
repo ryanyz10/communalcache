@@ -60,13 +60,14 @@ product decisions above. Neither Cache nor Owner DOs are in the target. Drop
 copies and revocation tombstones. Notifications and R2 still need durable external
 work, not a cross-store transaction.
 
-This is a **docs-only target**, not an implemented port. Current `src/cache.ts`
-still owns cache-local items/requests; `src/sync.ts` sweeps them; `src/db.ts` owns
-D1 discovery/outbox queries. Existing green tests do not prove the new batches.
-The [build plan](build-guide.md#d1-implementation-plan) is PRs 2–7. Draft #28's
-cache fan-out Your items is superseded by direct-D1 library work in PR 6.
-No application/config/migration changes, Cloudflare commands, reset or deployment
-occur in this spec PR. Fly/Supabase stays live until separately approved cutover.
+PRs 2–6 implement the single-D1 routes/screens and real-SQL batch/race tests in
+`src/db.ts`. Draft PR 7 removes historical Cache code/sweeps and prepares the
+class-deletion config plus obsolete projection-table migration. **It is not
+approved for merge/deploy: class deletion permanently destroys Cache DO data.**
+The [build plan](build-guide.md#d1-implementation-plan) records review/release
+status. Draft #28's cache fan-out library remains superseded by direct D1.
+No remote migration, reset, class deletion or deployment is performed by the
+retirement draft. Fly/Supabase stays live until separately approved cutover.
 
 ## Data model
 
@@ -516,14 +517,17 @@ only until ported. No production test bindings or live provider sends.
 
 Completion gates: Worker/frontend typechecks, whole Vitest suite, frontend build,
 local empty/upgrade D1 migrations, default/staging/production dry-run bundles and
-local health/config/deep links/API JSON errors. This docs PR runs existing-code
-checks only; none is evidence that the proposed D1 SQL is implemented.
+local health/config/deep links/API JSON errors. Real-D1 tests now cover the
+implemented guards/batches and retirement upgrades; local gates still do not
+prove remote migration, class deletion or provider delivery.
 
 [deploy.md](deploy.md) retains environment/pipeline details. PR 7 appends a Wrangler
 `deleted_classes` migration to retire Cache DOs: **it destroys DO data and requires
 explicit approval**, as does the staging test-data reset. Do not silently drop old
 state or rename into an empty namespace. Legacy production cutover/decommissioning
-is separate. No Cloudflare command, binding change, migration or reset in this PR.
+is separate. Draft PR 7 prepares the binding removal/class-deletion config and D1 table-drop
+migration for review only. It runs no remote Cloudflare command or staging reset;
+merge/deploy and reset each need explicit owner approval.
 
 Legacy migration maps Supabase users by verified email into Better Auth, preserves
 display names and imports caches/memberships/items/item_caches/requests directly

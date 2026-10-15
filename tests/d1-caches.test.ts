@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
-import { applyD1Migrations, createScheduledController, runInDurableObject, type D1Migration } from 'cloudflare:test'
+import { applyD1Migrations, createScheduledController, type D1Migration } from 'cloudflare:test'
 import worker from '../src/index'
-import { applyCacheIntent, cacheDetail, cacheJoinRequests, createCache, decideCacheJoin, joinCache, listMyCaches, updateCache } from '../src/db'
+import { cacheDetail, cacheJoinRequests, createCache, decideCacheJoin, joinCache, listMyCaches, updateCache } from '../src/db'
 import { appRequest, login } from './helpers'
 
 async function user(name = 'Neighbor') {
@@ -25,7 +25,6 @@ it('upgrades legacy registry rows additively without migrating or granting DO me
   await env.DB.exec('DROP TABLE memberships; ALTER TABLE caches DROP COLUMN operation_token; ALTER TABLE caches DROP COLUMN requires_approval; ALTER TABLE caches DROP COLUMN join_secret')
   await env.DB.prepare('DELETE FROM d1_migrations WHERE name=?').bind(migration.name).run()
   await env.DB.prepare('INSERT INTO caches(id,name,created_at) VALUES (?,?,1)').bind(id, 'Legacy').run()
-  await env.DB.prepare('INSERT INTO my_caches(user_id,cache_id) VALUES (?,?)').bind(owner, id).run()
   await applyD1Migrations(env.DB, [migration])
   expect(await env.DB.prepare('SELECT name,join_secret,requires_approval FROM caches WHERE id=?').bind(id).first()).toEqual({ name: 'Legacy', join_secret: null, requires_approval: 0 })
   expect((await listMyCaches(env.DB, owner)).results).toEqual([])
@@ -39,15 +38,8 @@ it('creates canonical config/owner atomically and appears in Home immediately wi
   expect(atob(cache.secret.replaceAll('-', '+').replaceAll('_', '/') + '=')).toHaveLength(32)
   expect((await listMyCaches(env.DB, cache.owner)).results).toEqual([{ id: cache.id, name: 'Tools' }])
   expect((await cacheDetail(env.DB, cache.id, cache.owner)).members).toEqual([{ user_id: cache.owner, display_name: 'Owner' }])
-  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM my_caches').first('n')).toBe(0)
-  const stub = env.CACHES.get(env.CACHES.idFromName(cache.id))
-  await runInDurableObject(stub, (_instance, state) => {
-    expect(state.storage.sql.exec('SELECT 1 FROM cache_config').toArray()).toEqual([])
-    expect(state.storage.sql.exec('SELECT 1 FROM members').toArray()).toEqual([])
-    expect(state.storage.sql.exec('SELECT 1 FROM pending_sync').toArray()).toEqual([])
-  })
   await worker.scheduled(createScheduledController(), env)
-  expect(await env.DB.prepare('SELECT cache_id FROM cache_sync_cursor').first('cache_id')).toBeNull()
+  expect((await listMyCaches(env.DB, cache.owner)).results).toEqual([{ id: cache.id, name: 'Tools' }])
 })
 
 it('enforces owner/status/boolean/FK constraints and rolls creation back on dependent failure', async () => {
@@ -69,7 +61,6 @@ it('joins membership in every cache read and guards owner-only settings/rotation
   for (const [id, status] of [[pending, 'pending'], [removed, 'removed']]) {
     await env.DB.prepare("INSERT INTO memberships VALUES (?,?,'member',?,1,NULL)").bind(cache.id, id, status).run()
   }
-  await env.DB.prepare('INSERT INTO my_caches VALUES (?,?)').bind(outsider, cache.id).run()
   for (const id of [pending, removed, outsider]) {
     expect((await listMyCaches(env.DB, id)).results).toEqual([])
     await expect(cacheDetail(env.DB, cache.id, id)).rejects.toMatchObject({ status: 404 })
@@ -80,7 +71,6 @@ it('joins membership in every cache read and guards owner-only settings/rotation
   await expect(decideCacheJoin(env.DB, cache.id, cache.applicant, pending, 'approve')).rejects.toMatchObject({ status: 404 })
   expect((await notifications()).results).toEqual([])
   expect(await updateCache(env.DB, cache.id, cache.owner, { name: 'Pantry', requires_approval: true })).toMatchObject({ name: 'Pantry', requires_approval: true })
-  await applyCacheIntent(env.DB, 'registry_upsert', JSON.stringify({ cache_id: cache.id, name: 'Stale projection', created_at: 1 }))
   expect((await cacheDetail(env.DB, cache.id, cache.applicant)).name).toBe('Pantry')
   expect(JSON.stringify(await cacheDetail(env.DB, cache.id, cache.owner))).not.toContain('example.test')
 })
@@ -201,14 +191,11 @@ it('guards destructive APIs on missing/protected targets without consulting DO m
   const cache = await createCache(env.DB, caller.id, 'Tools', false), item = crypto.randomUUID()
   const base = `/api/caches/${cache.id}`
   const paths: [string, number][] = [[base + `/items/${item}`,404],[base + `/members/${caller.id}`,409]]
-  const get = vi.fn(() => { throw new Error('Must not call legacy DO') })
-  const gatedEnv = { ...env, CACHES: { ...env.CACHES, get } } as unknown as Env
   for (const [path, expected] of paths) {
-    const response = await worker.fetch(appRequest(path, { method:'DELETE', cookie:caller.cookie, body:{} }), gatedEnv)
+    const response = await worker.fetch(appRequest(path, { method:'DELETE', cookie:caller.cookie, body:{} }), env)
     expect(response.status).toBe(expected)
     expect(await response.json()).toEqual({ error:expected===404?'not_found':'owner_cannot_be_removed' })
   }
-  expect(get).not.toHaveBeenCalled()
   expect((await notifications()).results).toEqual([])
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM write_limits').first('n')).toBe(0)
 })
