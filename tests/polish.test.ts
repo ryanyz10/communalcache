@@ -118,7 +118,7 @@ it('reports sync retry/backlog age without cache names, payloads or invite secre
   await runInDurableObject(stub, (_instance, state) => { expect(state.storage.sql.exec('SELECT 1 FROM pending_sync').toArray()).toEqual([]) })
 })
 
-it('canonicalizes mixed-case D1 cache/applicant IDs and gates mixed-case legacy paths without changing secrets', async () => {
+it('canonicalizes mixed-case D1 cache/applicant/item IDs and keeps requests/destruction gated', async () => {
   const owner = await profile(), member = await profile('member@example.test')
   const info = await createCache(env.DB, owner.id, 'Pantry', true), id = info.id
   const base = `/api/caches/${id.toUpperCase()}`
@@ -129,9 +129,9 @@ it('canonicalizes mixed-case D1 cache/applicant IDs and gates mixed-case legacy 
   expect((await call(base + '/join-requests')).status).toBe(200)
   expect((await call(base + `/join-requests/${member.id.toUpperCase()}/approve`, 'POST', {})).status).toBe(200)
   const itemPath = base + `/items/${crypto.randomUUID().toUpperCase()}`
-  expect((await call(base + '/items')).status).toBe(503)
-  expect((await call(itemPath)).status).toBe(503)
-  expect((await call(itemPath + '/photo')).status).toBe(503)
+  expect((await call(base + '/items')).status).toBe(200)
+  expect((await call(itemPath)).status).toBe(404)
+  expect((await call(itemPath + '/photo')).status).toBe(404)
   expect((await call(base + `/requests/${crypto.randomUUID().toUpperCase()}/approve`, 'POST', {})).status).toBe(503)
   expect((await call(base + `/members/${member.id.toUpperCase()}`, 'DELETE')).status).toBe(503)
   expect((await call(base, 'GET', undefined, member.cookie)).status).toBe(200)
