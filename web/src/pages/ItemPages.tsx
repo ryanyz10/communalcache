@@ -8,23 +8,25 @@ import type { Item } from '../lib/items'
 import { OnboardingPage } from './OnboardingPage'
 import { ItemPhoto, PhotoUpload } from './ItemPhoto'
 import { ItemRequests } from './RequestsPage'
+import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 
 export function ItemList({ cacheId }: { cacheId: string }) {
   const query = useQuery({ queryKey: ['items', cacheId], queryFn: () => apiFetch<Item[]>(`/api/caches/${cacheId}/items`) })
   return <section className="mt-6" aria-labelledby="items-heading">
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex items-center justify-between gap-3 lg:hidden">
       <h2 id="items-heading" className="text-xl font-semibold">Shared things</h2>
       <Link to={`/caches/${cacheId}/items/new`} className="cc-pill">+ Add item</Link>
     </div>
     {query.isPending && <p role="status" className="mt-4">Loading items…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try items again</button></div>}
-    {query.isSuccess && (query.data.length ? <ul className="cc-list mt-3">{query.data.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0">
-      <Link to={`/caches/${cacheId}/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5">
+    {query.isSuccess && (query.data.length ? <ul className="cc-list mt-3 lg:mt-0 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{query.data.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0 lg:border-0">
+      <Link to={`/caches/${cacheId}/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:block lg:h-full lg:overflow-hidden lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-0">
         <ItemPhoto key={item.photo_version} item={item} thumbnail />
-        <div className="min-w-0 flex-1"><h3 className="break-words font-semibold">{item.title}</h3>
-        <p className="text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p></div><span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span>
+        <div className="min-w-0 flex-1 lg:px-3.5 lg:py-3"><h3 className="break-words font-semibold">{item.title}</h3>
+        <p className="text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p></div><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:hidden">›</span>
       </Link>
-    </li>)}</ul> : <p className="mt-4 text-slate-600">Nothing shared yet. Add the first item for your neighbors.</p>)}
+    </li>)}<li className="hidden lg:block"><Link to={`/caches/${cacheId}/items/new`} className="lg:flex lg:h-full lg:min-h-[120px] lg:items-center lg:justify-center lg:rounded-[14px] lg:border-2 lg:border-dashed lg:border-slate-300 lg:font-semibold lg:text-slate-600">+ Add item</Link></li></ul> : <p className="mt-4 text-slate-600">Nothing shared yet. Add the first item for your neighbors.</p>)}
+    {query.isSuccess && !query.data.length && <Link to={`/caches/${cacheId}/items/new`} className="hidden lg:mt-4 lg:flex lg:min-h-[120px] lg:items-center lg:justify-center lg:rounded-[14px] lg:border-2 lg:border-dashed lg:border-slate-300 lg:font-semibold lg:text-slate-600">+ Add item</Link>}
   </section>
 }
 
@@ -62,14 +64,16 @@ export function ItemPage() {
   const query = useQuery({ queryKey: ['item', cacheId, itemId], queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`), enabled: !!me?.display_name })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  return <main className="cc-page">
-    <Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link>
+  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+    <WideBreadcrumbs><Link to="/">Caches</Link><span aria-hidden="true">›</span><Link to={`/caches/${cacheId}`}>Cache</Link>{query.data && <><span aria-hidden="true">›</span><span>{query.data.title}</span></>}</WideBreadcrumbs>
+    <Link to={`/caches/${cacheId}`} className="text-sm underline lg:hidden">‹ Back to cache</Link>
     {query.isPending && <p role="status" className="mt-4">Loading item…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try again</button></div>}
-    {query.isSuccess && <>
-      <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight">{query.data.title}</h1>
-      <p className="mt-2 text-slate-600">Shared by {query.data.owner_name ?? 'Member'}</p>
-      <ItemPhoto key={query.data.photo_version} item={query.data} />
+    {query.isSuccess && <div className="contents lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-10">
+      <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight lg:col-start-2 lg:row-start-1 lg:mt-0 lg:text-[28px] lg:font-bold">{query.data.title}</h1>
+      <p className="mt-2 text-slate-600 lg:col-start-2 lg:row-start-2">Shared by {query.data.owner_name ?? 'Member'}</p>
+      <div className="contents lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:block"><ItemPhoto key={query.data.photo_version} item={query.data} /></div>
+      <div className="contents lg:col-start-2 lg:row-start-3 lg:block">
       <p className="mt-4">{query.data.is_consumable ? `${query.data.quantity} in stock` : 'Reusable · no stock quantity'}</p>
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
       {me.id === query.data.owner_id && <>
@@ -78,7 +82,8 @@ export function ItemPage() {
         <PhotoUpload item={query.data} />
       </>}
       <ItemRequests item={query.data} />
-    </>}
+      </div>
+    </div>}
   </main>
 }
 
@@ -101,7 +106,7 @@ function ItemForm({ cacheId, item }: { cacheId: string; item?: Item }) {
     },
   })
   function onSubmit(event: FormEvent) { event.preventDefault(); save.mutate() }
-  return <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+  return <form className="mt-6 space-y-4 lg:max-w-[640px]" onSubmit={onSubmit}>
     <div><label htmlFor="item-title" className="block text-sm font-medium">Title</label>
       <input id="item-title" type="text" required maxLength={120} value={title} onChange={event => setTitle(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
     </div>
@@ -134,7 +139,7 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   if (editing && item.isSuccess && item.data.owner_id !== me.id) return <Navigate to={`/caches/${cacheId}/items/${itemId}`} replace />
   const error = cache.error ?? (editing ? item.error : null)
   const pending = cache.isPending || (editing && item.isPending)
-  return <main className="cc-page">
+  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
     <Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link>
     <h1 className="mt-4 text-2xl font-semibold tracking-tight">{editing ? 'Edit item' : 'Add an item'}</h1>
     {pending && <p role="status" className="mt-4">Loading…</p>}

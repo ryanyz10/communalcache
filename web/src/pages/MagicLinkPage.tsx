@@ -40,16 +40,16 @@ export function MagicLinkPage() {
     finally { setPending(false) }
   }
   return <AuthScreen>
-    <header className="mt-14 text-center">
-      <div className="flex justify-center"><BrandMark /></div>
-      <h1 className="cc-auth-heading">Almost there</h1>
+    <header className="mt-14 text-center lg:mt-0">
+      <div className="flex justify-center lg:hidden"><BrandMark /></div>
+      <h1 className="cc-auth-heading lg:mt-0">Almost there</h1>
       <p className="mt-2 text-slate-600">Tap Continue to finish signing in.</p>
     </header>
     {!link && <p role="alert" className="mt-4 text-red-700">This sign-in link is missing or invalid. Request a new link or use an email code.</p>}
     {error && <p role="alert" className="mt-4 text-red-700">{error}</p>}
     {link && <button type="button" disabled={pending || attempted} onClick={() => void proceed()} className="cc-auth-primary mt-8">{pending ? 'Signing in…' : 'Continue'}</button>}
     <p className="mt-4 text-center text-[13px] leading-[18px] text-slate-600">Opening this page does not use your link. Links work once and expire after 5 minutes.</p>
-    <div className="min-h-8 flex-1" />
+    <div className="min-h-8 flex-1 lg:flex-none" />
     <Link to="/login" className="cc-auth-text">Link not working? Get a new one</Link>
     <p className="mt-2 text-center text-[13px] leading-[18px] text-slate-600">You can also request an email code. A saved invite stays in its original tab; reopen it here if you use another browser.</p>
   </AuthScreen>
