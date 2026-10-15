@@ -7,6 +7,7 @@ import { CachePage } from './pages/CachePage'
 import { ItemPage, ItemEditorPage } from './pages/ItemPages'
 import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
+import { MagicLinkPage } from './pages/MagicLinkPage'
 import { RequestsPage } from './pages/RequestsPage'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
@@ -25,6 +26,7 @@ export default function App() {
         <Ready>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/auth/link" element={<MagicLinkPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/" element={<HomePage />} />
             <Route path="/requests" element={<RequestsPage />} />

@@ -11,9 +11,10 @@ decommissioning.** Existing production remains live until an approved cutover.
 One TypeScript module Worker, its React static assets, and an exported SQLite cache
 DO class. Bindings connect global D1, cache DO namespace, private R2 and Queue
 producer/consumer; a scheduled handler runs registry-sync and outbox sweeps.
-Better Auth runs inside the Worker with D1 users/sessions and email OTPs. Resend
-fetch serves two independent paths: sign-in codes awaited by the auth request,
-and Queue-driven notification email. No target Supabase service or SMTP setup.
+Better Auth runs inside the Worker with D1 users/sessions and magic links plus
+explicit email-OTP fallback. Resend fetch serves auth mail awaited by its request
+(link-only by default, code-only on request), independently of Queue notification
+email. No target Supabase service or SMTP setup.
 
 Foundation supplies `wrangler.jsonc`, D1 binding `DB` (database `communalcache`),
 SQLite DO binding `CACHES` (class `Cache`) and `ASSETS` (`web/dist`). The approved
@@ -219,19 +220,29 @@ part of this application. Discovery projections never authorize access.
   trustedOrigins, host-only HttpOnly/Secure/SameSite=Lax cookies; no session cookie
   cache/secondary storage. Keep library CSRF checks; app mutations also enforce
   an exact Origin check (missing/null/foreign rejected).
-- Enable only email-otp sign-in/signup, six digits/300s/three attempts, hashed
-  storage and rotate-on-resend. Disable password/unused auth routes and plugins;
+- Enable magic-link sign-in/signup (hashed 300s tokens, single use) and explicit
+  email-otp fallback (six digits/300s/three attempts, hashed storage/rotation).
+  Disable password/unused auth routes and plugins;
   never expose admin/list-users, raw tokens or a public migration endpoint.
 - Database rate-limit storage, not memory; trusted Cloudflare IP header and tested
   send/resend/verify limits. App profile gate exempts auth, PATCH /api/me and push.
-- Auth code delivery awaits bounded Resend fetch, independent of notification
+- Auth link/code delivery awaits bounded Resend fetch, independent of notification
   Queue. Better Auth 1.7.7 catches callback errors; a per-request closure result maps
   failed sends/timeouts to generic JSON 502. No callback redirect for code login:
   pending join stays in sessionStorage and returns to the same page. Foundation
   proves preservation; Feature 2 adds the actual join POST.
-- Magic-link plugin is a later scanner-safe SPA Continue flow, hashed token and
-  exact same-origin callbacks; combined link/code lifecycle needs proof. SMS is
-  deferred, no provider account or sender provisioned.
+- Primary sign-in mail contains only the magic link; the secondary code action
+  sends a separate OTP email. `/auth/link#token=...` captures/removes the fragment
+  and verifies only after Continue. Set no-referrer/no-store on that landing route;
+  never log fragments, auth bodies or mail. Public verify GET is 405; the
+  Origin-protected POST uses an internal plugin HTTP-handler GET adapter, keeping
+  D1-backed 5/60s send/verify limits. All callbacks resolve against fixed
+  APP_BASE_URL and must have its exact origin, without protocol-relative URLs or
+  userinfo. No new secret/config/migration is needed; plugin identifiers use a
+  disjoint namespace and OTP migration 0003 stays. Fresh-browser links work, but
+  tab-local pending invites do not transfer; use code fallback or reopen the
+  invite there. Outstanding links remain valid until consumed/expired; resends
+  do not promise latest-link-only rotation. SMS is deferred.
 
 Legacy Fly/Supabase Auth/SMTP/Postgres settings matter only to the old live app.
 Leave them intact until a separately approved migration/cutover; no target Supabase
@@ -313,8 +324,13 @@ After approval, separately check:
   surface; expired/old/resend codes and revoked sessions fail.
 - Auth cookie flags, exact origin/CSRF checks, caller-only auth user/session data,
   disabled password/admin routes and D1-backed multi-instance rate limits work.
-- Later magic-link follow-up: scanner landing GET consumes nothing; Continue
-  verifies once and foreign callback URLs are rejected. Not part of code-first release.
+- Magic-link mail contains only the fragment landing link, with five-minute
+  expiry. Scanner/preview GET consumes nothing; Continue creates one cookie session;
+  replay/expired links show resend/code recovery. Missing/null/foreign Origin and
+  foreign/protocol-relative callback URLs are rejected. Test both same-tab pending
+  invite resumption and a fresh-browser mobile mail-client handoff (reopen the
+  invite there); code fallback still signs in in the original tab. These live
+  behaviors remain UNVERIFIED until separately approved provider/browser smoke.
 - New cache page opens before discovery catches up; stale/removed indexes never
   authorize a tap; request aggregation stays caller-scoped and bounded.
 - Queue-driven notification email arrives (auth-code success does not prove this).
