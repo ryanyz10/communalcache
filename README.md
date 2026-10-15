@@ -130,9 +130,10 @@ to generic JSON `502 email_unavailable`; a rate-limited request remains 429.
 
 Joining/request events now flow from durable DO intents through D1 outbox IDs to
 Queue-driven email, using the same `EMAIL_FROM` and Resend binding as auth but an
-independent handler. There is no new notifications screen. Until Push, every
-recipient uses their private verified email; app APIs still expose only your own
-email. Provider calls abort after 10 seconds within a 30-second delivery deadline.
+independent handler. There is no new notifications screen. Live browser subscriptions
+receive encrypted push; recipients without subscriptions, or whose subscriptions all
+return 404/410 in this pass, receive email. Transient push errors retry push rather
+than escalating to email. App APIs still expose only your own email. Provider calls abort after 10 seconds within a 30-second delivery deadline.
 Queue duplicates are harmless after terminal recording, but a crash after provider
 acceptance can still duplicate mail (at-least-once delivery).
 
@@ -144,6 +145,33 @@ helpers; no external provider is contacted. A real `wrangler dev` consumer can
 send notification mail if a provider key is configured, so do not use production
 credentials or assume local persistence makes provider fetches local. For read-only
 smoke, use a fresh isolated `--persist-to` directory with no queued work.
+
+### Web push and installation
+
+The dashboard has **Enable notifications** and **Disable notifications** controls.
+Permission is requested only after Enable is pressed. On iPhone/iPad, use Share →
+Add to Home Screen, open the installed app, then enable. At most three browsers
+can register for one account. Logout deletes the caller's server registration,
+unsubscribes locally and closes displayed notifications before signing out.
+An unmatched previous-account browser registration is cleared without auto-enabling
+notifications for the new account. The ownership marker is local UI state, not API
+authorization. The service worker opens only same-origin paths and never caches
+private API/photo responses. The manifest reuses the existing SVG icon.
+
+For a local test setup, put a local-only P-256 VAPID pair in gitignored `.dev.vars`:
+`VAPID_PUBLIC_KEY` is the base64url uncompressed 65-byte public point and
+`VAPID_PRIVATE_KEY` is the base64url JWK `d` scalar. Public config exposes only the
+public key; blank public config disables Enable. Use separate approved staging and
+production pairs; never commit/log private keys or put secret values on argv.
+`APP_BASE_URL` is the VAPID contact URI. Registration/delivery tests use generated
+fixture keys and mock all providers; the provider-free UI fixture keeps push disabled.
+
+The exact `@block65/webcrypto-web-push@2.0.0` pin (published 2026-09-03) has local
+workerd encryption/decryption and VAPID signature proof. Actual push-service and
+installed iOS delivery, platform icon rendering, production CPU/free-tier fit and
+private-IP/DNS-rebinding blocking remain **UNVERIFIED**. The strict service-origin
+allowlist and manual redirects are application controls, not proof of platform
+SSRF immunity. No VAPID/provider/account changes were performed by this feature.
 
 ## Validation
 
