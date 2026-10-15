@@ -53,11 +53,11 @@ it('uses Unicode-safe initials and identity/version-specific same-origin image p
   expect(photo).not.toMatch(/blob:|r2\.dev|Authorization/)
 })
 
-it('renders labeled Account Change/Choose/Remove controls in one native neutral-style sheet with initials fallback', () => {
+it('renders labeled Account Change/Choose/Remove controls in a native neutral-style sheet with initials fallback', () => {
   const fetch = vi.spyOn(globalThis,'fetch')
   const markup = render(createElement(AccountPage),{version:null})
   for(const copy of ['Profile photo','Change photo','Choose a photo','Remove photo','Save photo','Only you and people who share an active cache','Initials when there is none'])expect(markup).toContain(copy)
-  expect(markup.match(/<dialog\b/g)).toHaveLength(1)
+  expect(markup.match(/<dialog\b/g)).toHaveLength(2)
   expect(markup).toContain('aria-labelledby="profile-photo-heading"')
   expect(markup).toContain('aria-haspopup="dialog"')
   expect(markup).toContain('aria-controls="profile-photo-sheet"')

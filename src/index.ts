@@ -1,6 +1,7 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile, ownContact, saveContact, removeContact, requestContact } from './db'
+import { contactInput } from './contacts'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto, serveProfilePhoto } from './photos'
@@ -97,15 +98,16 @@ async function dispatch(request: Request, env: Env) {
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
   const libraryRoute = path.match(/^\/api\/me\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?)?$/i)
   const profilePhotoRoute = path.match(/^\/api\/users\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/photo$/i)
-  const ownRequestRoute = path.match(/^\/api\/me\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
+  const ownRequestRoute = path.match(/^\/api\/me\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject|contact)$/i)
+  const ownContactRoute = path === '/api/me/contact' || path === '/api/me/contact/preview'
   // UUIDs are case-insensitive; SQLite text keys are not.
   for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute, ownRequestRoute, profilePhotoRoute]) {
     if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
   }
   const ownPhoto = path === '/api/me/photo'
   const photoRoute = ownPhoto || !!profilePhotoRoute || itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
-  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute && !ownPhoto && !profilePhotoRoute) throw new HttpError(404, 'not_found')
-  const methods = ownPhoto ? ['GET','POST','DELETE'] : profilePhotoRoute ? ['GET'] : libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
+  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute && !ownPhoto && !profilePhotoRoute && !ownContactRoute) throw new HttpError(404, 'not_found')
+  const methods = ownContactRoute ? (path.endsWith('/preview') ? ['POST'] : ['GET','PUT','DELETE']) : ownRequestRoute?.[2] === 'contact' ? ['GET'] : ownPhoto ? ['GET','POST','DELETE'] : profilePhotoRoute ? ['GET'] : libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
     : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute || ownRequestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
@@ -117,12 +119,25 @@ async function dispatch(request: Request, env: Env) {
     : cacheRoute?.[2] === '/join' ? 'join'
     : cacheRoute?.[3] ? 'join_decision'
     : itemRoute?.[3] === '/requests' ? 'request'
-    : requestRoute || ownRequestRoute ? 'request_decision' : null
+    : requestRoute || (ownRequestRoute && ownRequestRoute[2] !== 'contact') ? 'request_decision' : null
   if (writeRoute) {
     if (!session.user.emailVerified) throw new HttpError(401, 'unauthorized')
     await requireWriteLimit(env.DB, profile.id, writeRoute)
   }
   if (ownPhoto || profilePhotoRoute) return serveProfilePhoto(request,env,profilePhotoRoute?.[1] ?? profile.id,profile.id)
+  if (ownContactRoute) {
+    if (path.endsWith('/preview')) return json({ contact: contactInput(await readBody(request)) })
+    if (method === 'GET') return json({ contact: await ownContact(env.DB, profile.id) })
+    if (method === 'DELETE') {
+      if (request.body) await readBody(request)
+      await removeContact(env.DB, profile.id)
+      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+    }
+    const contact = contactInput(await readBody(request))
+    await saveContact(env.DB, profile.id, contact)
+    return json({ contact })
+  }
+  if (ownRequestRoute?.[2] === 'contact') return json({ contact: await requestContact(env.DB, ownRequestRoute[1], profile.id) })
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
     const body = await readBody(request)

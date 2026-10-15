@@ -69,6 +69,8 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_available') return 'Choose whether this item is available.'
   if (error.code === 'insufficient_stock') return 'There is not enough available stock. The item and requests have been refreshed.'
   if (error.code === 'request_not_pending') return 'This request has already been decided. The list has been refreshed.'
+  if (error.code === 'invalid_contact') return 'Enter a valid phone number, platform username or chosen email address, not a URL.'
+  if (error.code === 'invalid_approval_message') return 'Keep the approval message within 500 characters.'
   if (error.code === 'invalid_reason') return 'Give a rejection reason between 1 and 500 characters.'
   if (error.code === 'invalid_photo_type' || error.code === 'invalid_photo') return "Couldn't read that image, try another JPEG, PNG or WebP."
   if (error.code === 'photo_too_large') return 'That photo is too large. Try a smaller image (maximum 5 MB after resizing).'
