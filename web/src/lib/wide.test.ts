@@ -38,21 +38,22 @@ function render(element: ReactElement, options: { caller?: string | null; path?:
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('keeps the phone icon navigation and adds hidden-until-lg inline navigation with an active Requests tab', () => {
+it('uses a shared profile menu on phone and desktop rather than tabs or a Requests icon', () => {
   const markup = render(createElement(AppHeader), { path: '/requests', route: '/requests' })
-  const desktop = markup.match(/<nav aria-label="Desktop navigation"[^>]*>[\s\S]*?<\/nav>/)![0]
-  expect(desktop).toContain('class="hidden lg:flex')
-  expect(desktop).toContain('href="/"')
-  expect(desktop).toMatch(/<a(?=[^>]*href="\/requests")(?=[^>]*aria-current="page")[^>]*>/)
-  expect(desktop).toContain('1 pending incoming requests on the first page')
-  expect(markup).toContain('aria-label="Main navigation" class="flex items-center gap-1.5 lg:hidden"')
+  expect(markup).toContain('aria-label="Home"')
+  expect(markup).toContain('hidden lg:inline lg:text-[17px]')
+  expect(markup).toContain('aria-haspopup="menu"')
+  expect(markup).toContain('aria-expanded="false"')
+  expect(markup).toMatch(/<a(?=[^>]*href="\/requests")(?=[^>]*aria-current="page")(?=[^>]*role="menuitem")[^>]*>/)
+  expect(markup).not.toContain('Desktop navigation')
+  expect(markup).not.toContain('Main navigation')
   expect(markup).toContain('lg:max-w-[1120px]')
   expect(markup).not.toContain('private@example.test')
 })
 
-it('adds cache cards and the sidebar at lg while keeping one native create dialog and form', () => {
+it('keeps full-width cache cards at lg with one native create dialog and no request sidebar', () => {
   const markup = render(createElement(HomePage))
-  expect(markup).toContain('lg:grid-cols-[minmax(0,1fr)_340px]')
+  expect(markup).not.toContain('lg:grid-cols-[minmax(0,1fr)_340px]')
   expect(markup).toContain('lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]')
   expect(markup).toContain('hidden lg:flex lg:size-10')
   expect(markup).toContain('cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6')
@@ -98,8 +99,8 @@ it('adds a hidden sticky settings menu with only authorized sections and matchin
 it('places existing request groups side by side and account sections in labeled wide rows without duplicate actions', () => {
   const requests = render(createElement(RequestsPage))
   expect(requests).toContain('contents lg:grid lg:grid-cols-2')
-  expect(requests).toContain('aria-label="Incoming"')
-  expect(requests).toContain('aria-label="Outgoing"')
+  expect(requests).toContain('aria-label="Needs your answer"')
+  expect(requests).toContain('aria-label="Your requests"')
   expect(requests.match(/>Approve request from Priya<\/button>/g)).toHaveLength(1)
   const account = render(createElement(AccountPage))
   expect(account).toContain('cc-page lg:max-w-[880px]')
