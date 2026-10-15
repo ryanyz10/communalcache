@@ -10,6 +10,7 @@ import { HttpError, json, readBody, requireOrigin } from './http'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
+import { requireTurnstile } from './turnstile'
 
 const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
@@ -59,6 +60,7 @@ async function dispatch(request: Request, env: Env) {
         request = new Request(request, { body: JSON.stringify(input) })
       }
     }
+    if (path === '/api/auth/sign-in/magic-link' || path === '/api/auth/email-otp/send-verification-otp') await requireTurnstile(request, env, 'signin')
     const delivery: DeliveryResult = { status: 'not_called' }
     const response = await createAuth(env, delivery, path).handler(request)
     if ((path.endsWith('/send-verification-otp') || path === '/api/auth/sign-in/magic-link') && delivery.status === 'failed') {
@@ -90,6 +92,7 @@ async function dispatch(request: Request, env: Env) {
       app_base_url: env.APP_BASE_URL,
       better_auth_url: env.BETTER_AUTH_URL,
       vapid_public_key: env.VAPID_PUBLIC_KEY,
+      turnstile_site_key: env.TURNSTILE_SITE_KEY,
     })
   }
   const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/leave|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
@@ -202,6 +205,7 @@ async function dispatch(request: Request, env: Env) {
   if (path === '/api/caches') {
     const changes = cacheChanges(await readBody(request))
     if (changes.name === undefined) throw new HttpError(400, 'invalid_name')
+    await requireTurnstile(request, env, 'create_cache')
     return json(await createCache(env.DB, profile.id, changes.name, changes.requires_approval ?? false), 201)
   }
   const cacheId = cacheRoute![1], action = cacheRoute![2]

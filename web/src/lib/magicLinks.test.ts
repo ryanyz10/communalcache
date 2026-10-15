@@ -79,12 +79,12 @@ it('reads a fragment locally and only an explicit verification call POSTs its to
 
 it('carries a strict invite callback through the sign-in link while keeping OTP requests free of invite data', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ success: true, callback_url: 'https://communalcache.com/' }))
-  await sendSignInEmail(' own@example.test ', 'link', invite)
+  await sendSignInEmail(' own@example.test ', 'link', invite, 'bot-token')
   expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/sign-in/magic-link', expect.objectContaining({ body: JSON.stringify({ email: 'own@example.test', callbackURL: `/join/${invite}` }) }))
   expect(peekJoinToken()).toBe(invite)
   await verifyMagicLink(readMagicLink(`#token=${token}`)!)
   expect(destinationAfterLogin()).toBe(`/join/${invite}`)
-  await sendSignInEmail('own@example.test', 'code', invite)
+  await sendSignInEmail('own@example.test', 'code', invite, 'bot-token')
   expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/email-otp/send-verification-otp', expect.objectContaining({ body: JSON.stringify({ email: 'own@example.test', type: 'sign-in' }) }))
   expect(JSON.stringify(fetchMock.mock.calls.at(-1))).not.toContain(invite)
   expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).callbackURL).toBe(`/join/${invite}`)
@@ -103,7 +103,7 @@ it('keeps valid invite callbacks ahead of storage while preserving existing gene
 
 it('offers resend/code recovery after verification or delivery errors without dropping a saved invite', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'email_unavailable' }, { status: 502 }))
-  await expect(sendSignInEmail('own@example.test', 'link', invite)).rejects.toMatchObject({ status: 502 })
+  await expect(sendSignInEmail('own@example.test', 'link', invite, 'bot-token')).rejects.toMatchObject({ status: 502 })
   expect(peekJoinToken()).toBe(invite)
   fetchMock.mockResolvedValue(Response.json({ error: 'invalid_magic_link' }, { status: 400 }))
   await expect(verifyMagicLink(readMagicLink(`#token=${token}`)!)).rejects.toMatchObject({ code: 'invalid_magic_link' })

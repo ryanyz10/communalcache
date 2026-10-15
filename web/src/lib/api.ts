@@ -14,13 +14,18 @@ export class ApiError extends Error {
 
 export type Me = { id: string; email: string; display_name: string | null; profile_photo_version?: string | null }
 
-type ApiOptions = { method?: string; body?: unknown }
+type ApiOptions = { method?: string; body?: unknown; turnstileToken?: string }
+
+export function turnstileHeaders(token: string) {
+  if (!token.trim() || token.length > 2048) throw new ApiError(403, 'turnstile_failed')
+  return { 'X-Turnstile-Token': token }
+}
 
 export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   const res = await fetch(path, {
     method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
     credentials: 'same-origin',
-    headers: { Accept: 'application/json', ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { Accept: 'application/json', ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.turnstileToken !== undefined ? turnstileHeaders(opts.turnstileToken) : {}) },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
   if (!res.ok) {
@@ -49,6 +54,7 @@ export function errorMessage(error: unknown) {
   }
   if (error.code === 'limits_unavailable') return 'Could not check the limits. Please try again later.'
   if (error.status === 429) return error.retryAfter ? `Too many tries. Please wait ${error.retryAfter} seconds and try again.` : 'Too many tries. Please wait a minute and try again.'
+  if (error.code === 'turnstile_failed') return 'Bot check failed or expired. Please complete the new check and try again.'
   if (error.code === 'email_unavailable') return 'Could not send the sign-in email. Your invite is saved; please try again.'
   if (error.code === 'invalid_magic_link') return 'That sign-in link is invalid, expired or already used. Request a new link or use an email code.'
   if (error.code === 'invalid_callback') return 'That sign-in destination is not allowed. Request a new link from this app.'
