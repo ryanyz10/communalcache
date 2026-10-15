@@ -16,6 +16,7 @@ async function profile(email: string) {
 }
 async function fixture() {
   const owner = await profile('owner@example.test'), member = await profile('member@example.test'), outsider = await profile('outsider@example.test')
+  await env.DB.prepare("UPDATE user SET plan='plus' WHERE id=?").bind(member.id).run()
   const first = await createCache(env.DB,member.id,'Tools',false), second = await createCache(env.DB,member.id,'Pantry',false)
   for (const cache of [first,second]) await joinCache(env.DB,cache.id,owner.id,cache.invite_token.split('.')[1])
   const item = await createItem(env.DB,owner.id,itemChanges({title:'Mixer',is_consumable:false},true),first.id)

@@ -50,7 +50,7 @@ it('enforces owner/status/boolean/FK constraints and rolls creation back on depe
   await expect(env.DB.prepare('INSERT INTO memberships VALUES (?,?,\'member\',\'active\',1,NULL)').bind(cache.id, 'missing').run()).rejects.toThrow()
   await expect(env.DB.prepare('UPDATE caches SET requires_approval=2 WHERE id=?').bind(cache.id).run()).rejects.toThrow()
   await env.DB.exec("CREATE TRIGGER fail_owner BEFORE INSERT ON memberships WHEN NEW.role='owner' BEGIN SELECT RAISE(ABORT,'injected owner failure'); END")
-  await expect(createCache(env.DB, owner, 'Lost', false)).rejects.toThrow('injected owner failure')
+  await expect(createCache(env.DB, second, 'Lost', false)).rejects.toThrow('injected owner failure')
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM caches').first('n')).toBe(1)
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM memberships').first('n')).toBe(1)
 })

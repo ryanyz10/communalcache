@@ -13,6 +13,7 @@ async function user(name = 'Neighbor') {
 
 it('returns own unshared and multi-cache items with active cache names, shared stock and all-cache pending counts, never requester identities', async () => {
   const owner = await user(), neighbor = await user(), outsider = await user()
+  await env.DB.prepare("UPDATE user SET plan='plus' WHERE id=?").bind(owner).run()
   const a = await createCache(env.DB,owner,'Maple Street',false), b = await createCache(env.DB,owner,'Garden Club',false)
   for (const cache of [a,b]) await joinCache(env.DB,cache.id,neighbor,cache.invite_token.split('.')[1])
   const item = await createItem(env.DB,owner,itemChanges({title:'Starter',is_consumable:true,quantity:8},true),a.id)

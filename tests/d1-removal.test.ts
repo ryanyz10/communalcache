@@ -16,6 +16,7 @@ async function user(name = 'Neighbor') {
 }
 async function fixture() {
   const owner = await user('Cache owner'), member = await user('Member'), neighbor = await user('Neighbor'), outsider = await user('Outsider')
+  await env.DB.prepare("UPDATE user SET plan='plus' WHERE id=?").bind(owner).run()
   const a = await createCache(env.DB,owner,'Cache A',false), b = await createCache(env.DB,owner,'Cache B',false)
   for(const cache of [a,b])for(const id of [member,neighbor])await joinCache(env.DB,cache.id,id,cache.invite_token.split('.')[1])
   const owned = await createItem(env.DB,member,itemChanges({title:'Member sugar',is_consumable:true,quantity:10},true),a.id)

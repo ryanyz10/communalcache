@@ -248,7 +248,7 @@ export default {
     try { return await dispatch(request, env) }
     catch (error) {
       if (error instanceof HttpError) {
-        const response = json({ error: error.code }, error.status)
+        const response = json({ error: error.code, ...(error.limit ? { limit: error.limit } : {}) }, error.status)
         if (error.retryAfter !== undefined) response.headers.set('Retry-After', String(error.retryAfter))
         return response
       }
