@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { HomePage } from './pages/HomePage'
 import { CachePage } from './pages/CachePage'
-import { ItemPage, ItemEditorPage } from './pages/ItemPages'
 import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
 import { MagicLinkPage } from './pages/MagicLinkPage'
@@ -27,19 +26,19 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Ready>
-          <AppHeader />
+          <AppHeader itemsMoving />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/link" element={<MagicLinkPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/" element={<HomePage />} />
-            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/requests" element={<RequestsPage itemsMoving />} />
             <Route path="/account" element={<AccountPage />} />
-            <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
-            <Route path="/caches/:cacheId" element={<CachePage />} />
-            <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
-            <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
-            <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
+            <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage removalDisabled />} />
+            <Route path="/caches/:cacheId" element={<CachePage itemsMoving />} />
+            <Route path="/caches/:cacheId/items/new" element={<CachePage itemsMoving />} />
+            <Route path="/caches/:cacheId/items/:itemId" element={<CachePage itemsMoving />} />
+            <Route path="/caches/:cacheId/items/:itemId/edit" element={<CachePage itemsMoving />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Ready>

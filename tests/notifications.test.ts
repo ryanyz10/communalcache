@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
 import { createExecutionContext, createMessageBatch, createScheduledController, evictDurableObject, getQueueResult, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test'
 import worker from '../src/index'
-import { claimOutbox, markOutboxSent, recordOutboxFailure } from '../src/db'
+import { claimOutbox, createCache, decideCacheJoin, joinCache, markOutboxSent, recordOutboxFailure } from '../src/db'
 import { deliverNotification, notificationContent, sweepNotifications } from '../src/notifications'
 import { appRequest, login } from './helpers'
 
@@ -308,17 +308,23 @@ it('runs notification recovery even when the registry recovery cursor fails', as
 it('keeps recipient emails off app APIs while delivering through private auth-row lookup', async () => {
   const owner = await login('owner@example.test'), recipient = await user('Private neighbor')
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: owner.cookie, body: { display_name: 'Owner' } }), env)
-  const cacheId = crypto.randomUUID(), stub = env.CACHES.get(env.CACHES.idFromName(cacheId))
-  const info = await stub.create(cacheId, owner.id, 'Pantry', false)
-  await stub.join(recipient, info.invite_token.split('.')[1])
-  const item = await stub.createItem(owner.id, { title: 'Sugar', is_consumable: true, quantity: 2 })
-  await stub.createRequest(recipient, item.id, { quantity: 1 })
-  await stub.flushSync()
-  for (const path of [`/api/caches/${cacheId}`, `/api/caches/${cacheId}/items/${item.id}/requests`, '/api/requests', '/api/caches']) {
+  const info = await createCache(env.DB, owner.id, 'Pantry', true), cacheId = info.id
+  await joinCache(env.DB, cacheId, recipient, info.invite_token.split('.')[1])
+  const decision = await decideCacheJoin(env.DB, cacheId, owner.id, recipient, 'approve')
+  for (const path of [`/api/caches/${cacheId}`, `/api/caches/${cacheId}/join-requests`, '/api/caches']) {
     const response = await worker.fetch(appRequest(path, { cookie: owner.cookie }), env)
     expect(response.status).toBe(200)
     expect(JSON.stringify(await response.json())).not.toContain('example.test')
   }
+  for (const path of [`/api/caches/${cacheId}/items/${crypto.randomUUID()}/requests`, '/api/requests']) {
+    const response = await worker.fetch(appRequest(path, { cookie: owner.cookie }), env)
+    expect(response.status).toBe(503)
+    expect(JSON.stringify(await response.json())).not.toContain('example.test')
+  }
+  const mail = emailMock()
+  mail.mockClear()
+  expect(await deliverNotification(env, decision.notificationId)).toBe('ack')
+  expect(JSON.parse(mail.mock.calls[0][1]!.body as string).to).toEqual([`${recipient}@example.test`])
   expect(await (await worker.fetch(appRequest('/api/me', { cookie: owner.cookie }), env)).json()).toMatchObject({ email: 'owner@example.test' })
   expect((await worker.fetch(appRequest('/api/notifications', { cookie: owner.cookie }), env)).status).toBe(404)
 })

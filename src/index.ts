@@ -1,10 +1,8 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { deletePush, displayNames, getProfile, listMyCaches, savePush, setDisplayName, type Profile } from './db'
+import { cacheDetail, cacheJoinRequests, createCache, decideCacheJoin, deletePush, getProfile, joinCache, listMyCaches, savePush, setDisplayName, updateCache, type Profile } from './db'
 import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
-import { readPhoto } from './photos'
-import { aggregateRequests, enrichRequests } from './requests'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
@@ -108,11 +106,11 @@ async function dispatch(request: Request, env: Env) {
   const profile = await getProfile(env.DB, session.user.id)
   if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
+  // No D1-to-DO membership bridge: these routes reopen with their canonical D1 ports.
+  if (itemRoute || requestRoute || memberRoute || path === '/api/requests') throw new HttpError(503, 'items_moving')
   const writeRoute: WriteRoute | null = method !== 'POST' ? null
     : cacheRoute?.[2] === '/join' ? 'join'
-    : cacheRoute?.[3] ? 'join_decision'
-    : itemRoute?.[3] === '/requests' ? 'request'
-    : requestRoute ? 'request_decision' : null
+    : cacheRoute?.[3] ? 'join_decision' : null
   if (writeRoute) {
     if (!session.user.emailVerified) throw new HttpError(401, 'unauthorized')
     await requireWriteLimit(env.DB, profile.id, writeRoute)
@@ -124,127 +122,53 @@ async function dispatch(request: Request, env: Env) {
     return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
   }
   if (path === '/api/caches' && method === 'GET') return json((await listMyCaches(env.DB, profile.id)).results)
-  try {
-    if (memberRoute) {
-      if (request.body) await readBody(request)
-      await env.CACHES.get(env.CACHES.idFromName(memberRoute[1])).removeMember(profile.id, memberRoute[2])
-      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+  if (path === '/api/push/subscribe') {
+    const body = await readBody(request)
+    if (method === 'DELETE') {
+      if (typeof body.endpoint !== 'string' || !body.endpoint || body.endpoint.length > 2048) throw new HttpError(400, 'invalid_push_endpoint')
+      await deletePush(env.DB, profile.id, body.endpoint)
+    } else {
+      const subscription = await pushSubscription(body).catch(error => {
+        if (error instanceof Error && ['invalid_push_endpoint', 'invalid_push_keys'].includes(error.message)) throw new HttpError(400, error.message)
+        throw error
+      })
+      const result = await savePush(env.DB, profile.id, subscription)
+      if (result.meta.changes === 0) throw new HttpError(409, 'push_limit')
     }
-    if (path === '/api/push/subscribe') {
-      const body = await readBody(request)
-      if (method === 'DELETE') {
-        if (typeof body.endpoint !== 'string' || !body.endpoint || body.endpoint.length > 2048) throw new HttpError(400, 'invalid_push_endpoint')
-        await deletePush(env.DB, profile.id, body.endpoint)
-      } else {
-        const subscription = await pushSubscription(body)
-        const result = await savePush(env.DB, profile.id, subscription)
-        if (result.meta.changes === 0) throw new HttpError(409, 'push_limit')
-      }
-      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
-    }
-    if (path === '/api/requests') {
-      const after = new URL(request.url).searchParams.get('after')
-      if (after !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(after)) throw new HttpError(400, 'invalid_cursor')
-      return json(await aggregateRequests(env, profile.id, after?.toLowerCase() ?? null))
-    }
-    if (requestRoute) {
-      const stub = env.CACHES.get(env.CACHES.idFromName(requestRoute[1]))
-      const result = await stub.decideRequest(profile.id, requestRoute[2], requestRoute[3] as 'approve' | 'reject', await readBody(request))
-      return json((await enrichRequests(env.DB, [result]))[0])
-    }
-    if (path === '/api/caches') {
-      const changes = cacheChanges(await readBody(request))
-      if (changes.name === undefined) throw new HttpError(400, 'invalid_name')
-      const id = crypto.randomUUID()
-      return json(await env.CACHES.get(env.CACHES.idFromName(id)).create(id, profile.id, changes.name, changes.requires_approval ?? false), 201)
-    }
-    if (itemRoute) {
-      const stub = env.CACHES.get(env.CACHES.idFromName(itemRoute[1]))
-      const itemId = itemRoute[2]
-      if (method === 'DELETE') {
-        if (request.body) await readBody(request)
-        await stub.deleteItem(profile.id, itemId)
-        return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
-      }
-      if (itemRoute[3] === '/requests') {
-        if (method === 'GET') return json(await enrichRequests(env.DB, await stub.itemRequests(profile.id, itemId)))
-        const result = await stub.createRequest(profile.id, itemId, await readBody(request))
-        return json((await enrichRequests(env.DB, [result]))[0], 201)
-      }
-      if (photoRoute) {
-        if (method === 'GET') {
-          const key = await stub.photoKey(profile.id, itemId)
-          const object = await env.BUCKET.get(key)
-          if (!object) throw new HttpError(404, 'not_found')
-          return new Response(object.body, { headers: {
-            'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream',
-            'Content-Length': String(object.size),
-            'Cache-Control': 'private, no-store',
-            'X-Content-Type-Options': 'nosniff',
-          } })
-        }
-        const key = await stub.photoUploadKey(profile.id, itemId)
-        const { bytes, contentType } = await readPhoto(request)
-        let attached = false
-        try {
-          await env.BUCKET.put(key, bytes, { httpMetadata: { contentType } })
-          attached = await stub.finishPhotoUpload(profile.id, itemId, key, true)
-        } catch (error) {
-          await stub.finishPhotoUpload(profile.id, itemId, key, false)
-          throw error
-        }
-        if (!attached) throw new HttpError(404, 'not_found')
-        const item = await stub.itemDetail(profile.id, itemId)
-        const names = await displayNames(env.DB, [item.owner_id])
-        return json({ ...item, owner_name: names.get(item.owner_id) ?? null })
-      }
-      if (!itemId && method === 'GET') {
-        const items = await stub.listItems(profile.id)
-        const names = await displayNames(env.DB, [...new Set(items.map(item => item.owner_id))])
-        return json(items.map(item => ({ ...item, owner_name: names.get(item.owner_id) ?? null })))
-      }
-      const item = method === 'POST' ? await stub.createItem(profile.id, await readBody(request))
-        : method === 'PATCH' ? await stub.updateItem(profile.id, itemId, await readBody(request))
-        : await stub.itemDetail(profile.id, itemId)
-      const names = await displayNames(env.DB, [item.owner_id])
-      return json({ ...item, owner_name: names.get(item.owner_id) ?? null }, method === 'POST' ? 201 : 200)
-    }
-    const stub = env.CACHES.get(env.CACHES.idFromName(cacheRoute![1]))
-    const action = cacheRoute![2]
-    if (action === '/join') {
-      const body = await readBody(request)
-      if (typeof body.secret !== 'string') throw new HttpError(400, 'invalid_secret')
-      return json(await stub.join(profile.id, body.secret))
-    }
-    if (action === '/join-requests') {
-      const requests = await stub.joinRequests(profile.id)
-      const names = await displayNames(env.DB, requests.map(member => member.user_id))
-      return json(requests.map(member => ({ ...member, display_name: names.get(member.user_id) ?? null })))
-    }
-    if (cacheRoute![3]) {
-      if (request.body) await readBody(request)
-      return json(await stub.decideJoin(profile.id, cacheRoute![3], cacheRoute![4] as 'approve' | 'reject'))
-    }
-    if (action === '/invite/rotate') {
-      if (request.body) await readBody(request)
-      return json(await stub.rotateInvite(profile.id))
-    }
-    if (method === 'PATCH') return json(await stub.update(profile.id, cacheChanges(await readBody(request))))
-    const detail = await stub.detail(profile.id)
-    const names = await displayNames(env.DB, detail.members.map(member => member.user_id))
-    return json({ ...detail, members: detail.members.map(member => ({ ...member, display_name: names.get(member.user_id) ?? null })) })
-  } catch (error) {
-    // RPC recreates Error objects; use only the stable messages defined by cache RPCs.
-    if (error instanceof Error && error.message === 'not_found') throw new HttpError(404, 'not_found')
-    if (error instanceof Error && error.message === 'cache_exists') throw new HttpError(409, 'cache_exists')
-    if (error instanceof Error && error.message === 'member_removed') throw new HttpError(403, 'member_removed')
-    if (error instanceof Error && error.message === 'join_not_pending') throw new HttpError(409, 'join_not_pending')
-    if (error instanceof Error && error.message === 'quantity_reserved') throw new HttpError(409, 'quantity_reserved')
-    if (error instanceof Error && ['insufficient_stock', 'request_not_pending', 'owner_cannot_be_removed'].includes(error.message)) throw new HttpError(409, error.message)
-    if (error instanceof Error && ['invalid_request_quantity', 'invalid_reason', 'invalid_decision', 'invalid_push_endpoint', 'invalid_push_keys'].includes(error.message)) throw new HttpError(400, error.message)
-    if (error instanceof Error && ['invalid_title', 'invalid_description', 'invalid_is_consumable', 'immutable_is_consumable', 'invalid_quantity', 'invalid_json'].includes(error.message)) throw new HttpError(400, error.message)
-    throw error
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   }
+  if (path === '/api/caches') {
+    const changes = cacheChanges(await readBody(request))
+    if (changes.name === undefined) throw new HttpError(400, 'invalid_name')
+    return json(await createCache(env.DB, profile.id, changes.name, changes.requires_approval ?? false), 201)
+  }
+  const cacheId = cacheRoute![1], action = cacheRoute![2]
+  if (action === '/join') {
+    const body = await readBody(request)
+    if (typeof body.secret !== 'string') throw new HttpError(400, 'invalid_secret')
+    const result = await joinCache(env.DB, cacheId, profile.id, body.secret)
+    await enqueueNotification(env, result.notificationId)
+    return json(result.membership)
+  }
+  if (action === '/join-requests') return json(await cacheJoinRequests(env.DB, cacheId, profile.id))
+  if (cacheRoute![3]) {
+    if (request.body) await readBody(request)
+    const result = await decideCacheJoin(env.DB, cacheId, profile.id, cacheRoute![3], cacheRoute![4] as 'approve' | 'reject')
+    await enqueueNotification(env, result.notificationId)
+    return json({ status: result.status })
+  }
+  if (action === '/invite/rotate') {
+    if (request.body) await readBody(request)
+    return json(await updateCache(env.DB, cacheId, profile.id, {}, true))
+  }
+  if (method === 'PATCH') return json(await updateCache(env.DB, cacheId, profile.id, cacheChanges(await readBody(request))))
+  return json(await cacheDetail(env.DB, cacheId, profile.id))
+}
+
+async function enqueueNotification(env: Env, id: string | null) {
+  if (!id) return
+  try { await env.NOTIFICATIONS.send(id) }
+  catch { console.error('Notification enqueue failed; durable outbox retained') }
 }
 
 function cacheChanges(body: Record<string, unknown>) {
