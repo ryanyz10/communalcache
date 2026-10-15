@@ -41,8 +41,9 @@ function renderJoin(me: Me | null, invite = token) {
 const me = { id: 'caller', email: 'own@example.test', display_name: 'Neighbor' }
 
 it('keeps login and name onboarding on the invite page, then offers a join action', () => {
-  expect(renderJoin(null)).toContain('Your invite stays here while you sign in.')
-  expect(renderJoin(null)).toContain('Send code')
+  expect(renderJoin(null)).toContain('Your invite stays in this tab while you sign in.')
+  expect(renderJoin(null)).toContain('Email me a sign-in link')
+  expect(renderJoin(null)).toContain('Email me a code instead')
   expect(renderJoin({ ...me, display_name: null })).toContain('What should neighbors call you?')
   expect(renderJoin(me)).toContain('Join cache')
   expect(renderJoin(me, 'bad-token')).toContain('Invalid invite link')

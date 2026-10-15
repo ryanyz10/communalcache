@@ -73,6 +73,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 7 | Web push + PWA | Implemented; in review (local crypto/storage/PWA proof; live push/iOS UNVERIFIED) | — |
 | 8 | Member removal and item deletion | Implemented; in review (atomic cascades, durable D1/R2/outbox cleanup; no deployment) | — |
 | 9 | Polish | Implemented locally (D1 write budgets, accessible/error states, monitoring/runbook; release proof pending) | — |
+| — | Magic-link sign-in | Implemented locally (link-only primary, explicit code fallback, scanner-safe Continue; live mail/mobile proof pending) | — |
 
 ---
 
@@ -157,11 +158,12 @@ Better Auth 1.7.7 awaits but catches delivery callback errors; per-request closu
 state maps HTTP failure/timeout to generic JSON 502 without changing a rate-limited
 response. Tests prove concurrent send results cannot leak between requests.
 
-**Planned auth follow-up:** magic-link plugin with hashed 300s tokens, exact-origin
-callbacks and a scanner-safe SPA Continue button; no verification on page load.
-One email containing link + code is the goal, but combined challenge coordination
-is UNVERIFIED and needs its own tests. SMS/phone plugin is deferred, not Foundation
-or Features 1–9; it needs an SMS provider, registration/compliance and pumping controls.
+**Auth follow-up implemented locally:** primary sign-in sends a link-only email;
+“Email me a code instead” explicitly sends the existing OTP fallback. This
+user-approved decision replaces the combined link+code goal. Hashed 300s magic
+links use a fragment-token `/auth/link` landing page and explicit Continue; page
+load never verifies. See the [magic-link follow-up](#magic-link-sign-in) below.
+SMS/phone remains deferred and requires separate provider/compliance approval.
 
 ---
 
@@ -610,3 +612,41 @@ request, Queue-driven notification email, authorized image stream, installed iOS
 push, alarm/Queue/Cron recovery,
 migration-compatible Worker update, and rollback procedure. Legacy production
 stays live until approved cutover; no teardown is bundled into this feature.
+
+---
+
+## Magic-link sign-in
+
+**Goal:** one link-only sign-in email by default, with an explicit six-digit code
+fallback (“Email me a code instead”). No combined email or cross-invalidation
+promise; links and OTPs remain independent, short-lived challenges.
+
+Pinned Better Auth 1.7.7 options/source are reviewed directly: `expiresIn: 300`,
+`storeToken: 'hashed'`, default single atomic consumption, five requests per
+60 seconds for send and verify. Its `magic-link:<hash>` identifiers are disjoint
+from migration 0003's `sign-in-otp-*` unique index, so no migration is required.
+The OTP workaround, limits, hashed storage, rotation and three attempts remain.
+
+The email links to fixed-origin `/auth/link#token=...`; no bearer token reaches
+incoming URL logs. Landing responses add no-referrer/no-store, and the UI captures
+then removes the fragment from history. Only Continue POSTs JSON to the app auth
+verification route. Public GET verify is 405. An internal HTTP-handler adaptation
+to the plugin's GET-only endpoint preserves D1 rate limiting without a server-API
+bypass or external fetch. Redirects become JSON; session cookies survive success,
+and failure remains on the landing page with new-link/code recovery. Send awaits
+10s-bounded Resend HTTP and uses the request-local delivery result for JSON 502.
+
+Normalize callback/new-user/error URLs against fixed APP_BASE_URL and reject
+foreign/protocol-relative/credential-bearing callbacks. Signup/profile/CSRF/privacy
+rules remain. Saved invites stay in sessionStorage, not callbacks/mail; same-tab
+Continue resumes them. A fresh browser needs no requesting-browser state to verify,
+but must reopen the invite there (or use the code fallback in the original tab).
+A resend does not revoke other outstanding links; use newest-link copy is guidance.
+
+Proof: local real-D1 scanner GET/HEAD, single/concurrent Continue/session, replay,
+expiry, consumed-token failure, Origin/callback rejection, D1-backed 5/60s limits,
+Resend failure/timeout, code fallback and successful join after onboarding. UI
+checks link-primary/code-secondary controls, no verification on render and preserved
+pending joins. Whole completion gates and all three dry-run bundles are required.
+No provider/network delivery, deployment, resource change or dependency upgrade is
+part of this implementation; live email/mobile handoff remains approval-gated.
