@@ -74,7 +74,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 8 | Member removal and item deletion | Implemented; in review (atomic cascades, durable D1/R2/outbox cleanup; no deployment) | — |
 | 9 | Polish | Implemented locally (D1 write budgets, accessible/error states, monitoring/runbook; release proof pending) | — |
 | — | Magic-link sign-in | Implemented locally (link-only primary, explicit code fallback, scanner-safe Continue; live mail/mobile proof pending) | — |
-| — | Frontend redesign | Implemented locally (mocks 5a–5e: header, home/create sheet, Account, cache/settings; name-only discovery, no Your items API; visual review pending) | — |
+| — | Frontend redesign | Implemented locally (5a–5e signed-in pages; 6a–6f sign-in/link/code/name/invite screens, one native OTP input; auth behavior unchanged; visual review pending) | — |
 
 ---
 
