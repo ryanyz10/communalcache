@@ -34,7 +34,7 @@ it('renders caller library cards, names, shared stock, pending asks, private pho
   for (const copy of ['Your items','+ New item','Sugar','Maple Street, Garden Club','Lent out','8 to give away','2 pending asks','Not in a cache yet','Load more items']) expect(markup).toContain(copy)
   expect(markup).toContain(`/items/${item.id}`)
   expect(markup).toContain(`/api/me/items/${item.id}/photo?v=version`)
-  expect(markup).toContain('lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]')
+  expect(markup).toContain('cc-card-grid')
   expect(markup).not.toContain('/api/caches/null')
   expect(markup).not.toContain('private@example.test')
 })

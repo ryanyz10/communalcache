@@ -116,14 +116,14 @@ export function RequestsPage() {
   if (!me.display_name) return <OnboardingPage />
   const requests = query.data?.pages.flatMap(page => page.requests) ?? []
   const unavailable = query.data?.pages.flatMap(page => page.unavailable_cache_ids) ?? []
-  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
+  return <main className="cc-page">
     <h1 className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Requests</h1>
     {ownContact.isSuccess && !ownContact.data.contact && <aside className="mt-4 rounded-lg border border-slate-200 p-4"><h2 className="font-semibold">Add how to reach you</h2><p className="mt-1 text-sm text-slate-600">The other person sees it after approval, while you're both active in that cache.</p><Link to="/account" className="mt-2 inline-block underline">Add contact</Link></aside>}
     {query.isPending && <p role="status" className="mt-4">Loading requests…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)} Some requests may be unavailable.</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try requests again</button></div>}
     {!!unavailable.length && <div className="mt-4"><p role="alert" className="text-amber-800">Requests from {unavailable.length} cache(s) could not be loaded. These lists are incomplete.</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try unavailable caches again</button></div>}
     {query.data && <>
-      <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+      <div className="cc-requests-layout contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       {([
         { heading: 'Needs your answer', rows: requests.filter(request => request.owner_id === me.id && request.status === 'pending'), empty: 'No requests need your answer in the loaded results.' },
         { heading: 'Answered for your things', rows: requests.filter(request => request.owner_id === me.id && request.status !== 'pending'), empty: 'No answered requests for your things in the loaded results.' },
