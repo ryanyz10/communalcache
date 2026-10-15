@@ -104,6 +104,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
 | Readiness 9 | Supporter tips link | not started — needs owner setup; hosted link only, hidden until configured, no webhooks/app storage/unlocks |
+| Readiness | Signed-out landing page | Implemented; in review: public `/` uses the cozy landing mock and shared pixel art, centralized copy/metadata and sign-in CTAs. Session resolution gates rendering; signed-in Home and invite/magic-link paths are unchanged. No new dependencies or public cache data. |
 | Gate 10 | Full user-flow parity and cleanup refactor | not started — final release scope, regression-backed cleanup and phone/wide/theme/accessibility/error checklist |
 | Gate 11 | Independent security review | not started — independent reviewer, exact revision/scope, findings fixed or explicitly accepted; not a CI-only signoff |
 | Gate 12 | Explicit release approval | not started — owner-approved revision/environment/features after parity and security; external setup, destructive retirement/reset and legacy cutover approvals remain separate |
@@ -593,6 +594,22 @@ External payment provider storage is not an app payment ledger.
 app identity/query leakage; clicking cannot mutate D1 or entitlement state.
 After owner setup, manually verify the configured destination without making an
 unapproved payment. Do not provision payment products or providers automatically.
+
+### Signed-out landing page
+
+Public `/` introduces Communal Cache using `cozy-landing.tsx`: box mark/header,
+hero and sign-in/invite CTAs, decorative horizon, three how-it-works cards, four
+community promises and footer CTA. It reuses cozy system palettes, shared PixelArt
+and reduced-motion behavior; cards become three columns at 1024px. New copy and
+root title/description live in `web/src/lib/landingCopy.ts` for later review.
+
+Wait for the existing session gate before showing landing or Home. `/login`
+remains sign-in, and the invite CTA adds only an explanation on `/login?invite=1`;
+real `/join/:token` and `/auth/link` flows remain unchanged. The page has no public
+cache/item data, remote assets or new authentication mechanism. Routing/copy tests
+use the real route table and cover pending/error, signed-out/in, onboarding,
+invite and explicit magic-link Continue states. Fixture screenshots cover phone
+and wide layouts in both palettes; they remain mock-API presentation proof.
 
 ### Gate 10 — Full user-flow parity checklist and cleanup refactor
 

@@ -663,6 +663,15 @@ its accessible Home name and focus/tap behavior. Ship a matching SVG favicon,
 safe areas. Verify actual theme contrast, icon cropping and light/dark rendering,
 not just asset filenames or mock screenshots. No per-plan theme picker is added.
 
+### Signed-out landing page
+
+After session resolution, signed-out `/` shows the approved cozy landing page:
+introductory copy, sign-in/invite CTAs, decorative shared pixel art, how-it-works
+cards and community promises. Signed-in `/` stays Home; `/login`, actual invite
+links and magic-link Continue retain their existing flows. Landing copy and root
+metadata are centralized for review. No public directory, data access, additional
+auth provider or dependency is introduced.
+
 ### Owner-setup features — deferred until configured
 
 These are **needs owner setup**, ordered last among feature work, before final

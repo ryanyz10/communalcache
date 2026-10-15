@@ -16,38 +16,39 @@ import { AppHeader } from './components/AppHeader'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
-function Ready({ children }: { children: ReactNode }) {
+export function Ready({ children }: { children: ReactNode }) {
   const { ready, error } = useAuth()
   if (!ready) return <main className="mx-auto max-w-md px-4 py-12"><p role="status" className="text-slate-600">Starting…</p></main>
   if (error) return <main className="mx-auto max-w-md px-4 py-12"><p role="alert" className="text-red-700">{error}</p><button onClick={() => location.reload()} className="mt-4 underline">Try again</button></main>
   return children
 }
 
+export function AppRoutes() {
+  return <Routes>
+    <Route path="/login" element={<LoginPage />} />
+    <Route path="/auth/link" element={<MagicLinkPage />} />
+    <Route path="/join/:token" element={<JoinPage />} />
+    <Route path="/" element={<HomePage />} />
+    <Route path="/requests" element={<RequestsPage />} />
+    <Route path="/items" element={<LibraryPage />} />
+    <Route path="/items/new" element={<ItemEditorPage />} />
+    <Route path="/items/:itemId" element={<ItemPage />} />
+    <Route path="/items/:itemId/edit" element={<ItemEditorPage editing />} />
+    <Route path="/account" element={<AccountPage />} />
+    <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
+    <Route path="/caches/:cacheId" element={<CachePage />} />
+    <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
+    <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
+    <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>
+}
+
 export default function App() {
   return <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <BrowserRouter>
-        <Ready>
-          <AppHeader />
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/auth/link" element={<MagicLinkPage />} />
-            <Route path="/join/:token" element={<JoinPage />} />
-            <Route path="/" element={<HomePage />} />
-            <Route path="/requests" element={<RequestsPage />} />
-            <Route path="/items" element={<LibraryPage />} />
-            <Route path="/items/new" element={<ItemEditorPage />} />
-            <Route path="/items/:itemId" element={<ItemPage />} />
-            <Route path="/items/:itemId/edit" element={<ItemEditorPage editing />} />
-            <Route path="/account" element={<AccountPage />} />
-            <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
-            <Route path="/caches/:cacheId" element={<CachePage />} />
-            <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
-            <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
-            <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Ready>
+        <Ready><AppHeader /><AppRoutes /></Ready>
       </BrowserRouter>
     </AuthProvider>
   </QueryClientProvider>
