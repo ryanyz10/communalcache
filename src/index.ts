@@ -1,6 +1,7 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, decideCacheJoin, deletePush, getProfile, itemDetail, joinCache, libraryItems, listMyCaches, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deletePush, getProfile, itemDetail, itemRequests, joinCache, libraryItems, listMyCaches, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
+import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto } from './photos'
 import { sweepPhotoCleanup } from './cleanup'
@@ -97,26 +98,28 @@ async function dispatch(request: Request, env: Env) {
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
   const libraryRoute = path.match(/^\/api\/me\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?)?$/i)
+  const ownRequestRoute = path.match(/^\/api\/me\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   // UUIDs are case-insensitive; SQLite text keys are not.
-  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute]) {
+  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute, ownRequestRoute]) {
     if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
   }
   const photoRoute = itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
-  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute) throw new HttpError(404, 'not_found')
+  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute) throw new HttpError(404, 'not_found')
   const methods = libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
-    : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+    : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute || ownRequestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   const profile = await getProfile(env.DB, session.user.id)
   if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
-  // Requests and destructive cascades reopen only with their D1 protocol proofs.
-  if (requestRoute || memberRoute || path === '/api/requests' || itemRoute?.[3] === '/requests'
-    || (method === 'DELETE' && (itemRoute || libraryRoute))) throw new HttpError(503, 'items_moving')
+  // Destructive cascades reopen only with PR 5's complete snapshot/race proofs.
+  if (memberRoute || (method === 'DELETE' && (itemRoute || libraryRoute))) throw new HttpError(503, 'items_moving')
   const writeRoute: WriteRoute | null = method !== 'POST' ? null
     : cacheRoute?.[2] === '/join' ? 'join'
-    : cacheRoute?.[3] ? 'join_decision' : null
+    : cacheRoute?.[3] ? 'join_decision'
+    : itemRoute?.[3] === '/requests' ? 'request'
+    : requestRoute || ownRequestRoute ? 'request_decision' : null
   if (writeRoute) {
     if (!session.user.emailVerified) throw new HttpError(401, 'unauthorized')
     await requireWriteLimit(env.DB, profile.id, writeRoute)
@@ -126,6 +129,20 @@ async function dispatch(request: Request, env: Env) {
     const body = await readBody(request)
     if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
     return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
+  }
+  if (path === '/api/requests') return json(await requestsPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
+  if (requestRoute || ownRequestRoute) {
+    const requestId = requestRoute?.[2] ?? ownRequestRoute![1]
+    const action = (requestRoute?.[3] ?? ownRequestRoute![2]) as 'approve' | 'reject'
+    const result = await decideRequest(env.DB, requestId, profile.id, action, decisionInput(await readBody(request), action), requestRoute?.[1] ?? null)
+    await enqueueNotification(env, result.notificationId)
+    return json(result.request)
+  }
+  if (itemRoute?.[3] === '/requests') {
+    if (method === 'GET') return json(await itemRequests(env.DB, itemRoute[2], itemRoute[1], profile.id))
+    const result = await createRequest(env.DB, itemRoute[2], itemRoute[1], profile.id, requestQuantity(await readBody(request)))
+    await enqueueNotification(env, result.notificationId)
+    return json(result.request, 201)
   }
   if (libraryRoute || itemRoute) {
     const cacheId = itemRoute?.[1] ?? null, itemId = itemRoute?.[2] ?? libraryRoute?.[1]

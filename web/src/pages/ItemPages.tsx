@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheDetail } from '../lib/caches'
 import type { Item } from '../lib/items'
+import { invalidateRequestViews } from '../lib/requests'
 import { OnboardingPage } from './OnboardingPage'
 import { ItemPhoto, PhotoUpload } from './ItemPhoto'
 import { ItemRequests } from './RequestsPage'
@@ -23,7 +24,7 @@ export function ItemList({ cacheId }: { cacheId: string }) {
       <Link to={`/caches/${cacheId}/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:block lg:h-full lg:overflow-hidden lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-0">
         <ItemPhoto key={item.photo_version} item={item} thumbnail />
         <div className="min-w-0 flex-1 lg:px-3.5 lg:py-3"><h3 className="break-words font-semibold">{item.title}</h3>
-        <p className="text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p></div><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:hidden">›</span>
+        <p className="text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p>{item.available === false && <p className="mt-1 text-sm text-slate-600">Lent out{item.unavailable_note ? ` · ${item.unavailable_note}` : ''}</p>}</div><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:hidden">›</span>
       </Link>
     </li>)}<li className="hidden lg:block"><Link to={`/caches/${cacheId}/items/new`} className="lg:flex lg:h-full lg:min-h-[120px] lg:items-center lg:justify-center lg:rounded-[14px] lg:border-2 lg:border-dashed lg:border-slate-300 lg:font-semibold lg:text-slate-600">+ Add item</Link></li></ul> : <p className="mt-4 text-slate-600">Nothing shared yet. Add the first item for your neighbors.</p>)}
     {query.isSuccess && !query.data.length && <Link to={`/caches/${cacheId}/items/new`} className="hidden lg:mt-4 lg:flex lg:min-h-[120px] lg:items-center lg:justify-center lg:rounded-[14px] lg:border-2 lg:border-dashed lg:border-slate-300 lg:font-semibold lg:text-slate-600">+ Add item</Link>}
@@ -58,7 +59,27 @@ function DeleteItem({ item }: { item: Item }) {
   </>
 }
 
-export function ItemPage({ requestsDisabled = false, deletionDisabled = false }: { requestsDisabled?: boolean; deletionDisabled?: boolean }) {
+function ItemAvailability({ item }: { item: Item }) {
+  const client = useQueryClient()
+  const [lentOut, setLentOut] = useState(item.available === false)
+  const [note, setNote] = useState(item.unavailable_note ?? '')
+  const noteTooLong = [...note.trim()].length > 200
+  const save = useMutation({
+    mutationFn: () => apiFetch(`/api/me/items/${item.id}`, { method: 'PATCH', body: { available: !lentOut, unavailable_note: note.trim() || null } }),
+    onSettled: () => invalidateRequestViews(client),
+  })
+  function submit(event: FormEvent) { event.preventDefault(); if (!noteTooLong) save.mutate() }
+  return <form className="mt-6 space-y-3" onSubmit={submit} aria-label="Item availability">
+    <label className="flex items-center gap-3"><input type="checkbox" checked={lentOut} disabled={save.isPending} onChange={event => setLentOut(event.target.checked)} className="cc-switch" />Lent out</label>
+    <div><label htmlFor="unavailable-note" className="block text-sm font-medium">Lent out note (optional)</label><input id="unavailable-note" value={note} disabled={save.isPending} onChange={event => setNote(event.target.value)} className="cc-input" /><p className="mt-1 text-sm text-slate-600">Up to 200 characters. This blocks new requests, not existing pending requests.</p></div>
+    {noteTooLong && <p role="alert" className="text-red-700">Keep the note within 200 characters.</p>}
+    {save.isError && <p role="alert" className="text-red-700">{errorMessage(save.error)}</p>}
+    {save.isSuccess && <p role="status" className="text-emerald-700">Availability saved.</p>}
+    <button type="submit" disabled={save.isPending || noteTooLong} className="cc-outline">{save.isPending ? 'Saving…' : 'Save availability'}</button>
+  </form>
+}
+
+export function ItemPage({ deletionDisabled = false }: { deletionDisabled?: boolean }) {
   const { cacheId = '', itemId = '' } = useParams()
   const { me } = useAuth()
   const query = useQuery({ queryKey: ['item', cacheId, itemId], queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`), enabled: !!me?.display_name })
@@ -79,9 +100,10 @@ export function ItemPage({ requestsDisabled = false, deletionDisabled = false }:
       {me.id === query.data.owner_id && <>
         <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="cc-pill mt-6">Edit item</Link>
         {!deletionDisabled && <DeleteItem item={query.data} />}
+        <ItemAvailability key={`${query.data.available}:${query.data.unavailable_note ?? ''}`} item={query.data} />
         <PhotoUpload item={query.data} />
       </>}
-      {requestsDisabled ? <p role="status" className="mt-6">Requests are being moved, back soon</p> : <ItemRequests item={query.data} />}
+      <ItemRequests item={query.data} />
       </div>
     </div>}
   </main>

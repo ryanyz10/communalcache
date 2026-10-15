@@ -27,18 +27,18 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Ready>
-          <AppHeader itemsMoving />
+          <AppHeader />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/link" element={<MagicLinkPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/" element={<HomePage />} />
-            <Route path="/requests" element={<RequestsPage itemsMoving />} />
+            <Route path="/requests" element={<RequestsPage />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage removalDisabled />} />
             <Route path="/caches/:cacheId" element={<CachePage />} />
             <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
-            <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage requestsDisabled deletionDisabled />} />
+            <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage deletionDisabled />} />
             <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

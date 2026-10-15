@@ -7,6 +7,9 @@ export type Item = {
   description: string | null
   is_consumable: boolean
   quantity: number | null
+  available_quantity?: number | null
+  available?: boolean
+  unavailable_note?: string | null
   created_at: number
   photo_version: string | null
 }

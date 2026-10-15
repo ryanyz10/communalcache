@@ -311,16 +311,14 @@ it('keeps recipient emails off app APIs while delivering through private auth-ro
   const info = await createCache(env.DB, owner.id, 'Pantry', true), cacheId = info.id
   await joinCache(env.DB, cacheId, recipient, info.invite_token.split('.')[1])
   const decision = await decideCacheJoin(env.DB, cacheId, owner.id, recipient, 'approve')
-  for (const path of [`/api/caches/${cacheId}`, `/api/caches/${cacheId}/join-requests`, '/api/caches']) {
+  for (const path of [`/api/caches/${cacheId}`, `/api/caches/${cacheId}/join-requests`, '/api/caches', '/api/requests']) {
     const response = await worker.fetch(appRequest(path, { cookie: owner.cookie }), env)
     expect(response.status).toBe(200)
     expect(JSON.stringify(await response.json())).not.toContain('example.test')
   }
-  for (const path of [`/api/caches/${cacheId}/items/${crypto.randomUUID()}/requests`, '/api/requests']) {
-    const response = await worker.fetch(appRequest(path, { cookie: owner.cookie }), env)
-    expect(response.status).toBe(503)
-    expect(JSON.stringify(await response.json())).not.toContain('example.test')
-  }
+  const missing = await worker.fetch(appRequest(`/api/caches/${cacheId}/items/${crypto.randomUUID()}/requests`, { cookie: owner.cookie }), env)
+  expect(missing.status).toBe(404)
+  expect(JSON.stringify(await missing.json())).not.toContain('example.test')
   const mail = emailMock()
   mail.mockClear()
   expect(await deliverNotification(env, decision.notificationId)).toBe('ack')

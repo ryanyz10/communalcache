@@ -1,5 +1,6 @@
 import { HttpError } from './http'
 import type { ItemChanges } from './items'
+import type { DecisionInput } from './requests'
 
 export function consumeWriteLimit(db: D1Database, userId: string, route: string, windowStart: number, limit: number) {
   // The guarded UPSERT is one atomic D1 statement, including concurrent Worker attempts.
@@ -255,7 +256,7 @@ export async function decideCacheJoin(db: D1Database, cacheId: string, userId: s
 
 type ItemRow = {
   id: string; owner_id: string; owner_name: string | null; title: string; description: string | null
-  photo_path: string | null; is_consumable: number; quantity: number | null; available: number
+  photo_path: string | null; is_consumable: number; quantity: number | null; available_quantity: number | null; available: number
   unavailable_note: string | null; created_at: number
 }
 
@@ -265,7 +266,9 @@ function itemInfo(row: ItemRow, cacheId: string | null) {
 }
 
 const itemRead = `SELECT i.id,i.owner_id,i.title,i.description,i.photo_path,i.is_consumable,i.quantity,
-  i.available,i.unavailable_note,i.created_at,u.display_name AS owner_name FROM items i JOIN user u ON u.id=i.owner_id`
+  i.available,i.unavailable_note,i.created_at,u.display_name AS owner_name,
+  CASE WHEN i.is_consumable=1 THEN i.quantity-(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending') ELSE NULL END AS available_quantity
+  FROM items i JOIN user u ON u.id=i.owner_id`
 const itemAccess = `(? IS NULL AND i.owner_id=?) OR EXISTS(
   SELECT 1 FROM item_caches a JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
   JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
@@ -324,21 +327,128 @@ export async function attachItem(db: D1Database, itemId: string, cacheId: string
 }
 
 export async function updateItem(db: D1Database, itemId: string, userId: string, changes: ItemChanges, cacheId: string | null = null) {
-  // Requests stay gated; PR 4 adds the all-cache reservation floor with its D1 request table.
   const token = crypto.randomUUID()
   const result = await db.prepare(`UPDATE items AS i SET title=COALESCE(?,title),
     description=CASE WHEN ? THEN ? ELSE description END,quantity=CASE WHEN ? THEN ? ELSE quantity END,
     available=COALESCE(?,available),unavailable_note=CASE WHEN ? THEN ? ELSE unavailable_note END,operation_token=?
-    WHERE i.id=? AND i.owner_id=? AND (${itemAccess}) AND (?=0 OR i.is_consumable=(? IS NOT NULL))`)
+    WHERE i.id=? AND i.owner_id=? AND (${itemAccess}) AND (?=0 OR i.is_consumable=(? IS NOT NULL))
+    AND (?=0 OR ? IS NULL OR ?>=(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending'))`)
     .bind(changes.title ?? null, changes.description !== undefined ? 1 : 0, changes.description ?? null,
       changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.available === undefined ? null : changes.available ? 1 : 0,
       changes.unavailable_note !== undefined ? 1 : 0, changes.unavailable_note ?? null, token, itemId, userId,
-      cacheId, userId, userId, cacheId, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null).run()
+      cacheId, userId, userId, cacheId, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null,
+      changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.quantity ?? null).run()
   if (result.meta.changes === 0) {
-    await readItem(db, itemId, userId, cacheId, true)
-    throw new HttpError(400, 'invalid_quantity')
+    const item = await readItem(db, itemId, userId, cacheId, true)
+    if (changes.quantity !== undefined && (item.is_consumable === 1) !== (changes.quantity !== null)) throw new HttpError(400, 'invalid_quantity')
+    throw new HttpError(409, 'quantity_reserved')
   }
   return itemDetail(db, itemId, userId, cacheId)
+}
+
+export type D1Request = {
+  id: string; item_id: string; cache_id: string; cache_name: string; item_title: string
+  owner_id: string; owner_name: string | null; requester_id: string; requester_name: string | null
+  quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
+  decided_at: number | null; created_at: number
+}
+
+const requestRead = `SELECT r.id AS id,r.item_id,r.cache_id,c.name AS cache_name,i.title AS item_title,
+  i.owner_id,owner.display_name AS owner_name,r.requester_id,requester.display_name AS requester_name,
+  r.quantity,r.status,r.decision_reason,r.decided_at,r.created_at AS created_at FROM requests r
+  JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
+  JOIN user owner ON owner.id=i.owner_id JOIN user requester ON requester.id=r.requester_id`
+const requestContext = `EXISTS(SELECT 1 FROM item_caches a JOIN caches config ON config.id=a.cache_id AND config.join_secret IS NOT NULL
+  JOIN memberships requester ON requester.cache_id=a.cache_id AND requester.user_id=r.requester_id AND requester.status='active'
+  JOIN memberships owner ON owner.cache_id=a.cache_id AND owner.user_id=i.owner_id AND owner.status='active'
+  WHERE a.item_id=r.item_id AND a.cache_id=r.cache_id)`
+
+export async function createRequest(db: D1Database, itemId: string, cacheId: string, userId: string, quantity: number | null) {
+  // Bound JS integers can be REAL in SQLite; integer equality avoids relying on parameter typeof().
+  const id = crypto.randomUUID(), token = crypto.randomUUID(), now = Date.now()
+  const [created, _outbox, result] = await db.batch([
+    db.prepare(`INSERT INTO requests(id,item_id,cache_id,requester_id,quantity,status,created_at,creation_token)
+      SELECT ?,i.id,?,?,?,'pending',?,? FROM items i JOIN item_caches a ON a.item_id=i.id AND a.cache_id=?
+      JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
+      JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
+      JOIN memberships owner ON owner.cache_id=c.id AND owner.user_id=i.owner_id AND owner.status='active'
+      WHERE i.id=? AND i.owner_id<>? AND i.available=1 AND ((i.is_consumable=0 AND ? IS NULL)
+        OR (i.is_consumable=1 AND ? BETWEEN 1 AND 9999 AND ?=CAST(? AS INTEGER)
+          AND i.quantity-(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending')>=?))`)
+      .bind(id,cacheId,userId,quantity,now,token,cacheId,userId,itemId,userId,quantity,quantity,quantity,quantity,quantity),
+    db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
+      SELECT ?,'request_created',?,json_object('event','request_created','cache_id',c.id,'cache_name',c.name,
+        'item_id',i.id,'item_title',i.title,'request_id',r.id,'recipient_id',i.owner_id,'user_id',r.requester_id,'quantity',r.quantity),?
+      FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id WHERE r.id=? AND r.creation_token=?`)
+      .bind(token,token,now,id,token),
+    db.prepare(`${requestRead} WHERE r.id=? AND r.creation_token=?`).bind(id,token),
+  ])
+  if (created.meta.changes === 0) {
+    const item = await readItem(db,itemId,userId,cacheId)
+    if (item.owner_id === userId) throw new HttpError(404,'not_found')
+    if ((item.is_consumable === 1) !== (quantity !== null) || (quantity !== null && (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999))) throw new HttpError(400,'invalid_request_quantity')
+    throw new HttpError(409,item.available ? 'insufficient_stock' : 'item_unavailable')
+  }
+  return { request: result.results[0] as D1Request, notificationId: token }
+}
+
+export async function itemRequests(db: D1Database, itemId: string, cacheId: string, userId: string) {
+  const [item, requests] = await db.batch([
+    db.prepare(`${itemRead} WHERE i.id=? AND (${itemAccess})`).bind(itemId,cacheId,userId,userId,cacheId),
+    db.prepare(`${requestRead} WHERE r.item_id=? AND r.cache_id=? AND (${itemAccess})
+      AND (r.status='pending' OR r.requester_id=? OR i.owner_id=?) ORDER BY r.created_at DESC,r.id DESC`)
+      .bind(itemId,cacheId,cacheId,userId,userId,cacheId,userId,userId),
+  ])
+  if (!item.results.length) throw new HttpError(404,'not_found')
+  return requests.results as D1Request[]
+}
+
+export async function decideRequest(db: D1Database, requestId: string, userId: string, action: 'approve' | 'reject', input: DecisionInput, cacheId: string | null = null) {
+  const token = crypto.randomUUID(), now = Date.now(), status = action === 'approve' ? 'approved' : 'rejected', event = `request_${status}`
+  const markLentOut = action === 'approve' && input.mark_lent_out
+  const [decided, _stock, _availability, _outbox, result] = await db.batch([
+    db.prepare(`UPDATE requests AS r SET status=?,decision_reason=?,decided_at=?,decision_token=?
+      WHERE r.id=? AND r.status='pending' AND (? IS NULL OR r.cache_id=?)
+      AND EXISTS(SELECT 1 FROM items i WHERE i.id=r.item_id AND i.owner_id=? AND ${requestContext}
+        AND (?=0 OR i.is_consumable=0) AND (?=0 OR i.is_consumable=0 OR i.quantity>=r.quantity))`)
+      .bind(status,input.reason,now,token,requestId,cacheId,cacheId,userId,markLentOut ? 1 : 0,action === 'approve' ? 1 : 0),
+    db.prepare(`UPDATE items SET quantity=quantity-(SELECT quantity FROM requests WHERE id=? AND decision_token=?)
+      WHERE id=(SELECT item_id FROM requests WHERE id=? AND decision_token=?) AND is_consumable=1 AND ?=1`)
+      .bind(requestId,token,requestId,token,action === 'approve' ? 1 : 0),
+    db.prepare(`UPDATE items SET available=0,unavailable_note=CASE WHEN ? THEN ? ELSE unavailable_note END
+      WHERE id=(SELECT item_id FROM requests WHERE id=? AND decision_token=?) AND is_consumable=0 AND ?=1`)
+      .bind(input.unavailable_note !== undefined ? 1 : 0,input.unavailable_note ?? null,requestId,token,markLentOut ? 1 : 0),
+    db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
+      SELECT ?,?,?,json_object('event',?,'cache_id',c.id,'cache_name',c.name,'item_id',i.id,'item_title',i.title,
+        'request_id',r.id,'recipient_id',r.requester_id,'user_id',i.owner_id,'quantity',r.quantity,'reason',r.decision_reason),?
+      FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id WHERE r.id=? AND r.decision_token=?`)
+      .bind(token,event,token,event,now,requestId,token),
+    db.prepare(`${requestRead} WHERE r.id=? AND r.decision_token=?`).bind(requestId,token),
+  ])
+  if (decided.meta.changes === 0) {
+    const request = await db.prepare(`${requestRead} WHERE r.id=? AND i.owner_id=? AND (? IS NULL OR r.cache_id=?) AND ${requestContext}`)
+      .bind(requestId,userId,cacheId,cacheId).first<D1Request>()
+    if (!request) throw new HttpError(404,'not_found')
+    if (request.status !== 'pending') throw new HttpError(409,'request_not_pending')
+    if (markLentOut && request.quantity !== null) throw new HttpError(400,'invalid_lent_out')
+    throw new HttpError(409,'insufficient_stock')
+  }
+  return { request: result.results[0] as D1Request, notificationId: token }
+}
+
+export async function requestsPage(db: D1Database, userId: string, after: string | null) {
+  let time: number | null = null, id: string | null = null
+  if (after !== null) {
+    const match = after.match(/^([0-9]{1,16})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
+    if (!match || !Number.isSafeInteger(Number(match[1]))) throw new HttpError(400,'invalid_cursor')
+    time = Number(match[1]); id = match[2].toLowerCase()
+  }
+  const cursor = '(? IS NULL OR r.created_at<? OR (r.created_at=? AND r.id<?))'
+  const rows = (await db.prepare(`${requestRead} WHERE i.owner_id=? AND ${cursor}
+    UNION ${requestRead} WHERE r.requester_id=? AND ${cursor} ORDER BY created_at DESC,id DESC LIMIT 26`)
+    .bind(userId,time,time,time,id,userId,time,time,time,id).all<D1Request>()).results
+  const requests = rows.slice(0,25), last = requests.at(-1)
+  return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
 }
 
 export async function finishItemPhoto(db: D1Database, itemId: string, userId: string, key: string, uploaded: boolean, cacheId: string | null = null) {
