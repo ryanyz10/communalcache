@@ -6,6 +6,7 @@ import { destinationAfterLogin } from '../lib/pendingJoin'
 import { sendSignInEmail } from '../lib/magicLinks'
 import { AuthScreen, BrandMark, MailIcon } from '../components/AuthScreen'
 import { CodeInput } from '../components/CodeInput'
+import { PixelHorizon } from '../components/PixelArt'
 
 export function LoginForm({ inviteToken }: { inviteToken?: string }) {
   const { refresh } = useAuth()
@@ -46,6 +47,7 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
       <BrandMark />
       <h1 className="cc-auth-heading">{inviteToken ? "You're invited" : <>Share more,<br />buy less.</>}</h1>
       <p className="mt-2 text-slate-600">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : 'Borrow and lend with your neighbors on Communal Cache.'}</p>
+      <PixelHorizon kind="boxes" entries={['Share','Borrow','Lend'].map(name=>({id:name,name}))} />
     </header> : <header className="mt-10 text-center lg:mt-0">
       <div aria-hidden="true" className="mx-auto flex size-16 items-center justify-center rounded-full bg-blue-100 text-blue-800">{sent === 'link' ? <MailIcon /> : <span className="text-[22px] font-bold">123</span>}</div>
       <h1 className="cc-auth-heading">{sent === 'link' ? 'Check your email' : 'Enter your code'}</h1>

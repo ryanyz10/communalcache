@@ -10,6 +10,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { ItemList } from './ItemPages'
 import { AddItemSheet } from './AddItemSheet'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
+import { PixelHorizon } from '../components/PixelArt'
 
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams()
@@ -28,7 +29,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
     catch { setStatus('Could not share or copy. Open Cache settings to select the invite link.') }
   }
   return <main className="cc-page lg:max-w-[1120px] lg:p-8">
-    <WideBreadcrumbs><Link to="/">Caches</Link><span aria-hidden="true">›</span><span>{cache.name}</span></WideBreadcrumbs>
+    <div className="cc-hero"><WideBreadcrumbs><Link to="/">Caches</Link><span aria-hidden="true">›</span><span>{cache.name}</span></WideBreadcrumbs>
     <Link to="/" className="text-sm underline lg:hidden">‹ Your caches</Link>
     <div className="mt-3 flex items-center justify-between gap-3">
       <div className="min-w-0"><h1 className="break-words text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">{cache.name}</h1><p className="text-sm text-slate-600">{cache.members.length} {cache.members.length === 1 ? 'member' : 'members'}</p></div>
@@ -41,6 +42,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
         {!itemsMoving && <button type="button" onClick={() => addDialog.current?.showModal()} className="hidden lg:inline-flex lg:items-center lg:rounded-full lg:bg-slate-900 lg:px-3.5 lg:py-1.5 lg:text-sm lg:font-medium lg:text-white">+ Add item</button>}
       </div>
     </div>
+    <PixelHorizon kind="houses" entries={cache.members.map(member=>({id:member.user_id,name:member.display_name ?? 'Member'}))} /></div>
     {status && <p role="status" className="mt-3 text-sm">{status}</p>}
     {cache.owner_id === me.id && joins.isError && <p role="alert" className="mt-4 text-sm text-red-700">Join requests could not be loaded. <Link to={`/caches/${cache.id}/settings`} className="underline">Open settings to try again.</Link></p>}
     {cache.owner_id === me.id && !!joins.data?.length && <div className="mt-4 flex items-center justify-between gap-2 rounded-[10px] border border-amber-200 bg-amber-100 px-3.5 py-3 text-sm text-amber-900"><span><b>{joins.data.length} {joins.data.length === 1 ? 'person' : 'people'}</b> {joins.data.length === 1 ? 'wants' : 'want'} to join</span><Link to={`/caches/${cache.id}/settings`} className="underline">Review</Link></div>}

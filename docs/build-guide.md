@@ -99,7 +99,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 2 | Free quotas and limit-reached UX | Implemented with readiness 1 for existing endpoints: atomic cache/membership/item/request/photo guards, rolling 24h and active-only member counts, races and clear limit-reached copy. Profile-photo enforcement now lands with readiness 3. |
 | Readiness 3 | Private profile photo | Implemented; in review: 0013 app-owned user_photos + explicit profile cleanup scope, self/shared-active SQL read and metadata guards, post-R2 plan recheck, Account Change photo sheet and avatars/initials across named views. No theme/dependency/resource changes. Browser upload is blocked by shared item/profile transport read errors; API/D1/UI-unit proof is separate. |
 | Readiness 4 | Contact after approval | Implemented; in review: 0014 app-owned user_contacts, validated server-built links, request-scoped approved-party/both-active SQL reveal, Account editor/preview and request buttons/nudges. Optional private approval message starts empty, max 500 code points, atomic with decision/outbox; never auth-email fallback. Inline platform glyphs need official brand assets before release. |
-| Readiness 5 | Cozy theme and app identity | not started — round-6 pixel horizon, sunny/evening prefers-color-scheme, open-box-with-cat mark and complete icon set; accessible/reduced-motion layouts |
+| Readiness 5 | Cozy theme and app identity | Implemented; in review: round-6 sunny/evening CSS tokens via prefers-color-scheme, 2px Home boxes/cache-member houses, decorative reduced-motion cat, open-box/cat Home mark and reproducible SVG/32/180/192/512 icon set. Phone/wide fixture comparisons cover key screens in both palettes; native installed-PWA/device proof remains separate. No API, plan UI or dependency changes. |
 | Readiness 6 | Turnstile and bot setup | not started — needs owner setup; email sends + cache creation, Worker siteverify; Bot Fight Mode zone toggle separately approved |
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
@@ -500,6 +500,29 @@ against round 6; keyboard/screen-reader structure and contrast; full user flows
 with decoration off. Inspect icon dimensions, favicon/manifest references,
 maskable cropping and installed-PWA appearance; automated layout/asset checks do
 not replace actual rendered/device evidence.
+
+Implementation: `web/src/index.css` defines both palettes and maps the existing
+Tailwind utility names to shared tokens so sheets/error/status/wide layouts inherit
+the same theme. `PixelArt.tsx` keeps the horizon aria-hidden; Home box shortcuts are
+pointer-only (tabIndex=-1), while the existing labeled cache list remains the
+keyboard/screen-reader path. The SVG uses fixed 2px sprite cells and horizontal
+overflow when many decorations cannot fit. The walking cat stops under
+prefers-reduced-motion; information and controls never depend on it.
+
+`node scripts/make-icons.mjs` regenerates the committed icons using only Node
+built-ins and the app's shared OPEN_BOX sprite. Maskable artwork lies inside the
+40%-radius safe circle; backgrounds remain opaque to the edges. Tests inspect
+actual PNG dimensions, decode pixels, check safe-area containment/reproducibility,
+and assert body/status/avatar contrast of at least 4.5:1 for both palettes.
+
+Browser comparison fixtures: `/__fixture/compare?screen=home` (also cache, item,
+requests, account, signin) renders sunny/evening phone viewports side by side;
+`&layout=wide&theme=evening` exercises a real 1280px iframe viewport. A fixture-only
+style forces tokens for screenshots because browser emulation is unavailable;
+production has no override/picker and follows the system media query. Before/after
+receipts cover all six screens; extra wide layouts and the rendered 512px icon
+were inspected. These screenshots are mock-API presentation proof, not native
+system-setting, installed-PWA or real-device proof.
 
 ### Readiness 6 — Turnstile (needs owner setup)
 
