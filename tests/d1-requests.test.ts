@@ -15,6 +15,7 @@ async function user(name = 'Neighbor') {
 }
 async function fixture(quantity = 10, reusable = false) {
   const admin = await user('Cache admin'), owner = await user('Owner'), first = await user('First requester'), second = await user('Second requester'), neighbor = await user('Neighbor')
+  await env.DB.prepare("UPDATE user SET plan='plus' WHERE id=?").bind(admin).run()
   const a = await createCache(env.DB,admin,'Cache A',false), b = await createCache(env.DB,admin,'Cache B',false)
   for(const cache of [a,b]) await joinCache(env.DB,cache.id,owner,cache.invite_token.split('.')[1])
   for(const caller of [first,neighbor]) await joinCache(env.DB,a.id,caller,a.invite_token.split('.')[1])
@@ -242,7 +243,11 @@ it('a zero-row create cannot reuse a previous request ID to manufacture an outbo
 
 it('pages direct incoming/outgoing party queries with stable timestamp/UUID cursors and no cache fan-out', async () => {
   const f = await fixture(100), ids: string[] = []
-  for(let index=0;index<27;index++)ids.push((await createRequest(env.DB,f.item.id,f.a.id,f.first,1)).request.id)
+  for(let index=0;index<27;index++) {
+    const created = await createRequest(env.DB,f.item.id,f.a.id,f.first,1)
+    ids.push(created.request.id)
+    await decideRequest(env.DB,created.request.id,f.owner,'approve',approve())
+  }
   await env.DB.prepare('UPDATE requests SET created_at=1').run()
   const first = await requestsPage(env.DB,f.first,null), second = await requestsPage(env.DB,f.first,first.next_cursor)
   expect(first.requests).toHaveLength(25)

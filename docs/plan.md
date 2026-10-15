@@ -486,23 +486,26 @@ sheets/focus, loading/error/empty states and bounded cursor pagination. Complete
 items board 1a–1d in PR 6, after backend protocols; do not invent additional product
 behavior from an architecture change.
 
-## Production readiness additions — approved, not implemented
+## Production readiness additions — approved scope
 
 These decisions extend the settled D1 architecture; they do not replace its
 membership/attachment checks, shared stock, guarded token batches, durable outbox
-or private storage. This is a **docs-only specification**: no schema, API, UI,
-config, dependency, resource or provider setup changes are implemented here.
+or private storage. Plans foundation and limits on existing endpoints are now
+implemented for review (readiness 1–2); the remaining features are not implemented.
+No plan UI, billing, provider setup or release approval is included.
 [Build-guide readiness rows](build-guide.md#production-readiness-build-order)
 order each future feature and its proof. Nothing below authorizes merging draft
 DO retirement, deleting data, provisioning services or releasing production.
 
 ### Plans foundation and launch limits
 
-Add `plan` to `caches` and app `user`, defaulting every existing/new row to `free`.
-Use **one `plan_limits` table keyed by plan** for both cache and user limits.
-There are exactly two plans: `free` and one internal `higher` placeholder tier with
-raised limits. This internal key is not a marketed plan name or plan UI. Higher
-numerical values not settled below require owner approval before implementation.
+Migration 0012 adds `plan` to `caches` and app `user`, defaulting every existing/new
+row to `free`, with CHECK(plan IN ('free','plus')). **One `plan_limits` table keyed
+by plan** serves cache and user limits. There are exactly two plans: `free` and
+internal placeholder `plus`. Free owned_caches is 1; plus keeps owned_caches at 3
+and cache_members at 100. All other seeded values equal free until the owner
+decides otherwise. This is not a
+marketed tier or a billing/upgrade UI.
 Do not infer a third/500-member tier, prices or subscriptions from older notes.
 
 This phase has **no plan picker, upgrade flow, checkout or billing**. A cache's
@@ -510,41 +513,34 @@ plan controls its member limit; its owner's personal plan does not silently
 upgrade it. A user's plan controls account quotas. Until the protected admin page
 exists, assignment uses a documented, exact-target manual D1 command **only after
 owner approval**, for example assigning an explicitly selected test group/user
-to the higher placeholder. Do not run it automatically or treat spec approval as
-permission for a remote D1 command. The future runbook must name the environment,
-cache/user UUID, allowed plan key, verification and reversal procedure without
-printing secrets or another user's auth email.
+to plus. Do not run it automatically or treat feature/spec approval as permission
+for a remote D1 command. The [manual assignment runbook](deploy.md#manual-plan-assignment-owner-run)
+names environment/database/UUID, allowed key, verification and reversal without
+printing auth email. No remote assignment is run by this feature PR.
 
-Future manual command templates, **not executable against the current schema and
-not run by this PR** (only after the foundation migration and exact owner approval):
-
-```bash
-# Use the approved environment/database/UUID and only free or higher; never browser input.
-CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute <approved_database> --env <approved_environment> --remote --command "UPDATE caches SET plan='<approved_plan>' WHERE id='<approved_cache_uuid>' AND EXISTS(SELECT 1 FROM plan_limits WHERE plan='<approved_plan>')"
-CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute <approved_database> --env <approved_environment> --remote --command "UPDATE user SET plan='<approved_plan>' WHERE id='<approved_user_uuid>' AND EXISTS(SELECT 1 FROM plan_limits WHERE plan='<approved_plan>')"
-```
-
-Run only the approved target operation, verify exactly one intended row changed
-and read back only its ID/plan, not auth email. Record the previous plan for an
-approved reversal using the same guarded template; no scheduled assignment job.
-
-| Limit | Free, every account | Higher placeholder | Authority |
+| Limit | Free, every account | Plus placeholder | Authority |
 | --- | --- | --- | --- |
-| Caches you own | 3 | Raised value to approve | User plan |
-| New caches per day | 2 | Raised value to approve | User plan |
-| Caches you are in, including those you own | 20 | Raised value to approve | User plan |
+| Caches you own | 1 | 3 | User plan |
+| New caches in rolling 24h | 2 | 2 | User plan |
+| Active caches you are in, including those you own | 20 | 20 | User plan |
 | Members per cache, including its owner | 30 | 100 | Cache plan |
-| Items you own, shared or not | 100 | Raised value to approve | User plan |
-| Open requests you have made | 20 | Raised value to approve | User plan |
+| Items you own, shared or not | 100 | 100 | User plan |
+| Open requests you have made | 20 | 20 | User plan |
 | Current photos per item | 1, at the current 5 MB actual-byte cap | 1 in this phase | Photo policy, not an upgrade perk |
-| Current profile photo | 1 | 1 in this phase | Photo policy, not an upgrade perk |
+| Current profile photo | 1 | 1 | Seeded only; endpoint/guard follows in readiness 3 |
 
 Open requests means `status='pending'`; approval/rejection closes them, not a
 holder/return lifecycle. One canonical item counts once regardless of cache
 attachments. Replacing a photo does not create a second current photo; obsolete
 immutable keys awaiting cleanup do not become extra photo slots. Free caps apply
-to every account; manual assignment of a higher plan is explicit, not an owner
-or admin exemption.
+to every account; assignment to plus is explicit, not an owner/admin exemption.
+The daily quota counts owned canonical caches with `created_at > now - 24h`;
+exactly 24h old expires. There is no cache-delete endpoint that erases this usage.
+Only active memberships count toward account/cache member caps (including owners).
+Pending joins reserve no seat and may be submitted while full; approval rechecks
+both the cache's plan and applicant's plan atomically. Rejection is not quota
+blocked. `left` rejoin rechecks the cap; existing active/pending join replays stay
+idempotent, and valid-secret removed denial remains 403.
 
 All quota reads use the limits table **inside the same guarded SQL write or
 token-gated atomic batch** as the mutation. No hard-coded route copies, client
@@ -552,11 +548,14 @@ counters, per-isolate state, prior entitlement SELECT across an await or copied
 membership grant. Cover cache creation and all membership activations (open joins,
 gated approvals and left-member rejoin), library creation and request creation;
 keep stock/authorization/outbox predicates in the same operation. A losing cap
-race returns a clear structured **limit reached** error and matching UI message,
-not partial state or an undisclosed billing prompt. A plan change never silently
+race returns HTTP 409 `{error:'limit_reached',limit:'<stable_limit_name>'}` and
+matching UI copy, not partial state or a billing prompt. Missing plan policy fails
+closed with 503 limits_unavailable, never an unlimited fallback. SQL diagnostics
+classify failed guards; they never authorize a later write/retry. A plan change never silently
 deletes/detaches existing canonical data; growth while at/over a cap is guarded.
-The implementation review must settle/test day-window boundaries, pending-seat
-accounting and all unspecified higher values before enabling these limits.
+Current item-photo finalization rechecks photos_per_item after R2 I/O; replacing
+the single current pointer is allowed. A rejected upload retains durable cleanup.
+Profile_photos is seeded for the later profile-photo feature, not a new endpoint.
 
 ### Profile photo and private shared-cache visibility
 

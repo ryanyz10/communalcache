@@ -11,6 +11,7 @@ it('drops only obsolete projections on a populated upgrade, preserving canonical
   await reset()
   await applyD1Migrations(env.DB,migrations.filter(row => row !== retirement))
   const owner = await login('owner@example.test'), neighbor = await login('neighbor@example.test')
+  await env.DB.prepare("UPDATE user SET plan='plus' WHERE id=?").bind(owner.id).run()
   const a = await createCache(env.DB,owner.id,'Tools',false), b = await createCache(env.DB,owner.id,'Garden',false)
   await joinCache(env.DB,a.id,neighbor.id,a.invite_token.split('.')[1])
   const item = await createItem(env.DB,owner.id,itemChanges({title:'Seeds',is_consumable:true,quantity:8},true),a.id)

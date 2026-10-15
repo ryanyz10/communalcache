@@ -199,6 +199,63 @@ Existing action pins (resolved 2026-10-14) remain: checkout v7.0.1
 Actions Node 24-capable hosted runner; app/tooling Node 22.23.1 locally validated.
 No dependency or workflow release-policy change is included in this draft.
 
+## Manual plan assignment (owner-run)
+
+Migration **0012_plan_limits** adds `plan` to app user/cache rows (free default,
+free/plus CHECK) and seeds one `plan_limits` table. Free values are owned_caches 1,
+new_caches_per_day 2, member_caches 20, cache_members 30, owned_items 100,
+open_requests 20, photos_per_item 1 and profile_photos 1. Plus keeps owned_caches 3 and
+cache_members 100; every other value intentionally equals free until the owner
+decides otherwise. Profile photo is seeded only; its endpoint/guard is a later PR.
+There is no plan UI, upgrade flow, billing or automatic assignment job.
+
+**No remote plan command is run by this feature PR.** The owner must approve each
+exact environment/database, cache/user UUID, previous plan and target plan before
+an operator acts. Use named staging or production configuration, never assume
+production permission from local tests. Check that migration 0012 is applied and
+the target policy row exists. Public signup/profile/cache writes cannot assign a
+plan. Do not change plan_limits globally as a shortcut for a one-user/cache grant.
+
+Templates below require replacing the quoted placeholders with the **approved**
+values, validating UUIDs and allowing only free/plus (no browser-supplied SQL).
+Run only the selected target's commands, not both targets automatically:
+
+```bash
+# Preflight: capture only ID/plan and the approved target policy, never auth email.
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute '<approved_database>' --env '<approved_environment>' --remote --command "SELECT id,plan FROM caches WHERE id='<approved_cache_uuid>'; SELECT plan FROM plan_limits WHERE plan='<approved_target_plan>';"
+# Guard against a changed preflight value; expect exactly one UPDATE change.
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute '<approved_database>' --env '<approved_environment>' --remote --command "UPDATE caches SET plan='<approved_target_plan>' WHERE id='<approved_cache_uuid>' AND plan='<approved_previous_plan>' AND EXISTS(SELECT 1 FROM plan_limits WHERE plan='<approved_target_plan>'); SELECT id,plan FROM caches WHERE id='<approved_cache_uuid>';"
+
+# User target instead, with the same explicit approval/read-back requirements.
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute '<approved_database>' --env '<approved_environment>' --remote --command "SELECT id,plan FROM user WHERE id='<approved_user_uuid>'; SELECT plan FROM plan_limits WHERE plan='<approved_target_plan>';"
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute '<approved_database>' --env '<approved_environment>' --remote --command "UPDATE user SET plan='<approved_target_plan>' WHERE id='<approved_user_uuid>' AND plan='<approved_previous_plan>' AND EXISTS(SELECT 1 FROM plan_limits WHERE plan='<approved_target_plan>'); SELECT id,plan FROM user WHERE id='<approved_user_uuid>';"
+```
+
+If preflight returns no target/policy row or UPDATE changes zero rows, stop and
+investigate; do not broaden the WHERE or silently retry a stale assignment.
+Record operator approval, revision/environment, target ID and old/new plans.
+Reversal uses the same guarded template with approved old/new values swapped;
+a downgrade does **not** delete/detach canonical data or cancel admitted work.
+Cache plan controls member capacity; personal plus does not change owned caches' plans.
+
+Limits are checked in canonical guarded writes: cache create, open join/gated
+approval/left rejoin, item create (including create-and-attach), request create
+and item-photo finalization. Pending joins count neither membership cap and
+reserve no seat; approval rechecks cache and applicant plans atomically. Existing
+active/pending replays and rejection are not blocked by a downgrade. Daily usage
+counts owned canonical caches with created_at strictly newer than now minus 24h;
+exactly 24h old expires. No cache-delete endpoint currently erases that history.
+Photo replacement uses one current pointer; allowance is rechecked after R2 I/O
+and a rejected upload retains durable cleanup. Profile-photo enforcement waits
+for its future endpoint. Missing plan policy denies writes, never grants unlimited
+capacity. API quota failures are 409 limit_reached plus a stable limit name.
+
+Migration 0012 is additive and preserves existing over-cap rows; only growth is
+blocked. An old Worker does not enforce the new quotas during the migration/
+deployment overlap. Release enforcement proof must use the new revision after
+rollout (with an approved write boundary if strict activation timing is needed).
+No code rollback restores deleted DO data from the inherited retirement draft.
+
 ## Provider and secret setup (approval required)
 
 ### Cloudflare / private photos / Queue
