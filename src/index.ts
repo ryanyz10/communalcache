@@ -63,8 +63,9 @@ async function dispatch(request: Request, env: Env) {
     })
   }
   const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
-  if (path !== '/api/me' && path !== '/api/caches' && !cacheRoute) throw new HttpError(404, 'not_found')
-  const methods = path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?$/i)
+  if (path !== '/api/me' && path !== '/api/caches' && !cacheRoute && !itemRoute) throw new HttpError(404, 'not_found')
+  const methods = itemRoute ? (itemRoute[2] ? ['GET', 'PATCH'] : ['GET', 'POST']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(401, 'unauthorized')
@@ -84,6 +85,20 @@ async function dispatch(request: Request, env: Env) {
       if (changes.name === undefined) throw new HttpError(400, 'invalid_name')
       const id = crypto.randomUUID()
       return json(await env.CACHES.get(env.CACHES.idFromName(id)).create(id, profile.id, changes.name, changes.requires_approval ?? false), 201)
+    }
+    if (itemRoute) {
+      const stub = env.CACHES.get(env.CACHES.idFromName(itemRoute[1]))
+      const itemId = itemRoute[2]
+      if (!itemId && method === 'GET') {
+        const items = await stub.listItems(profile.id)
+        const names = await displayNames(env.DB, [...new Set(items.map(item => item.owner_id))])
+        return json(items.map(item => ({ ...item, owner_name: names.get(item.owner_id) ?? null })))
+      }
+      const item = method === 'POST' ? await stub.createItem(profile.id, await readBody(request))
+        : method === 'PATCH' ? await stub.updateItem(profile.id, itemId, await readBody(request))
+        : await stub.itemDetail(profile.id, itemId)
+      const names = await displayNames(env.DB, [item.owner_id])
+      return json({ ...item, owner_name: names.get(item.owner_id) ?? null }, method === 'POST' ? 201 : 200)
     }
     const stub = env.CACHES.get(env.CACHES.idFromName(cacheRoute![1]))
     const action = cacheRoute![2]
@@ -115,6 +130,8 @@ async function dispatch(request: Request, env: Env) {
     if (error instanceof Error && error.message === 'cache_exists') throw new HttpError(409, 'cache_exists')
     if (error instanceof Error && error.message === 'member_removed') throw new HttpError(403, 'member_removed')
     if (error instanceof Error && error.message === 'join_not_pending') throw new HttpError(409, 'join_not_pending')
+    if (error instanceof Error && error.message === 'quantity_reserved') throw new HttpError(409, 'quantity_reserved')
+    if (error instanceof Error && ['invalid_title', 'invalid_description', 'invalid_is_consumable', 'immutable_is_consumable', 'invalid_quantity', 'invalid_json'].includes(error.message)) throw new HttpError(400, error.message)
     throw error
   }
 }

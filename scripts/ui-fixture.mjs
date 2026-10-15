@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 const dist = fileURLToPath(new URL('../web/dist/', import.meta.url))
 let me = null
 const caches = new Map()
+const items = new Map()
 let vite
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname
@@ -58,6 +59,31 @@ const server = createServer(async (request, response) => {
         const cache={id,name:body.name.trim(),owner_id:me.id,requires_approval:!!body.requires_approval,invite_token:`${id}.${randomBytes(32).toString('base64url')}`}
         caches.set(id,cache)
         json(cache,201)
+        return
+      }
+      const itemRoute=path.match(/^\/api\/caches\/([^/]+)\/items(?:\/([^/]+))?$/)
+      if (itemRoute) {
+        const cacheId=itemRoute[1], itemId=itemRoute[2]
+        if (!caches.has(cacheId)) { json({error:'not_found'},404); return }
+        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>item.cache_id===cacheId)); return }
+        if (!itemId && request.method === 'POST') {
+          if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
+          if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
+          const item={id:randomUUID(),cache_id:cacheId,owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,created_at:Date.now()}
+          items.set(item.id,item)
+          json(item,201)
+          return
+        }
+        const item=items.get(itemId)
+        if (!item || item.cache_id!==cacheId) { json({error:'not_found'},404); return }
+        if (request.method === 'PATCH') {
+          if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
+          if (item.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
+          item.title=body.title.trim()
+          item.description=body.description??null
+          item.quantity=item.is_consumable?body.quantity:null
+        }
+        json(item)
         return
       }
       const match=path.match(/^\/api\/caches\/([^/]+)(\/invite\/rotate)?$/)

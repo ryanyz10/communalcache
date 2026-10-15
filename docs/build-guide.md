@@ -66,7 +66,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | — | Deploy pipeline | Implemented; in review (CI → staging, fast-forward production; setup pending) | — |
 | 1 | Caches | Implemented; in review (Cloudflare port, no deployment) | [#2](https://github.com/ryanyz10/communalcache/pull/2) (closed Go reference) |
 | 2 | Joining | Implemented; in review (Cloudflare port, no deployment) | [#3](https://github.com/ryanyz10/communalcache/pull/3) (closed Go reference) |
-| 3 | Items (no photos) | Not started | — |
+| 3 | Items (no photos) | Implemented; in review (Cloudflare, pending-reservation stock floor; no deployment) | — |
 | 4 | Photos | Not started | — |
 | 5 | Requests | Not started | — |
 | 6 | Notifications + email | Not started | — |
