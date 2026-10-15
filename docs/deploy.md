@@ -21,8 +21,8 @@ D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1` is committed in `wrangler.jsonc`;
 remote migrations and deployment still need separate approval. Compatibility date
 `2026-09-30` supports RPC/default error serialization; `nodejs_compat` is set.
 Caches declares an intended five-minute registry Cron and its scheduled handler;
-no production trigger has been installed. R2/Queue bindings remain later features,
-not provisioned here.
+no production trigger has been installed. Photos/Notifications now declare R2/Queue
+bindings, but the remote buckets/queues have not been provisioned by these features.
 
 ## Local checks first
 
@@ -65,7 +65,9 @@ Staging is `https://communalcache-staging.ryanyz10-be6.workers.dev`, using D1
 `https://communalcache.com`, using D1 `communalcache`
 (`b4257b89-22d6-40f1-b250-ccd1985bf1d1`); production workers.dev and version preview
 URLs are disabled. Each environment has its own Worker and self-bound `Cache` DO
-namespace, plus an explicit five-minute registry Cron. No Queue/R2 is added here.
+namespace, plus an explicit five-minute registry/outbox Cron. The pipeline feature
+itself added no Queue/R2; the later Photos/Notifications features declare those
+bindings, whose remote resources still require approval before release.
 
 Both deploy jobs serialize per environment with `cancel-in-progress: false`; a
 running migration/deploy is not interrupted by a newer push. GitHub can coalesce
@@ -188,10 +190,14 @@ locally validated version (no repo engine/version file is currently present).
    Worker logic first. An API 404/auth error must not turn into HTML 200.
 4. Keep R2 public domain and `r2.dev` access off. Worker streams authorized photos
    with private cache headers; no public bucket, signed URL or service-role key.
-5. Configure Queue producer/consumer retry delays/batch/concurrency bounds and a
-   Cron Trigger for registry sync/outbox rescue. Default three Queue retries are
-   insufficient as the sole recovery policy. DO alarms catch and re-arm pending
-   work indefinitely; Cron repairs stuck known-cache projections and expired claims.
+5. After approval, create `communalcache-notifications-staging` for staging and
+   `communalcache-notifications` for default/production, bound as `NOTIFICATIONS`.
+   Both producer and consumer configs are declared: batch size five, six retries,
+   60-second retry delay and consumer concurrency two. The five-minute Cron handles
+   registry sync and cursor-paged outbox rescue; Queue retry exhaustion/retention
+   is not the recovery policy. DO failures persist exponential backoff (five
+   seconds to one hour); Cron respects it and expired outbox claims stay eligible
+   regardless of attempts until a sent/failed terminal state is recorded.
 6. Check Free-plan budgets before choosing a plan. HTTP CPU, DO duration/storage,
    D1 rows, Queue operations/24h retention and R2 operations are separate quotas.
    R2 free allowances are not a hard zero-billing cap. Any paid upgrade needs approval.

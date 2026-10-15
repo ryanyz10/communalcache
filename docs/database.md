@@ -115,7 +115,9 @@ schema compiler (`scripts/auth-schema.mjs`); `0002_app.sql` adds discovery, push
 subscriptions and outbox; `0003_otp_identifier_unique.sql` supplies the narrow
 sign-in OTP uniqueness workaround above without changing the generator reference.
 Caches adds `0004_cache_sync_cursor.sql` for the bounded registry sweep; it is
-discovery/recovery metadata, never authorization.
+discovery/recovery metadata, never authorization. Notifications adds
+`0005_notification_sync_cursor.sql` so bounded outbox recovery pages cannot starve
+later IDs behind repeatedly crashed claims; this cursor is not delivery state.
 Auth date columns store adapter-produced ISO strings;
 app timestamps are integer milliseconds. `wrangler.jsonc` commits the approved
 `communalcache` D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`. Tests and default dev
@@ -154,8 +156,9 @@ Tests also inject DDL failure and prove version/DDL rollback. Caches now drains
 registry/reverse-index intents in sequence. Joining produces notification intents
 whose stable pending_sync ID becomes the D1 outbox ID and dedupe key via
 `INSERT OR IGNORE`; replay preserves attempts, claims and terminal state. Payloads
-snapshot the recipient ID and cache name without emails or invite secrets. Queue
-handoff and actual delivery remain in Feature 6.
+snapshot the recipient ID and cache name without emails or invite secrets.
+Notifications now sends each materialized outbox ID to Queue before deleting its
+local intent, so either external boundary can be replayed without resetting state.
 
 Photos reuses the existing nullable `items.photo_path`, so it needs no schema bump.
 Worker uploads use an immutable key, then the DO re-checks live membership/ownership
@@ -182,8 +185,8 @@ prefer fixing forward for incompatible migrations.
 
 A mutation writes state plus ordered pending_sync rows locally, then sets an alarm.
 For each pending row, apply its D1/R2 effects idempotently; insert outbox by the
-stable DO-generated ID, then delete the local pending row. Feature 6 will add
-Queue handoff/recovery; Joining only persists undelivered outbox rows.
+stable DO-generated ID, send that ID to Queue, then delete the local pending row.
+Queue failure or a crash after send leaves the stable intent replayable.
 Replay cannot reset an existing outbox's attempts/claim/sent/failed state.
 
 - One ordered bounded drain per DO, even if alarm and `flushSync` overlap.
@@ -196,11 +199,32 @@ Replay cannot reset an existing outbox's attempts/claim/sent/failed state.
 
 [Alarms are at-least-once and finite-retry](https://developers.cloudflare.com/durable-objects/api/alarms/index.md).
 The Caches implementation serializes all drains through one per-object promise,
-processes at most 25 D1/R2 effects per drain, and keeps work armed while it remains.
+processes at most 25 intent rows per drain (up to 50 external binding calls when
+rows each insert D1 then send Queue), and keeps work armed while it remains.
 Registry Cron sweeps 25 caches per tick using a persisted guarded cursor; failures
 on one cache do not block others. `triggers.crons` declares the intended five-minute
 schedule but no production trigger has been installed. Mutations with no external
 effect (approval setting/invite rotation) need no projection intent.
+
+Sync failures persist `sync_retry` metadata in DO storage, doubling alarm delay from
+five seconds to one hour; success clears it. Entry points preserve that delay and
+registry Cron calls `flushSync(true)` to respect it; an explicit `flushSync()` forces
+a retry for diagnostics. This changes no local SQL schema version and does not cap
+recovery attempts.
+
+Notification Queue consumption claims an outbox row with one guarded D1 UPDATE and
+checks `meta.changes`. The 90-second lease/token guard protects both terminal writes,
+which also require unsent/unfailed state. A failed send clears its own claim for retry;
+an observed failure at `attempts >= 6` stamps `failed_at`. Attempts never bound claim
+or Cron eligibility. Email lookup is private; no API exposes another user's email.
+A 30-second delivery deadline covers claim/lookup/provider work (including a stuck
+response body), with a 10-second provider abort and guarded durable outcome recording.
+
+The five-minute Cron independently runs registry and outbox recovery. Outbox recovery
+pages 25 IDs older than three minutes with absent/expired claims, then sends one Queue
+batch and advances its guarded cursor. Terminal/live-claim rows are skipped; crashes
+and dropped Queue messages remain recoverable. Sending succeeds at least once, not
+exactly once: accepted mail followed by a failed D1 success write may be sent again.
 
 The namespace binding cannot list objects. Management REST listing exists but needs
 account credentials and is not the application's sweep mechanism. A newly created
@@ -228,7 +252,10 @@ are the API references. With the pinned plugin, expected native RPC rejections u
 explicit await/try-catch assertions instead of Vitest `.rejects` (which produced
 spurious unhandled reports). Crash replay uses `abortAllDurableObjects`, then
 reacquires the same named stub; forced teardown invalidates old RPC channels.
-Graceful eviction remains the constructor-upgrade check, not a forced-crash model.
+Graceful eviction remains the constructor-upgrade/backoff-persistence check, not a forced-crash model.
+Notification tests use the real local Queue producer with no automatic consumer;
+`createMessageBatch`/`getQueueResult` exercise consumer ack/retry behavior in workerd,
+while Resend fetch is mocked. No hosted Queue or real-provider delivery is claimed.
 Tests must distinguish pending work from terminal failure
 and a duplicate external send from a duplicate durable outbox row.
 

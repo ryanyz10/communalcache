@@ -69,7 +69,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 3 | Items (no photos) | Implemented; in review (Cloudflare, pending-reservation stock floor; no deployment) | — |
 | 4 | Photos | Implemented; in review (private local R2, cleanup recovery; remote buckets pending) | — |
 | 5 | Requests | Implemented; in review (transactional reservations/decisions, bounded discovery; no deployment) | — |
-| 6 | Notifications + email | Not started | — |
+| 6 | Notifications + email | Implemented; in review (guarded Queue/email delivery + recovery; remote setup pending) | — |
 | 7 | Web push + PWA | Not started | — |
 | 8 | Member removal and item deletion | Not started | — |
 | 9 | Polish | Not started | — |
@@ -425,6 +425,20 @@ Competing claims send once while lease is valid; crash after sixth claim remains
 recoverable; mixed crashes/observed failures pin the claim-budget meaning;
 stale terminal update rejected; Cron revives expired/dropped Queue work. Check
 recipients, HTML escaping, deadlines and permanently failed terminal state.
+
+The port uses `NOTIFICATIONS` with `communalcache-notifications` (default/production)
+and `communalcache-notifications-staging`; remote queues still need approved creation.
+The existing five-minute Cron independently sweeps 25 registry caches and cursor-pages
+25 old (at least three minutes), expired-claim nonterminal outbox IDs. Queue batches
+are five sequential rows, with six Queue retries, 60-second retry delay and configured
+consumer concurrency two. A crashed sixth claim remains eligible regardless of attempts.
+No new UI/API is added; until Push, all recipients use private verified-email lookup.
+
+Persistent sync retry backoff now grows from five seconds to one hour and survives DO
+eviction. Entry points re-arm without shortening it, and registry Cron respects it;
+explicit `flushSync()` can force a diagnostic retry. This closes the fixed-five-second
+permanent-failure loop without abandoning durable work. Notification delivery remains
+at-least-once: provider acceptance followed by a failed terminal write can duplicate mail.
 
 ---
 
