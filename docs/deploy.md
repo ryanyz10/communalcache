@@ -276,13 +276,21 @@ Domain ownership alone is not sending-domain verification.
 ### Web push
 
 The sender pins `@block65/webcrypto-web-push@2.0.0` (published 2026-09-03), after
-local workerd RFC 8291 decryption/VAPID signature proof. Generate a separate P-256
-VAPID pair for staging and production through a trusted offline process. Store
+local workerd RFC 8291 decryption/VAPID signature proof. Use a separate P-256 VAPID
+pair for each environment; production generation still requires separate approval. Store
 `VAPID_PRIVATE_KEY` (base64url JWK `d`) as a Worker secret and configure matching
 `VAPID_PUBLIC_KEY` (base64url 65-byte uncompressed point) as public runtime config.
 The app origin is the VAPID subject/contact URI. No secret value belongs in argv,
 git, provider mocks, screenshots or logs. Key rotation requires browsers to disable
 and re-enable notifications with the matching new public key.
+
+**Staging key provisioned:** under explicit user approval, the matching private key
+was uploaded separately to Worker `communalcache-staging`. This config-only change
+sets only `env.staging.vars.VAPID_PUBLIC_KEY`; it neither reads nor contains the
+private key and performs no deployment. Default and production public keys remain
+blank. Production key setup and actual push-provider/browser delivery, including
+installed iOS, remain **UNVERIFIED**. A staging dry-run validates the binding/bundle,
+not notification permission or delivery; live proof follows an approved release.
 
 Allowed push services are exact `fcm.googleapis.com`,
 `updates.push.services.mozilla.com`, `web.push.apple.com`, and hostname-boundary

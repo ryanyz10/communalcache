@@ -40,7 +40,7 @@
         "APP_BASE_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
         "BETTER_AUTH_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
-        "VAPID_PUBLIC_KEY": ""
+        "VAPID_PUBLIC_KEY": "BDc7hJ9A4t13ANKe0ifevZBjiewe1vNnn6zJEQUpxBJBzq1Y_PLCepOAIIZaIdsQTgUTEfgNon3XjSLNjigr-5Y"
       },
       "d1_databases": [{
         "binding": "DB",
