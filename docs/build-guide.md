@@ -74,7 +74,8 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 8 | Member removal and item deletion | Implemented; in review (atomic cascades, durable D1/R2/outbox cleanup; no deployment) | — |
 | 9 | Polish | Implemented locally (D1 write budgets, accessible/error states, monitoring/runbook; release proof pending) | — |
 | — | Magic-link sign-in | Implemented locally (link-only primary, explicit code fallback, scanner-safe Continue; live mail/mobile proof pending) | — |
-| — | Frontend redesign | Implemented locally (5a–5e, 6a–6f, 1a–1h; nav v2 profile menu, caches-only home, pending/mine requests, HTML sign-in mail + text fallback; visual review pending) | — |
+| — | Frontend redesign | Implemented locally (5a–5e, 6a–6f, 1a–1h; nav v2 profile menu, pending/mine requests, HTML sign-in mail + text fallback; visual review pending) | — |
+| — | Your items | Implemented; in review (DO-authorized owner listing, 25-cache pages/five-way fan-out, Home section; no deployment) | — |
 
 ---
 

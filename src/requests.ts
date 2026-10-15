@@ -1,5 +1,5 @@
 import type { RequestInfo } from './cache'
-import { displayNames, requestCachePage } from './db'
+import { displayNames, memberCachePage } from './db'
 
 export async function enrichRequests(db: D1Database, requests: RequestInfo[]) {
   const names = await displayNames(db, [...new Set(requests.flatMap(row => [row.requester_id, row.owner_id]))])
@@ -7,7 +7,7 @@ export async function enrichRequests(db: D1Database, requests: RequestInfo[]) {
 }
 
 export async function aggregateRequests(env: Env, userId: string, after: string | null) {
-  const discovered = (await requestCachePage(env.DB, userId, after)).results
+  const discovered = (await memberCachePage(env.DB, userId, after)).results
   // ponytail: 25 caches/page (below the 50 ceiling), five RPCs at once, leaving binding budget for auth/names.
   // Raise only with measured budgets; use continuation rather than a registry-wide fan-out.
   const page = discovered.slice(0, 25)

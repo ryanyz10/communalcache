@@ -27,5 +27,6 @@ export function invalidateRequestViews(client: QueryClient, cacheId: string, ite
     client.invalidateQueries({ queryKey: ['requests'] }),
     client.invalidateQueries({ queryKey: ['item', cacheId, itemId] }),
     client.invalidateQueries({ queryKey: ['items', cacheId] }),
+    client.invalidateQueries({ queryKey: ['my-items'] }),
   ])
 }

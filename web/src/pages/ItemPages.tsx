@@ -40,7 +40,7 @@ function DeleteItem({ item }: { item: Item }) {
       dialog.current?.close()
       client.removeQueries({ queryKey: ['item', item.cache_id, item.id] })
       client.removeQueries({ queryKey: ['item-requests', item.cache_id, item.id] })
-      await Promise.all([client.invalidateQueries({ queryKey: ['items', item.cache_id] }), client.invalidateQueries({ queryKey: ['requests'] })])
+      await Promise.all([client.invalidateQueries({ queryKey: ['items', item.cache_id] }), client.invalidateQueries({ queryKey: ['requests'] }), client.invalidateQueries({ queryKey: ['my-items'] })])
       navigate(`/caches/${item.cache_id}`)
     },
   })
@@ -101,7 +101,7 @@ function ItemForm({ cacheId, item }: { cacheId: string; item?: Item }) {
     }),
     onSuccess: async saved => {
       queryClient.setQueryData(['item', cacheId, saved.id], saved)
-      await queryClient.invalidateQueries({ queryKey: ['items', cacheId] })
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['items', cacheId] }), queryClient.invalidateQueries({ queryKey: ['my-items'] })])
       navigate(`/caches/${cacheId}/items/${saved.id}`)
     },
   })

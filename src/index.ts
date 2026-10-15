@@ -5,6 +5,7 @@ import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
 import { readPhoto } from './photos'
 import { aggregateRequests, enrichRequests } from './requests'
+import { aggregateOwnedItems } from './items'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
@@ -21,7 +22,7 @@ const authMethods: Record<string, string> = {
 
 export function requireProfile(path: string, method: string, profile: Profile) {
   if (path.startsWith('/api/auth/') || path.startsWith('/api/push/') || (path === '/api/me' && method === 'PATCH')) return
-  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !profile.display_name) {
+  if ((path === '/api/me/items' || ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) && !profile.display_name) {
     throw new HttpError(409, 'profile_incomplete')
   }
 }
@@ -100,8 +101,8 @@ async function dispatch(request: Request, env: Env) {
     if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
   }
   const photoRoute = itemRoute?.[3] === '/photo'
-  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute) throw new HttpError(404, 'not_found')
-  const methods = memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  if (path !== '/api/me' && path !== '/api/me/items' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute) throw new HttpError(404, 'not_found')
+  const methods = memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' || path === '/api/me/items' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
@@ -141,6 +142,11 @@ async function dispatch(request: Request, env: Env) {
         if (result.meta.changes === 0) throw new HttpError(409, 'push_limit')
       }
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+    }
+    if (path === '/api/me/items') {
+      const after = new URL(request.url).searchParams.get('after')
+      if (after !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(after)) throw new HttpError(400, 'invalid_cursor')
+      return json(await aggregateOwnedItems(env, profile.id, after?.toLowerCase() ?? null))
     }
     if (path === '/api/requests') {
       const after = new URL(request.url).searchParams.get('after')

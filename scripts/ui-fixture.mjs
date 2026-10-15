@@ -84,6 +84,18 @@ const server = createServer(async (request, response) => {
       json(me)
       return
     }
+    if (path === '/api/me/items') {
+      if (!authenticated) { json({error:'unauthorized'},401); return }
+      if (!me.display_name) { json({error:'profile_incomplete'},409); return }
+      if (request.method!=='GET') { json({error:'method_not_allowed'},405); return }
+      const after=new URL(request.url,'http://localhost').searchParams.get('after')
+      const discovered=[...caches.keys()].sort().filter(id=>!after || id>after.toLowerCase()).slice(0,26)
+      const page=discovered.slice(0,25)
+      const owned=[...items.values()].filter(item=>item.owner_id===me.id && page.includes(item.cache_id)).map(({owner_name,...item})=>({...item,cache_name:caches.get(item.cache_id).name,pending_request_count:[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending').length}))
+      owned.sort((left,right)=>right.created_at-left.created_at || left.id.localeCompare(right.id))
+      json({items:owned,unavailable_cache_ids:[],next_cursor:discovered.length>25?page.at(-1):null})
+      return
+    }
     if (path === '/api/requests') {
       if (!authenticated) { json({error:'unauthorized'},401); return }
       json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id),unavailable_cache_ids:[],next_cursor:null})

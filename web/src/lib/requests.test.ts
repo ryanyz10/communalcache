@@ -99,7 +99,7 @@ it('uses nested cookie-auth mutations without forged party IDs and invalidates e
   const client = new QueryClient()
   const invalidate = vi.spyOn(client, 'invalidateQueries').mockResolvedValue()
   await invalidateRequestViews(client, 'cache', 'item')
-  expect(invalidate.mock.calls.map(call => call[0]?.queryKey)).toEqual([['item-requests', 'cache', 'item'], ['requests'], ['item', 'cache', 'item'], ['items', 'cache']])
+  expect(invalidate.mock.calls.map(call => call[0]?.queryKey)).toEqual([['item-requests', 'cache', 'item'], ['requests'], ['item', 'cache', 'item'], ['items', 'cache'], ['my-items']])
   client.clear()
 })
 

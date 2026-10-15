@@ -100,8 +100,10 @@ The house icon in the pinned header goes Home. The profile menu opens **Requests
 its sign-out button along with your own name/email and notification toggle. Escape,
 outside pointer clicks and navigation close the menu; keyboard arrows/Home/End move
 between its items. The profile/menu badge counts only first-page pending incoming
-requests. Home shows caches only, with no requests preview/sidebar or Your items
-placeholder. Discovery supplies names, not item/member counts; no counts are invented. The fixture API is mocked;
+requests. Home shows caches followed by **Your items**, with no requests preview/
+sidebar. Your items links to your own listings with cache name, stock/type, private
+photo and pending-request count; add an item from a cache to populate it. Cache
+discovery summaries supply names, not member/item totals; no counts are invented. The fixture API is mocked;
 the runtime suite separately proves real D1/DO authority.
 For Items, use **Add item** from a cache: create a reusable item without stock or
 check Consumable and set stock (including zero). Open the item, edit its title,
@@ -148,6 +150,32 @@ Real email sign-in requires separately approved Resend/domain setup and a local
 provider key. Delivery is awaited with a 10-second abort deadline. Better Auth
 1.7.7 catches callback rejections, so a request-local delivery result maps failures
 to generic JSON `502 email_unavailable`; a rate-limited request remains 429.
+
+### Your items across caches
+
+`GET /api/me/items?after={cacheId}` requires a signed-in caller with a completed
+display name. It returns `{items, unavailable_cache_ids, next_cursor}`. Each item
+has the existing item fields (`id`, `cache_id`, `owner_id`, `title`, `description`,
+`is_consumable`, nullable `quantity`, `created_at`, nullable `photo_version`) plus
+`cache_name` and `pending_request_count`. There are no emails, invite secrets or R2
+keys. Photos still use the same-origin, membership-checked private photo route.
+
+The endpoint discovers at most 25 caller `my_caches` entries per page and makes at
+most five concurrent DO calls. Each DO checks active membership and filters
+`owner_id = caller` in one synchronous local transaction; D1 never authorizes.
+Pending counts use the local pending-request index. Names come from live DO config,
+not the registry projection. Removed/non-member 404 drift is skipped; other failed
+cache reads are explicitly unavailable. A missing discovery row hides an entry
+until sync catches up, never grants access. Each cache returns all of this owner's
+items, as the cache item list does; per-cache pagination is the upgrade if that
+list grows. Results are sorted within each discovery page, not a global item cursor.
+
+Home has phone-first compact rows and `lg:` photo cards, a loading skeleton, honest
+empty/error/partial states and **Load more item caches** continuation. Item/stock/
+photo edits, request decisions, cache renames and removal invalidate this view.
+The provider-free fixture mocks the same response shape; DO/D1 tests, not that
+fixture, prove permission and discovery-drift behavior. No new schema or resources
+are required.
 
 ### Email links and code fallback
 
@@ -262,7 +290,7 @@ Current bounded work:
 | DO sync drain | 25 iterations, up to 50 D1/Queue/R2 binding calls; alarm continues |
 | R2 item cleanup | 100 keys/page, relist after deletion; intent remains until empty |
 | Registry / outbox Cron | 25 caches and 25 recoverable IDs per five-minute tick; durable cursors |
-| Requests aggregation | 25 discovered caches/page, 5 concurrent RPCs, explicit next cursor/unavailable IDs |
+| Requests / Your items aggregation | 25 discovered caches/page, 5 concurrent RPCs, explicit next cursor/unavailable IDs |
 | Queue consumer | 3 sequential rows/batch, up to 3 browser registrations/user; 10s provider / 30s row deadline |
 | Write abuse counters | 1 atomic D1 statement/attempt; 4 reusable rows/user |
 

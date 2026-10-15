@@ -1,3 +1,6 @@
+export type OwnedItem = Omit<Item, 'owner_name'> & { cache_name: string; pending_request_count: number }
+export type OwnedItemsPage = { items: OwnedItem[]; unavailable_cache_ids: string[]; next_cursor: string | null }
+
 export type Item = {
   id: string
   cache_id: string

@@ -5,6 +5,7 @@ export type CacheInfo = { id: string; name: string; owner_id: string; invite_tok
 type CacheRow = { id: string; name: string; join_secret: string; requires_approval: number; created_at: number; owner_id: string }
 export type ItemInfo = { id: string; cache_id: string; owner_id: string; title: string; description: string | null; is_consumable: boolean; quantity: number | null; created_at: number; photo_version: string | null }
 type ItemRow = Omit<ItemInfo, 'is_consumable' | 'photo_version'> & { is_consumable: number; photo_path: string | null }
+export type OwnedItemInfo = ItemInfo & { cache_name: string; pending_request_count: number }
 export type RequestInfo = {
   id: string; cache_id: string; cache_name: string; item_id: string; item_title: string; owner_id: string; requester_id: string
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null; decided_at: number | null; created_at: number
@@ -264,6 +265,20 @@ export class Cache extends DurableObject<Env> {
         SELECT id, ? AS cache_id, owner_id, title, description, is_consumable, quantity, created_at, photo_path
         FROM items ORDER BY created_at DESC, id
       `, cache.id).toArray().map(itemInfo)
+    })
+  }
+
+  async itemsForOwner(userId: string): Promise<OwnedItemInfo[]> {
+    await this.rearm()
+    return this.ctx.storage.transactionSync(() => {
+      const cache = this.readCache(userId)
+      // ponytail: cache pages bound fan-out, not item rows; large caches need per-cache item pagination.
+      const rows = this.ctx.storage.sql.exec<ItemRow & { pending_request_count: number }>(`
+        SELECT i.id, ? AS cache_id, i.owner_id, i.title, i.description, i.is_consumable, i.quantity, i.created_at, i.photo_path,
+          (SELECT COUNT(*) FROM requests r WHERE r.item_id = i.id AND r.status = 'pending') AS pending_request_count
+        FROM items i WHERE i.owner_id = ? ORDER BY i.created_at DESC, i.id
+      `, cache.id, userId).toArray()
+      return rows.map(({ pending_request_count, ...item }) => ({ ...itemInfo(item), cache_name: cache.name, pending_request_count }))
     })
   }
 

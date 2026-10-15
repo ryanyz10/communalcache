@@ -16,7 +16,7 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
   const update = useMutation({
     mutationFn: (changes: { name?: string; requires_approval?: boolean }) => apiFetch<CacheInfo>(`/api/caches/${cache.id}`, { method: 'PATCH', body: changes }),
     onSuccess: async (_result, changes) => {
-      await Promise.all([client.invalidateQueries({ queryKey: ['cache', cache.id] }), client.invalidateQueries({ queryKey: ['caches'] })])
+      await Promise.all([client.invalidateQueries({ queryKey: ['cache', cache.id] }), client.invalidateQueries({ queryKey: ['caches'] }), client.invalidateQueries({ queryKey: ['my-items'] })])
       if (changes.name !== undefined) { setEditing(false); edit.current?.focus() }
     },
   })
@@ -41,7 +41,7 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
     mutationFn: () => apiFetch<void>(`/api/caches/${cache.id}/members/${member.user_id}`, { method: 'DELETE' }),
     onSuccess: async () => {
       dialog.current?.close()
-      await Promise.all(['cache', 'items', 'requests'].map(key => client.invalidateQueries({ queryKey: key === 'requests' ? [key] : [key, cache.id] })))
+      await Promise.all(['cache', 'items', 'requests', 'my-items'].map(key => client.invalidateQueries({ queryKey: key === 'requests' || key === 'my-items' ? [key] : [key, cache.id] })))
       // Removal unmounts its trigger; focus the surviving section heading.
       document.getElementById('members-heading')?.focus()
     },
