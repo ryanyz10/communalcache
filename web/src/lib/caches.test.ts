@@ -12,7 +12,7 @@ import { apiFetch, ApiError, errorMessage } from './api'
 const id='11111111-1111-4111-8111-111111111111'
 const cache={id,name:'Tools',owner_id:'owner',requires_approval:false,invite_token:id+'.'+'a'.repeat(43),members:[{user_id:'owner',display_name:'Neighbor'},{user_id:'member',display_name:'Member neighbor'}]}
 
-function renderPage(owner:boolean, home=false, settings=false, moving=false) {
+function renderPage(owner:boolean, home=false, settings=false) {
   vi.stubGlobal('location',{origin:'http://127.0.0.1:8788'})
   vi.stubGlobal('sessionStorage',{getItem:()=>null})
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
@@ -22,7 +22,7 @@ function renderPage(owner:boolean, home=false, settings=false, moving=false) {
   client.setQueryData(['join-requests',id],[{user_id:'applicant',display_name:'New neighbor',created_at:1}])
   client.setQueryData(['requests'],{pages:[{requests:[],unavailable_cache_ids:[],next_cursor:null}],pageParams:[null]})
   const path=home?'/':settings?'/caches/:cacheId/settings':'/caches/:cacheId'
-  const element=home?createElement(HomePage):settings?createElement(CacheSettingsPage,{removalDisabled:moving}):createElement(CachePage,{itemsMoving:moving})
+  const element=home?createElement(HomePage):settings?createElement(CacheSettingsPage):createElement(CachePage)
   const page=createElement(Routes,null,createElement(Route,{path,element}))
   const tree=createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,{initialEntries:[home?'/':`/caches/${id}${settings?'/settings':''}`]},page)}))
   const markup=renderToStaticMarkup(tree)
@@ -68,16 +68,18 @@ it('renders discovery entries and a named create sheet instead of inline setting
   expect(detail).not.toContain('Confirm removal')
 })
 
-it('shows the minimal transition message without legacy item or member-removal controls',()=>{
-  const cache=renderPage(true,false,false,true)
-  expect(cache).toContain('Items are being moved, back soon')
-  expect(cache).not.toContain('+ Add item')
-  expect(cache).not.toContain('Loading items')
-  const settings=renderPage(true,false,true,true)
-  expect(settings).not.toContain('Remove Member neighbor')
-  expect(settings).not.toContain('Confirm removal')
-  expect(settings).toContain('Approve New neighbor')
-  expect(settings).toContain('Reset link')
+it('distinguishes removal from voluntary leave and lists preservation/rejoin consequences',()=>{
+  const owner=renderPage(true,false,true)
+  expect(owner).toContain('Confirm removal')
+  expect(owner).toContain('Their library, photos and other caches are kept')
+  expect(owner).not.toContain('Their items are deleted')
+  expect(owner).not.toContain('Leave cache')
+  const member=renderPage(false,false,true)
+  expect(member).toContain('Leave cache')
+  expect(member).toContain('Confirm leave')
+  expect(member).toContain('You may rejoin with a current invite')
+  expect(member).toContain('Old items are not re-shared automatically')
+  expect(member).not.toContain('Confirm removal')
 })
 
 it('sends create/settings/rotate bodies without a forged owner or path secret',async()=>{
@@ -108,6 +110,13 @@ it('sends owner member removal to the nested cache route without a body',async()
   await apiFetch(`/api/caches/${id}/members/member`,{method:'DELETE'})
   expect(fetchMock).toHaveBeenCalledWith(`/api/caches/${id}/members/member`,expect.objectContaining({method:'DELETE',credentials:'same-origin',body:undefined}))
   expect(errorMessage(new ApiError(409,'owner_cannot_be_removed'))).toContain('cannot be removed')
+})
+
+it('posts voluntary leave without choosing another member and explains the owner prohibition',async()=>{
+  const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(null,{status:204}))
+  await apiFetch(`/api/caches/${id}/leave`,{body:{}})
+  expect(fetchMock).toHaveBeenCalledWith(`/api/caches/${id}/leave`,expect.objectContaining({method:'POST',credentials:'same-origin',body:'{}'}))
+  expect(errorMessage(new ApiError(409,'owner_cannot_leave'))).toContain('owner cannot leave')
 })
 
 it('distinguishes invalid names and unavailable cache data in the UI',()=>{

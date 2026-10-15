@@ -43,7 +43,9 @@ handshake, not logistics. Handoffs happen in real life; no addresses stored.
   lent out**. It blocks new requests, not existing pending ones. No holder, return,
   due date, borrower assignment or loan lifecycle; requests end approved/rejected.
 - Join by unguessable invite link; optional per-cache owner approval. Removed
-  members cannot rejoin with the still-valid secret. No ownership transfer.
+  members cannot rejoin with the still-valid secret. Non-owner members may leave
+  voluntarily and rejoin with a current invite, subject to approval; old items are
+  not re-attached automatically. No ownership transfer.
 - Private photos use immutable `ownerId/itemId/uploadUUID` keys in R2.
 
 **Single-D1 decision:** one D1 database is the source of truth for all relational
@@ -96,7 +98,7 @@ input. [database.md](database.md) gives illustrative DDL and batch protocols.
 | --- | --- |
 | Better Auth user/session/account/verification/rateLimit | Unchanged auth schema, private email, D1 sessions/challenges/rate limits; nullable app user.display_name |
 | caches | UUID, name/config, 32-byte base64url join_secret, requires_approval, created_at; operation_token for guarded multi-statement mutations |
-| memberships | (cache_id,user_id), role owner/member, status active/pending/removed, created_at, operation_token; exactly one active cache owner, protected from removal |
+| memberships | (cache_id,user_id), role owner/member, status active/pending/removed/left, created_at, operation_token; exactly one active cache owner, protected from removal |
 | items | UUID, owner_id, title, description, photo_path, immutable is_consumable, quantity, available, unavailable_note, created_at, operation_token |
 | item_caches | Unique (item_id,cache_id), attached_at, operation_token; real FKs to items/caches, no duplicated stock/display fields |
 | requests | UUID, item_id, cache_id where asked, requester_id, quantity, status, decision_reason, decided_at, created_at, decision_token |
@@ -276,6 +278,8 @@ and exact-key cleanup handle known work; document remaining crash coverage.
   read alone cannot authorize a later write. Missing cache/mismatch is 404.
 - New membership is active or pending. Existing active/pending joins are idempotent;
   removed is never overwritten and returns 403 **only with a valid current secret**.
+  A voluntary left membership is replaced by a fresh active/pending join under the
+  current secret/approval setting, without restoring old attachments.
   Owner approval/rejection is a guarded batch with a token and outbox snapshot.
   Rejection deletes pending membership so retry is possible; removal retains it.
 - Cache creation inserts config and active owner in one batch; partial creation
@@ -287,6 +291,10 @@ and exact-key cleanup handle known work; document remaining crash coverage.
   token. In that same batch snapshot/notify all affected pending requests, reject
   R's pending via C, reject all pending through R-owned attachments in C, then
   detach R's items from C. Dedupe overlaps. Keep R's library/photos/other caches.
+- **Leave C:** active non-owner caller uses the same guarded removal batch, setting
+  membership to left instead of removed. Pending requests are rejected and their
+  items detached from C; library/photos/other caches survive. Owners cannot leave.
+  Left members get cache-data 404 but may rejoin with a current valid invite.
 - **Detach I from C:** primary guarded attachment marker requires item-owner caller
   and active membership. Snapshot/notify pending via this attachment, reject them,
   then delete the token-marked attachment last. Keep item/stock/photo/other caches.
@@ -309,9 +317,10 @@ commits first and is included in removal, or removal commits first and its guard
 fails. The same applies to attach/detach/delete races. No registered targets,
 revocation tombstones, registry recovery or eventual permission propagation.
 Previously authorized in-flight reads and completed approvals are not recalled.
-The existing product has no self-leave endpoint; this spec does not add one. If
-leave is approved later it must use the same non-owner removal batch, not a bare
-membership delete. Destructive routes remain gated until PR 5 proves the protocol.
+PR 5's approved voluntary leave is POST /api/caches/{cacheId}/leave, using the same
+non-owner cleanup batch, never a bare membership delete. It retains a non-active
+left membership so removed denial and voluntary rejoin remain distinct. Every
+destructive endpoint ships only with its complete guarded batch/race proof.
 
 ## Backend and authentication
 
@@ -452,7 +461,9 @@ cache-local compatibility routes must not remain a second stock authority.
 - GET/POST /api/caches; GET/PATCH /api/caches/{cacheId}.
 - POST /api/caches/{cacheId}/invite/rotate and /join (body {secret}).
 - GET /api/caches/{cacheId}/join-requests; POST .../{userId}/approve|reject.
-- DELETE /api/caches/{cacheId}/members/{userId} (guarded until cascade proof).
+- DELETE /api/caches/{cacheId}/members/{userId}; POST /api/caches/{cacheId}/leave.
+  Both use the full guarded cleanup batch; only cache owners may remove others,
+  and owners cannot leave.
 - GET/POST /api/me/items; GET/PATCH/DELETE /api/me/items/{itemId}.
 - POST/GET /api/me/items/{itemId}/photo (owner library).
 - PUT/DELETE /api/me/items/{itemId}/attachments/{cacheId}.
