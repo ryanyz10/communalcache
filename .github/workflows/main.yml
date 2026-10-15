@@ -20,6 +20,9 @@ jobs:
       ${{ github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'push' &&
           github.event.workflow_run.head_repository.full_name == github.repository }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -29,12 +32,31 @@ jobs:
       group: deploy-staging
       cancel-in-progress: false
     steps:
-      - name: Check out the successful CI revision
+      - name: Resolve the current master deploy target
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          target=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/master" --jq '.object.sha')
+          if [ "$target" != "$DEPLOY_SHA" ]; then
+            # Older CI completions can replace the newest pending Staging run.
+            result=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --branch master --commit "$target" --event push --limit 1 --json conclusion,status --jq '.[0] | if . == null then "missing" elif .status != "completed" then .status else .conclusion end')
+            if [ "$result" != 'success' ]; then
+              echo "Skipping master $target: latest push CI is $result."
+              exit 0
+            fi
+          fi
+          echo "Deploying current master revision $target."
+          printf 'sha=%s\n' "$target" >> "$GITHUB_OUTPUT"
+      - name: Check out the resolved successful master revision
+        if: steps.target.outputs.sha != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ steps.target.outputs.sha }}
           persist-credentials: false
       - name: Set up Node
+        if: steps.target.outputs.sha != ''
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.23.1'
@@ -43,20 +65,15 @@ jobs:
             package-lock.json
             web/package-lock.json
       - name: Install locked dependencies
+        if: steps.target.outputs.sha != ''
         run: npm ci && npm --prefix web ci
       - name: Build web assets
+        if: steps.target.outputs.sha != ''
         run: npm --prefix web run build
       - name: Migrate and deploy staging
+        if: steps.target.outputs.sha != ''
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          # Completion order is not commit order; never redeploy an obsolete master run.
-          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/master" --jq '.object.sha')
-          if [ "$latest" != "$DEPLOY_SHA" ]; then
-            echo 'Skipping a superseded master revision.'
-            exit 0
-          fi
           npx --no-install wrangler d1 migrations apply communalcache-staging --remote -e staging
           npx --no-install wrangler deploy -e staging
