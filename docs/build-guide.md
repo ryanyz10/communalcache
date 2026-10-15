@@ -7,22 +7,33 @@ spec; this guide names the scope, traps and check that proves the implementation
 Every feature ends deployable. Destructive endpoints come late because removal
 without cleanup and notifications is worse than not exposing removal yet.
 
+The approved shared-items target is the [Owner DO plan](#shared-items-implementation-plan)
+below. Existing Features 1–9 are the cache-local implementation reference, not proof
+of the new protocol. Shared rollout must gate mixed old/new writes and destructive
+routes until their canonical guards, cascades and recovery are implemented.
+
 The Go foundation and Caches/Joining PRs are references, not completed Cloudflare
 features. Port them before adding later features; retain their product behaviors
 and authorization tests, not their Postgres/Fly mechanisms.
 
 ## Before you start
 
-- **Worker bindings**: D1 is global; a cache DO's local SQLite owns authorization
-  and all cache data. R2/Queue/D1 calls are external I/O, not local transactions.
+- **Worker bindings**: Cache DO owns membership and permanent owner_targets;
+  Owner DO owns library items, attachments, shared stock, requests and tombstones.
+  Listings and D1 discovery never authorize. RPC/R2/Queue/D1 are external I/O.
 - **`transactionSync`**: read, decide in JS, write and record intent synchronously;
   throw rolls back. No await, async callback or cursor crossing an await.
 - **DO scheduling**: single-threaded does not mean one entire async handler at a
   time. External awaits can interleave. Alarms retry automatically only six times;
   pending work needs explicit re-arming and a recovery backstop.
-- **Discovery vs permission**: `my_caches` discovers the caller's home list and
-  requests fan-out; each DO still authorizes. Registry is for discovery/sweeps,
-  never an ownership or membership source.
+- **Discovery vs permission**: `my_caches` discovers Home caches; `request_index`
+  discovers outgoing Owner targets, each filtering the requester. Library/incoming
+  reads use own Owner DO. Registry/known owner IDs only discover recovery work.
+- **Registration before attachment**: Cache active-owner check + owner_targets
+  insert is one local transaction before Owner attach. Targets survive detach;
+  removal delivers durable tombstones to every registered owner, not listings.
+  No cross-object await inside a local check/write transaction; no global commit
+  or instant revocation/rollback is claimed.
 - **Cloudflare Vitest plugin**: real local Worker/D1/DO storage tests. Mock provider
   HTTP, not SQL. `vitest-pool-workers` is deprecated; use `vitest-plugin`.
 
@@ -66,17 +77,117 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | — | Deploy pipeline | Implemented; in review (CI → staging, fast-forward production; setup pending) | — |
 | 1 | Caches | Implemented; in review (Cloudflare port, no deployment) | [#2](https://github.com/ryanyz10/communalcache/pull/2) (closed Go reference) |
 | 2 | Joining | Implemented; in review (Cloudflare port, no deployment) | [#3](https://github.com/ryanyz10/communalcache/pull/3) (closed Go reference) |
-| 3 | Items (no photos) | Implemented; in review (Cloudflare, pending-reservation stock floor; no deployment) | — |
-| 4 | Photos | Implemented; in review (private local R2, cleanup recovery; remote buckets pending) | — |
-| 5 | Requests | Implemented; in review (transactional reservations/decisions, bounded discovery; no deployment) | — |
+| 3 | Items (no photos) | Current cache-local port; replaced by shared PR 2 | — |
+| 4 | Photos | Current cache-local port; owner-scoped replacement in shared PR 2 | — |
+| 5 | Requests | Current cache-local port; shared-stock replacement in shared PR 3 | — |
 | 6 | Notifications + email | Implemented; in review (guarded Queue/email delivery + recovery; remote setup pending) | — |
 | 7 | Web push + PWA | Implemented; in review (local crypto/storage/PWA proof; live push/iOS UNVERIFIED) | — |
-| 8 | Member removal and item deletion | Implemented; in review (atomic cascades, durable D1/R2/outbox cleanup; no deployment) | — |
+| 8 | Member removal and item deletion | Current cache-local port; registered-target replacement in shared PR 4 | — |
 | 9 | Polish | Implemented locally (D1 write budgets, accessible/error states, monitoring/runbook; release proof pending) | — |
 | — | Magic-link sign-in | Implemented locally (link-only primary, explicit code fallback, scanner-safe Continue; live mail/mobile proof pending) | — |
-| — | Frontend redesign | Implemented locally (5a–5e, 6a–6f, 1a–1h; nav v2 profile menu, caches-only home, pending/mine requests, HTML sign-in mail + text fallback; visual review pending) | — |
+| — | Frontend redesign | Implemented locally (5a–5e, 6a–6f, 1a–1h; nav v2 profile menu, pending/mine requests, HTML sign-in mail + text fallback; library follows shared PR 5) | — |
+| — | Your items cache fan-out draft | Superseded by shared PR 5's Owner library; do not merge as the shared design | [#28](https://github.com/ryanyz10/communalcache/pull/28) (draft) |
+| Shared 1 | Owner DO specification | Spec review; docs only, no bindings/migrations/code | — |
+| Shared 2 | Owner items, attachments, listings and photos | Planned; permanent target registration before attachments | — |
+| Shared 3 | Owner requests, shared stock and discovery | Planned; tombstones/request_index, confirmed availability semantics | — |
+| Shared 4 | Cross-object removal and global deletion | Planned; both delivery orders, complete target coverage and recovery proof | — |
+| Shared 5 | Library and shared-item UI | Planned; existing/new sheet, cache checkboxes, Lent out; supersedes #28 | — |
+| Shared 6 | Staging data reset or migration | Planned; separately approved one-off operation, no legacy cutover | — |
 
 ---
+
+## Shared-items implementation plan
+
+Option B is decided: one Owner DO/user, one item/stock count across cache
+attachments; Cache membership plus display-only listings. The user also confirmed
+manual **Lent out** + optional note and the reusable approval **Mark as lent out**
+checkbox. No holder/return tracking or extra request statuses. This docs PR is PR 1;
+new runtime support below remains **UNVERIFIED** until its proving checks exist.
+PR 2–6 below are shared-plan sequence labels, not existing GitHub PR numbers;
+#28 is the actual draft being superseded.
+
+### PR 2 — Owner items, attachments, listings and photos
+
+Add the Owner class/identity/versioned schema, canonical items, attachments and
+pending_sync. Cache introduces listings and non-display
+`owner_targets(owner_id PRIMARY KEY, registered_at)`. Attach first performs Cache
+active-owner check + target insertion in one transaction; only then may Owner
+commit attachment after its tombstone check. Never delete targets on detach.
+Owner listing updates are display projections, not stock or request permission.
+Photos use private ownerId/itemId/uploadUUID keys and Owner re-check after R2 I/O.
+
+Prove own-library isolation, immutable type/stock bounds, one item shared to two
+caches, registration rollback/order/retention, projection replay/lag, private reads
+through both authorities, upload/delete races and ordered cleanup/recovery. Add
+bounded Owner recovery alongside Cache/outbox budgets; namespace enumeration or
+unmeasured extra RPC pages are not a recovery guarantee.
+
+### PR 3 — Owner requests and one shared stock ledger
+
+Move requests to Owner storage with cache/requester context. Admission checks R/O
+active and listing in Cache, then Owner transaction checks item/attachment, both
+tombstones, non-owner/type/quantity/manual flag/global reservation sum. Commit
+request + notification + request_index intent together. Owner decisions are
+pending-only, exactly-once stock deduction; edits cannot undercut all-cache pending.
+D1 `request_index(requester_id, owner_id)` discovers outgoing targets only;
+incoming and library are own Owner reads. Bound discovery/concurrency/rows and
+report failed owners honestly.
+
+Prove concurrent requests through different caches cannot overbook, decision/stock
+races, index forgery/drift, party/cache queue privacy and failure rollback. Lent out
+blocks new requests but keeps existing pending rows; approval checkbox updates
+flag/note and every attachment's listing intents atomically. No borrower/return
+record. Do not enable shared request writes before PR 4's removal safety gate.
+
+### PR 4 — Removal, detach and global-delete races
+
+Cache removal marks R removed and durably covers **every owner_targets entry**,
+not listings. Each receiver inserts permanent revoked(C,R), rejects R's pending
+via C, and if R is that owner detaches all from C/rejects pending through it.
+Library items, photos and other caches survive. Detach-one and global item deletion
+snapshot recipients before local changes and record the appropriate listing,
+notification and canonical R2 cleanup intents.
+
+Prove tombstone-before-create and create-before-tombstone orders converge with no
+surviving pending row; owner removal between registration and attachment; missing/
+late listings; detach/re-attach; repeated/evicted/replayed delivery beyond six
+failures; pending-only decision races and no duplicate deductions. Delivery is
+at-least-once/eventual, not instant distributed rollback of completed approvals.
+Bound target delivery while retaining complete durable coverage until acknowledged.
+No destructive route is enabled early, including old route compatibility paths.
+
+### PR 5 — Library and shared-item UI
+
+Home Your items reads the caller's own Owner DO, including unshared items, and
+shows attached caches beneath each item. Cache Add item offers **Existing item**
+or **New item**; new also creates the library entry. Item detail's cache checkboxes
+attach/detach; a failed attach leaves a visible/retryable library entry, never an
+implicit duplicate. Add manual Lent out/note and the approval checkbox without a
+holder/return workflow. Preserve labels, focus, loading/error/partial states.
+
+**Supersedes draft #28**, whose cache fan-out API/UI implements the old placement.
+Do not carry its discovery-as-library shape into this phase; reuse only applicable
+presentation/test patterns. Prove one item across two caches, private own library,
+existing/new selection, failed attachment recovery and availability propagation.
+
+### PR 6 — Staging data reset or migration
+
+No production data exists on the new stack yet. Choose an explicitly approved
+staging reset or reviewed one-off migration with inventory/backup/recovery checks;
+no constructor silently drops the old cache data. Map old rows to Owner items,
+attachments/listings and owner-scoped photos, populate targets before attachments,
+and rebuild request_index. Ambiguous duplicate items require an approved mapping.
+Legacy verified-email identity migration/cutover remains a later separate operation;
+keep Fly/Supabase live and never transfer old sessions. No reset, script execution,
+binding/resource change or Cloudflare command runs in this docs PR.
+
+## Cache-local port reference
+
+The following Foundation/Features 1–9 sections describe existing implementation
+history and regression checks. Statements about cache-local items/requests,
+cache-key photos and my_caches request fan-out are intentionally historical. New
+shared code follows the Owner plan and AGENTS invariants above, not those old store
+locations. Keep intermediate releases gated rather than mixing two stock authorities.
 
 ## Foundation port
 
@@ -257,6 +368,8 @@ producer, moved from Feature 1). Logged-out invite → email code on the same pa
 
 ## Feature 3 — Items (no photos)
 
+> Cache-local reference; shared PR 2 replaces item placement and attachment rules.
+
 **Goal:** members list things and owners edit them.
 
 ### Scope
@@ -283,6 +396,8 @@ checks for Feature 5, not a fictional ban on empty consumable stock.
 ---
 
 ## Feature 4 — Photos
+
+> Cache-key reference; shared PR 2 uses canonical owner-scoped photos and both gates.
 
 **Goal:** owner uploads and member reads without exposing R2.
 
@@ -328,6 +443,8 @@ upgrade, not a claimed DO/R2 atomic commit.
 ---
 
 ## Feature 5 — Requests
+
+> Cache-local reference; shared PR 3 moves reservations/requests to Owner DOs.
 
 **Goal:** ask/approve/reject without over-booking.
 
@@ -508,6 +625,8 @@ those deployment facts. Set a separate VAPID pair per environment before live pr
 ---
 
 ## Feature 8 — Member removal and item deletion
+
+> Local-cascade reference; shared PR 4 adds registered-target revocation across objects.
 
 **Goal:** destructive endpoints arrive with cleanup and durable notifications.
 
