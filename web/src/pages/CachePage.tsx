@@ -11,6 +11,7 @@ import { ItemList } from './ItemPages'
 import { AddItemSheet } from './AddItemSheet'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { PixelHorizon } from '../components/PixelArt'
+import { Avatar } from '../components/Avatar'
 
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams()
@@ -21,14 +22,14 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const joins = useQuery({ queryKey: ['join-requests', cacheId], queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`), enabled: !!me?.display_name && query.data?.owner_id === me.id })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  if (query.isPending) return <main className="cc-page lg:max-w-[1120px] lg:p-8"><p role="status">Loading cache…</p></main>
-  if (query.isError) return <main className="cc-page lg:max-w-[1120px] lg:p-8"><Link to="/" className="text-sm underline">‹ Your caches</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={() => void query.refetch()}>Try again</button></main>
+  if (query.isPending) return <main className="cc-page lg:max-w-[1200px] lg:p-8"><p role="status">Loading cache…</p></main>
+  if (query.isError) return <main className="cc-page lg:max-w-[1200px] lg:p-8"><Link to="/" className="text-sm underline">‹ Your caches</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={() => void query.refetch()}>Try again</button></main>
   const cache = query.data
   async function invite() {
     try { setStatus(await shareInvite(new URL(`/join/${cache.invite_token}`, location.origin).href)) }
     catch { setStatus('Could not share or copy. Open Cache settings to select the invite link.') }
   }
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <div className="cc-hero"><WideBreadcrumbs><Link to="/">Caches</Link><span aria-hidden="true">›</span><span>{cache.name}</span></WideBreadcrumbs>
     <Link to="/" className="text-sm underline lg:hidden">‹ Your caches</Link>
     <div className="mt-3 flex items-center justify-between gap-3">
@@ -46,6 +47,13 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
     {status && <p role="status" className="mt-3 text-sm">{status}</p>}
     {cache.owner_id === me.id && joins.isError && <p role="alert" className="mt-4 text-sm text-red-700">Join requests could not be loaded. <Link to={`/caches/${cache.id}/settings`} className="underline">Open settings to try again.</Link></p>}
     {cache.owner_id === me.id && !!joins.data?.length && <div className="mt-4 flex items-center justify-between gap-2 rounded-[10px] border border-amber-200 bg-amber-100 px-3.5 py-3 text-sm text-amber-900"><span><b>{joins.data.length} {joins.data.length === 1 ? 'person' : 'people'}</b> {joins.data.length === 1 ? 'wants' : 'want'} to join</span><Link to={`/caches/${cache.id}/settings`} className="underline">Review</Link></div>}
-    {itemsMoving ? <p role="status" className="mt-6">Items are being moved, back soon</p> : <><ItemList cacheId={cache.id} onAdd={() => addDialog.current?.showModal()} /><AddItemSheet cacheId={cache.id} cacheName={cache.name} dialog={addDialog} /></>}
+    <div className="contents lg:grid lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start lg:gap-6">
+      {itemsMoving ? <p role="status" className="mt-6">Items are being moved, back soon</p> : <><ItemList cacheId={cache.id} onAdd={() => addDialog.current?.showModal()} /><AddItemSheet cacheId={cache.id} cacheName={cache.name} dialog={addDialog} /></>}
+      <aside className="hidden lg:mt-6 lg:block lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="cache-members-heading">
+        <h2 id="cache-members-heading" className="font-semibold">Members · {cache.members.length}</h2>
+        <ul className="mt-3 space-y-3">{cache.members.map(member=><li key={member.user_id} className="flex items-center gap-2 text-sm"><Avatar userId={member.user_id} name={member.display_name ?? 'Member'} photoVersion={member.profile_photo_version} size={28} /><span className="min-w-0 break-words">{member.display_name ?? 'Member'}</span></li>)}</ul>
+        <Link to={`/caches/${cache.id}/settings`} className="mt-4 inline-block text-sm underline">Cache settings</Link>
+      </aside>
+    </div>
   </main>
 }
