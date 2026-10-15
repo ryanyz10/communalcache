@@ -35,10 +35,10 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/requests" element={<RequestsPage />} />
             <Route path="/account" element={<AccountPage />} />
-            <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage removalDisabled />} />
+            <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
             <Route path="/caches/:cacheId" element={<CachePage />} />
             <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
-            <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage deletionDisabled />} />
+            <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
             <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

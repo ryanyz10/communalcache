@@ -36,25 +36,48 @@ function DeleteItem({ item }: { item: Item }) {
   const client = useQueryClient()
   const navigate = useNavigate()
   const remove = useMutation({
-    mutationFn: () => apiFetch<void>(`/api/caches/${item.cache_id}/items/${item.id}`, { method: 'DELETE' }),
+    mutationFn: () => apiFetch<void>(`/api/me/items/${item.id}`, { method: 'DELETE' }),
     onSuccess: async () => {
       dialog.current?.close()
-      client.removeQueries({ queryKey: ['item', item.cache_id, item.id] })
-      client.removeQueries({ queryKey: ['item-requests', item.cache_id, item.id] })
-      await Promise.all([client.invalidateQueries({ queryKey: ['items', item.cache_id] }), client.invalidateQueries({ queryKey: ['requests'] })])
+      client.removeQueries({ queryKey: ['item'] })
+      client.removeQueries({ queryKey: ['item-requests'] })
+      await invalidateRequestViews(client)
       navigate(`/caches/${item.cache_id}`)
     },
   })
   return <>
     <button type="button" className="ml-3 mt-6 rounded-full border border-red-300 px-3.5 py-1.5 text-sm font-medium text-red-800" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Delete item</button>
     <dialog ref={dialog} onCancel={event => { if (remove.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="delete-item-heading">
-      <h2 id="delete-item-heading" className="text-xl font-semibold">Delete {item.title}?</h2>
-      <p className="mt-3">This permanently removes the item, its photos and request history. Neighbors with pending requests will be notified.</p>
+      <h2 id="delete-item-heading" className="text-xl font-semibold">Delete {item.title} everywhere?</h2>
+      <ul className="mt-3 list-disc space-y-2 pl-5"><li>This permanently removes the item from your library and every cache.</li><li>Its request history is erased. Neighbors with pending requests will be notified.</li><li>Its private photos are queued for cleanup.</li></ul>
       {remove.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(remove.error)}</p>}
       <div className="mt-6 flex gap-3">
         <button type="button" autoFocus disabled={remove.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button>
         <button type="button" disabled={remove.isPending} onClick={() => remove.mutate()} className="rounded-md bg-red-700 px-4 py-2 text-white disabled:opacity-60">{remove.isPending ? 'Deleting…' : 'Confirm deletion'}</button>
       </div>
+    </dialog>
+  </>
+}
+
+function StopSharing({ item }: { item: Item }) {
+  const client = useQueryClient(), navigate = useNavigate(), dialog = useRef<HTMLDialogElement>(null)
+  const detach = useMutation({
+    mutationFn: () => apiFetch<void>(`/api/me/items/${item.id}/attachments/${item.cache_id}`, { method: 'DELETE' }),
+    onSuccess: async () => {
+      dialog.current?.close()
+      client.removeQueries({ queryKey: ['item', item.cache_id, item.id] })
+      client.removeQueries({ queryKey: ['item-requests', item.cache_id, item.id] })
+      await invalidateRequestViews(client)
+      navigate(`/caches/${item.cache_id}`)
+    },
+  })
+  return <>
+    <button type="button" className="cc-outline mt-3" onClick={() => { detach.reset(); dialog.current?.showModal() }}>Stop sharing in this cache</button>
+    <dialog ref={dialog} onCancel={event => { if (detach.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="detach-item-heading">
+      <h2 id="detach-item-heading" className="text-xl font-semibold">Stop sharing {item.title} here?</h2>
+      <ul className="mt-3 list-disc space-y-2 pl-5"><li>The item is removed from this cache only.</li><li>Pending requests through this cache are rejected and their requesters notified.</li><li>Your library item, photos, stock and other caches are kept.</li></ul>
+      {detach.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(detach.error)}</p>}
+      <div className="mt-6 flex gap-3"><button type="button" autoFocus disabled={detach.isPending} onClick={() => dialog.current?.close()} className="cc-outline">Cancel</button><button type="button" disabled={detach.isPending} onClick={() => detach.mutate()} className="cc-pill">{detach.isPending ? 'Saving…' : 'Confirm stop sharing'}</button></div>
     </dialog>
   </>
 }
@@ -79,7 +102,7 @@ function ItemAvailability({ item }: { item: Item }) {
   </form>
 }
 
-export function ItemPage({ deletionDisabled = false }: { deletionDisabled?: boolean }) {
+export function ItemPage() {
   const { cacheId = '', itemId = '' } = useParams()
   const { me } = useAuth()
   const query = useQuery({ queryKey: ['item', cacheId, itemId], queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`), enabled: !!me?.display_name })
@@ -99,7 +122,8 @@ export function ItemPage({ deletionDisabled = false }: { deletionDisabled?: bool
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
       {me.id === query.data.owner_id && <>
         <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="cc-pill mt-6">Edit item</Link>
-        {!deletionDisabled && <DeleteItem item={query.data} />}
+        <DeleteItem item={query.data} />
+        <StopSharing item={query.data} />
         <ItemAvailability key={`${query.data.available}:${query.data.unavailable_note ?? ''}`} item={query.data} />
         <PhotoUpload item={query.data} />
       </>}

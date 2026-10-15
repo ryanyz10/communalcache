@@ -195,20 +195,18 @@ it('retains committed outbox after Queue enqueue failure and Cron rescues it wit
   expect(batch).toHaveBeenCalledWith([{ body: rows[0].id }])
 })
 
-it('keeps destructive APIs gated without consulting DO membership or mutating data', async () => {
+it('guards destructive APIs on missing/protected targets without consulting DO membership', async () => {
   const caller = await login()
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
   const cache = await createCache(env.DB, caller.id, 'Tools', false), item = crypto.randomUUID()
   const base = `/api/caches/${cache.id}`
-  const paths: [string, string[]][] = [
-    [base + `/items/${item}`, ['DELETE']], [base + `/members/${caller.id}`, ['DELETE']],
-  ]
+  const paths: [string, number][] = [[base + `/items/${item}`,404],[base + `/members/${caller.id}`,409]]
   const get = vi.fn(() => { throw new Error('Must not call legacy DO') })
   const gatedEnv = { ...env, CACHES: { ...env.CACHES, get } } as unknown as Env
-  for (const [path, methods] of paths) for (const method of methods) {
-    const response = await worker.fetch(appRequest(path, { method, cookie: caller.cookie, ...(method !== 'GET' ? { body: {} } : {}) }), gatedEnv)
-    expect(response.status).toBe(503)
-    expect(await response.json()).toEqual({ error: 'items_moving' })
+  for (const [path, expected] of paths) {
+    const response = await worker.fetch(appRequest(path, { method:'DELETE', cookie:caller.cookie, body:{} }), gatedEnv)
+    expect(response.status).toBe(expected)
+    expect(await response.json()).toEqual({ error:expected===404?'not_found':'owner_cannot_be_removed' })
   }
   expect(get).not.toHaveBeenCalled()
   expect((await notifications()).results).toEqual([])

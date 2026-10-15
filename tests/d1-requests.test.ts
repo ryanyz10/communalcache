@@ -288,5 +288,5 @@ it('reopens Worker requests with auth/CSRF/limits, atomic notifications, and pos
   const window = Math.floor(Date.now()/60000)*60000
   await env.DB.prepare("UPDATE write_limits SET count=20,window_start=? WHERE user_id=? AND route='request'").bind(window,caller.id).run()
   expect((await worker.fetch(appRequest(path,{method:'POST',cookie:caller.cookie,body:{quantity:1}}),env)).status).toBe(429)
-  expect((await worker.fetch(appRequest(`/api/caches/${cache.id}/members/${caller.id}`,{method:'DELETE',cookie:owner.cookie}),env)).status).toBe(503)
+  expect((await worker.fetch(appRequest(`/api/caches/${cache.id}/members/${caller.id}`,{method:'DELETE',cookie:owner.cookie}),env)).status).toBe(204)
 })

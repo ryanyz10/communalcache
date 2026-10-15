@@ -17,7 +17,7 @@ See [plan.md](plan.md) and [D1 PRs 2–7](build-guide.md#d1-implementation-plan)
 
 Every cache-data query/write joins or EXISTS-checks active membership **in that
 same SQL statement or atomic batch**. Item/photo reads also check attachment and
-active owner membership. Non-members (including pending/removed) get 404; only the
+active owner membership. Non-members (including pending/removed/left) get 404; only the
 valid-current-secret removed join returns 403. Private library operations check
 owner_id=authenticated caller and do not need cache membership. Party-scoped
 request history never grants cache/item/photo access or another cache's queue.
@@ -48,7 +48,7 @@ CREATE TABLE memberships (
   cache_id TEXT NOT NULL REFERENCES caches(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES user(id),
   role TEXT NOT NULL CHECK(role IN ('owner','member')),
-  status TEXT NOT NULL CHECK(status IN ('active','pending','removed')),
+  status TEXT NOT NULL CHECK(status IN ('active','pending','removed','left')),
   created_at INTEGER NOT NULL, operation_token TEXT,
   PRIMARY KEY(cache_id,user_id),
   CHECK(role <> 'owner' OR status = 'active')
@@ -93,8 +93,10 @@ CREATE INDEX requests_requester ON requests(requester_id,created_at,id);
 
 Exactly one active cache owner is established by atomic cache+owner creation;
 the unique index enforces at most one. No owner removal/transfer route. Account or
-cache deletion is not added by these FKs. Membership rows are retained as removed,
-not deleted on removal. App type is immutable; guarded request SQL also enforces
+cache deletion is not added by these FKs. Membership rows are retained as removed
+on removal and left on voluntary leave. Only removed denies a valid-secret rejoin;
+left may rejoin under current approval rules without restoring old attachments.
+App type is immutable; guarded request SQL also enforces
 item/request quantity type consistency (a CHECK cannot look up another table).
 New stock cannot fall below the all-cache pending sum. Requests deliberately do
 not FK to attachments: decided history may remain after detach/removal. Global
@@ -207,7 +209,9 @@ a read-time grant. Body {secret}, no secret in API URL/logs; invite page no-refe
 Valid-current-secret removed join 403; missing/wrong secret 404. Reject join deletes
 pending membership for retry. A guarded token marker on pending membership gates
 outbox snapshot then delete/update; rejection snapshot precedes deletion. Removed
-rows persist; no separate revocation tombstone is needed.
+rows persist; no separate revocation tombstone is needed. A left row can be
+upserted to the new active/pending state only by the current-secret guarded join;
+existing active/pending joins remain idempotent and removed is never overwritten.
 
 ### Requests, decisions and stock
 
@@ -241,15 +245,21 @@ than silently weaken atomicity.
 | Operation | Primary witness | Dependent statements, all token guarded |
 | --- | --- | --- |
 | Remove R from C | memberships UPDATE active non-owner R → removed + fresh operation_token, requiring active cache-owner caller | Snapshot affected pending via C (R requester OR item owner R) into outbox, deduped; reject those pending; delete R-owned item_caches for C; retain membership token row |
+| Leave C | memberships UPDATE active non-owner caller → left + fresh operation_token | Same snapshot/reject/detach cleanup as removal; retain membership row; valid-current-secret rejoin follows current approval and never restores attachments |
 | Detach I from C | item_caches marker UPDATE requiring authenticated item owner and active membership | Snapshot/notify pending for I,C; reject pending; delete marked attachment last |
 | Delete library item I | items marker UPDATE requiring owner_id=caller | Snapshot pending across ALL caches, reject pending, insert exact/prefix R2 cleanup, delete marked item last (cascades attachments/requests) |
 
 Outbox snapshots contain recipient, title, reason, quantity and destination before
 source deletion, with per-request dedupe keys. Membership removal/attachment detach
 preserves library items/private photos/other caches and does not deduct stock.
-Completed approvals are not rolled back; no holder/return ledger is created. The
-product currently has no self-leave endpoint; any separately approved leave must
-use the non-owner removal protocol, not a bare DELETE.
+Completed approvals are not rolled back; no holder/return ledger is created.
+Approved POST /api/caches/{cacheId}/leave uses the non-owner removal protocol with
+left status, not a bare DELETE. Owners cannot leave. Membership removal/leave and
+detach each use five statements; global deletion uses seven. All affected state
+and snapshots commit together, while at most 25 immediate Queue hints are returned.
+The outbox retains the rest for Cron. A destructively rejected pending request's
+UUID is its stable outbox ID; the per-operation/request dedupe key and token gates
+prevent replays from resetting delivery or manufacturing another closure event.
 
 No registration-before-attachment protocol, target enumeration, eventual tombstone
 delivery or projection cleanup. Request/attach first is included in later removal;
@@ -311,10 +321,12 @@ single-use redemption and code fallback remain as [specified](plan.md#magic-link
 
 Current `migrations/d1/` contains 0001_auth, 0002_app (discovery/push/outbox),
 0003_otp_identifier_unique, 0004_cache_sync_cursor, 0005_notification_sync_cursor
-and 0006_write_limits. These describe the cache-local implementation. New
-canonical D1 tables/columns/indexes and removal of obsolete discovery/cursors
-require reviewed implementation migrations; this spec adds none. Never edit
-already-applied migration history to pretend the DO data was in D1 all along.
+and 0006_write_limits for the cache-local implementation. D1 port migrations add
+0007_d1_caches, 0008_d1_items and 0009_d1_requests. PR 5 adds
+0010_membership_leave: rebuild memberships while preserving rows/tokens/FKs and
+owner indexes, adding left to the status CHECK. Obsolete discovery/cursor removal
+still belongs to retirement. Never edit already-applied migration history to
+pretend the DO data was in D1 all along.
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Do not point it at legacy `internal/db/migrations/`.
 

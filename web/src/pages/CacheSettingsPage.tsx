@@ -1,9 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useParams } from 'react-router'
+import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheDetail, CacheInfo } from '../lib/caches'
+import { invalidateRequestViews } from '../lib/requests'
 import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
@@ -41,7 +42,7 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
     mutationFn: () => apiFetch<void>(`/api/caches/${cache.id}/members/${member.user_id}`, { method: 'DELETE' }),
     onSuccess: async () => {
       dialog.current?.close()
-      await Promise.all(['cache', 'items', 'requests'].map(key => client.invalidateQueries({ queryKey: key === 'requests' ? [key] : [key, cache.id] })))
+      await Promise.all([client.invalidateQueries({ queryKey: ['cache', cache.id] }), client.invalidateQueries({ queryKey: ['caches'] }), invalidateRequestViews(client)])
       // Removal unmounts its trigger; focus the surviving section heading.
       document.getElementById('members-heading')?.focus()
     },
@@ -50,14 +51,37 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
     <button type="button" aria-label={`Remove ${name}`} className="shrink-0 text-sm text-red-800 underline" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Remove</button>
     <dialog ref={dialog} onCancel={event => { if (remove.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby={`remove-${member.user_id}`}>
       <h3 id={`remove-${member.user_id}`} className="text-lg font-semibold">Remove {name}?</h3>
-      <p className="mt-3">They lose access immediately and cannot rejoin with an invite. Their items are deleted; their pending requests are rejected as “left the cache.”</p>
+      <ul className="mt-3 list-disc space-y-2 pl-5"><li>They lose access immediately and cannot rejoin with an invite.</li><li>Their pending requests here, and pending requests on their items here, are rejected.</li><li>Their items stop being shared here. Their library, photos and other caches are kept.</li></ul>
       {remove.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(remove.error)}</p>}
       <div className="mt-6 flex gap-3"><button type="button" autoFocus disabled={remove.isPending} onClick={() => dialog.current?.close()} className="cc-outline">Cancel</button><button type="button" disabled={remove.isPending} onClick={() => remove.mutate()} className="rounded-full bg-red-700 px-3.5 py-1.5 text-sm font-medium text-white disabled:opacity-60">{remove.isPending ? 'Removing…' : 'Confirm removal'}</button></div>
     </dialog>
   </>
 }
 
-export function CacheSettingsPage({ removalDisabled = false }: { removalDisabled?: boolean }) {
+function LeaveCache({ cache }: { cache: CacheDetail }) {
+  const client = useQueryClient(), navigate = useNavigate(), dialog = useRef<HTMLDialogElement>(null)
+  const leave = useMutation({
+    mutationFn: () => apiFetch<void>(`/api/caches/${cache.id}/leave`, { body: {} }),
+    onSuccess: async () => {
+      dialog.current?.close()
+      client.removeQueries({ queryKey: ['cache', cache.id] })
+      client.removeQueries({ queryKey: ['join-requests', cache.id] })
+      await Promise.all([client.invalidateQueries({ queryKey: ['caches'] }), invalidateRequestViews(client)])
+      navigate('/')
+    },
+  })
+  return <section className="mt-6">
+    <button type="button" className="cc-outline text-red-800" onClick={() => { leave.reset(); dialog.current?.showModal() }}>Leave cache</button>
+    <dialog ref={dialog} onCancel={event => { if (leave.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="leave-cache-heading">
+      <h2 id="leave-cache-heading" className="text-xl font-semibold">Leave {cache.name}?</h2>
+      <ul className="mt-3 list-disc space-y-2 pl-5"><li>You lose access to this cache.</li><li>Pending requests here involving you or your items are rejected.</li><li>Your library, photos and other caches are kept; your items stop being shared here.</li><li>You may rejoin with a current invite; approval still applies. Old items are not re-shared automatically.</li></ul>
+      {leave.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(leave.error)}</p>}
+      <div className="mt-6 flex gap-3"><button type="button" autoFocus disabled={leave.isPending} onClick={() => dialog.current?.close()} className="cc-outline">Cancel</button><button type="button" disabled={leave.isPending} onClick={() => leave.mutate()} className="cc-pill">{leave.isPending ? 'Leaving…' : 'Confirm leave'}</button></div>
+    </dialog>
+  </section>
+}
+
+export function CacheSettingsPage() {
   const { cacheId = '' } = useParams()
   const { me } = useAuth()
   const client = useQueryClient()
@@ -95,11 +119,11 @@ export function CacheSettingsPage({ removalDisabled = false }: { removalDisabled
     </nav>
     <div className="contents lg:block lg:min-w-0 lg:space-y-5">
     {owner && <JoinRequests cacheId={cache.id} />}
-    <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="members-heading" id="members"><h2 id="members-heading" tabIndex={-1} className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Members</h2><ul className="cc-list lg:border-0">{cache.members.map(member => <li key={member.user_id} className="cc-row"><div className="min-w-0 flex-1"><p className="break-words font-semibold">{member.display_name ?? 'Member'}</p>{member.user_id === cache.owner_id && <p className="text-sm text-slate-600">Owner</p>}</div>{!removalDisabled && owner && member.user_id !== cache.owner_id && <RemoveMember cache={cache} member={member} />}</li>)}</ul></section>
+    <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="members-heading" id="members"><h2 id="members-heading" tabIndex={-1} className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Members</h2><ul className="cc-list lg:border-0">{cache.members.map(member => <li key={member.user_id} className="cc-row"><div className="min-w-0 flex-1"><p className="break-words font-semibold">{member.display_name ?? 'Member'}</p>{member.user_id === cache.owner_id && <p className="text-sm text-slate-600">Owner</p>}</div>{owner && member.user_id !== cache.owner_id && <RemoveMember cache={cache} member={member} />}</li>)}</ul></section>
     <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="invite-heading" id="invite"><h2 id="invite-heading" className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Invite link</h2><div className="cc-list lg:border-0"><div className="cc-row"><a href={invite} className="min-w-0 flex-1 font-mono text-sm break-all select-all">{invite}</a><button type="button" className="cc-pill" onClick={() => void copy()}>Copy</button></div>{owner && <button type="button" className="cc-row w-full text-left" onClick={() => { rotate.reset(); dialog.current?.showModal() }}><span className="flex-1"><span className="block font-semibold">Reset link</span><span className="block text-sm text-slate-600">Old link stops working</span></span><span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span></button>}</div>
       {copyStatus && <p role="status" className="mt-3 text-sm">{copyStatus}</p>}{rotationStatus && <p role="status" className="mt-3 text-sm text-emerald-700">{rotationStatus}</p>}
     </section>
-    {owner && <OwnerSettings cache={cache} />}
+    {owner ? <OwnerSettings cache={cache} /> : <LeaveCache cache={cache} />}
     {owner && <dialog ref={dialog} onCancel={event => { if (rotate.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="rotate-heading"><h2 id="rotate-heading" className="text-xl font-semibold">Reset this invite?</h2><p className="mt-3">The old link will stop working. Existing members keep access.</p>{rotate.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(rotate.error)}</p>}<div className="mt-6 flex gap-3"><button type="button" autoFocus disabled={rotate.isPending} onClick={() => dialog.current?.close()} className="cc-outline">Cancel</button><button type="button" disabled={rotate.isPending} onClick={() => rotate.mutate()} className="cc-pill">{rotate.isPending ? 'Resetting…' : 'Confirm reset'}</button></div></dialog>}
     </div>
     </div>

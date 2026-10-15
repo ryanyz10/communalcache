@@ -267,7 +267,7 @@ it('rejects late photo attachment after prefix cleanup and records a fresh exact
   expect(await env.BUCKET.head(late)).toBeNull()
 })
 
-it('gates Worker destructive routes until D1 cascades ship, retaining Origin/profile protection', async () => {
+it('guards Worker destructive routes with D1 authority, retaining Origin/profile protection', async () => {
   const caller = await login(), cacheId = crypto.randomUUID()
   const paths = [`/api/caches/${cacheId}/members/${caller.id}`, `/api/caches/${cacheId}/items/${crypto.randomUUID()}`]
   for (const path of paths) expect((await worker.fetch(appRequest(path, { method: 'DELETE', cookie: caller.cookie }), env)).status).toBe(409)
@@ -275,7 +275,7 @@ it('gates Worker destructive routes until D1 cascades ship, retaining Origin/pro
   for (const path of paths) {
     for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(path, { method: 'DELETE', cookie: caller.cookie, origin }), env)).status).toBe(403)
     const response = await worker.fetch(appRequest(path, { method: 'DELETE', cookie: caller.cookie }), env)
-    expect(response.status).toBe(503)
-    expect(await response.json()).toEqual({ error: 'items_moving' })
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'not_found' })
   }
 })
