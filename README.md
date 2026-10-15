@@ -47,7 +47,10 @@ Wrangler serves both API and built SPA at `http://127.0.0.1:8787`. D1 and DO sta
 are local under `.wrangler/`. `wrangler.jsonc` commits the approved `communalcache`
 D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`; this does not make local dev/tests
 remote. Remote migrations and deployments still require explicit approval, as do
-further account/provider changes. No R2/Queue resources are provisioned. The intended
+further account/provider changes. Photos declares local `BUCKET` bindings, but remote
+`communalcache-photos` (default/production) and `communalcache-photos-staging` buckets
+still require approved private creation; no R2/Queue resources were provisioned.
+Never enable public bucket access. The intended
 five-minute registry Cron is declared in config only; no production trigger was installed.
 
 For Vite hot reload, set **both** URLs in `.dev.vars` to `http://localhost:5173`,
@@ -85,8 +88,11 @@ fixture API is mocked; the runtime suite separately proves real D1/DO authority.
 For Items, use **Add item** from a cache: create a reusable item without stock or
 check Consumable and set stock (including zero). Open the item, edit its title,
 description or stock, and return to the cache list. Type is fixed after creation;
-photos and deletion are intentionally absent. The mock fixture covers these UI
-flows only; real authorization and pending-reservation floors are runtime tests.
+deletion is intentionally absent. From item detail, choose a JPEG, PNG or WebP and
+**Upload photo**; the browser resizes/re-encodes it to JPEG. The owner can replace
+it, and item lists/detail load it from the same-origin authenticated photo route.
+The mock fixture covers UI flows only; real authorization, R2 cleanup and
+pending-reservation floors are runtime tests.
 Use `UI_FIXTURE_PORT=4174 npm run ui:fixture` if 4173 is occupied, or additionally
 `UI_FIXTURE_DEV=1` to exercise the real Vite source UI before building.
 
