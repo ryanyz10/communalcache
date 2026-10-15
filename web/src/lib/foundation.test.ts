@@ -48,7 +48,7 @@ it('uses same-origin cookies with no bearer token or callback secret', async () 
 
 it('shows recoverable errors without exposing provider or credential details', () => {
   expect(errorMessage(new ApiError(502, 'email_unavailable'))).toContain('invite is saved')
-  expect(errorMessage(new ApiError(400, 'INVALID_OTP'))).toContain('newest email')
+  expect(errorMessage(new ApiError(400, 'INVALID_OTP'))).toContain('most recent code')
   expect(errorMessage(new ApiError(429, 'too_many_requests'))).toContain('wait a minute')
   expect(errorMessage(new Error('private provider detail'))).not.toContain('private provider detail')
 })

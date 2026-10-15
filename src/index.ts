@@ -6,6 +6,7 @@ import { readPhoto } from './photos'
 import { aggregateRequests, enrichRequests } from './requests'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
+import { requireWriteLimit, type WriteRoute } from './rate-limit'
 export { Cache } from './cache'
 
 const authMethods: Record<string, string> = {
@@ -68,9 +69,13 @@ async function dispatch(request: Request, env: Env) {
   }
   const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
   const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/requests)?)?$/i)
-  const photoRoute = itemRoute?.[3] === '/photo'
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
+  // UUIDs are case-insensitive; DO names and SQLite text keys are not.
+  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute]) {
+    if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
+  }
+  const photoRoute = itemRoute?.[3] === '/photo'
   if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute) throw new HttpError(404, 'not_found')
   const methods = memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
@@ -79,6 +84,15 @@ async function dispatch(request: Request, env: Env) {
   const profile = await getProfile(env.DB, session.user.id)
   if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
+  const writeRoute: WriteRoute | null = method !== 'POST' ? null
+    : cacheRoute?.[2] === '/join' ? 'join'
+    : cacheRoute?.[3] ? 'join_decision'
+    : itemRoute?.[3] === '/requests' ? 'request'
+    : requestRoute ? 'request_decision' : null
+  if (writeRoute) {
+    if (!session.user.emailVerified) throw new HttpError(401, 'unauthorized')
+    await requireWriteLimit(env.DB, profile.id, writeRoute)
+  }
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
     const body = await readBody(request)
@@ -107,7 +121,7 @@ async function dispatch(request: Request, env: Env) {
     if (path === '/api/requests') {
       const after = new URL(request.url).searchParams.get('after')
       if (after !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(after)) throw new HttpError(400, 'invalid_cursor')
-      return json(await aggregateRequests(env, profile.id, after))
+      return json(await aggregateRequests(env, profile.id, after?.toLowerCase() ?? null))
     }
     if (requestRoute) {
       const stub = env.CACHES.get(env.CACHES.idFromName(requestRoute[1]))
@@ -235,7 +249,11 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try { return await dispatch(request, env) }
     catch (error) {
-      if (error instanceof HttpError) return json({ error: error.code }, error.status)
+      if (error instanceof HttpError) {
+        const response = json({ error: error.code }, error.status)
+        if (error.retryAfter !== undefined) response.headers.set('Retry-After', String(error.retryAfter))
+        return response
+      }
       // Auth/session/body errors must not log credentials or provider request bodies.
       return json({ error: 'internal_error' }, 500)
     }

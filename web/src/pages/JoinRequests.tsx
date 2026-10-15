@@ -14,10 +14,11 @@ export function JoinRequests({ cacheId }: { cacheId: string }) {
   })
   return <section className="mt-8" aria-labelledby="join-requests-heading">
     <h2 id="join-requests-heading" className="text-xl font-semibold">Join requests</h2>
-    <button type="button" onClick={() => void query.refetch()} className="mt-2 underline">Refresh requests</button>
+    <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching} className="mt-2 underline">Refresh requests</button>
     {query.isPending && <p role="status" className="mt-3">Loading join requests…</p>}
-    {query.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(query.error)}</p>}
-    {query.data?.length === 0 && <p className="mt-3 text-slate-600">No pending join requests.</p>}
+    {query.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(query.error)} Previously loaded join requests may be out of date.</p>}
+    {query.isSuccess && query.data.length === 0 && <p className="mt-3 text-slate-600">No pending join requests.</p>}
+    {decide.isPending && <p role="status" className="mt-3">Saving join decision…</p>}
     {decide.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(decide.error)}</p>}
     {decide.isSuccess && <p role="status" className="mt-3 text-emerald-700">Join request decided.</p>}
     <ul className="mt-3 space-y-4">{query.data?.map(request => <li key={request.user_id} className="rounded-md border border-slate-300 p-3">

@@ -13,7 +13,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false,
 
 function Ready({ children }: { children: ReactNode }) {
   const { ready, error } = useAuth()
-  if (!ready) return <main className="mx-auto max-w-md px-4 py-12"><p className="text-slate-600">Starting…</p></main>
+  if (!ready) return <main className="mx-auto max-w-md px-4 py-12"><p role="status" className="text-slate-600">Starting…</p></main>
   if (error) return <main className="mx-auto max-w-md px-4 py-12"><p role="alert" className="text-red-700">{error}</p><button onClick={() => location.reload()} className="mt-4 underline">Try again</button></main>
   return children
 }
