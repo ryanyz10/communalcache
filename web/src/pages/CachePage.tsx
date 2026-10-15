@@ -1,126 +1,43 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import type { CacheDetail, CacheInfo } from '../lib/caches'
+import type { CacheDetail } from '../lib/caches'
+import type { JoinRequest } from '../lib/joining'
+import { shareInvite } from '../lib/invites'
 import { OnboardingPage } from './OnboardingPage'
-import { JoinRequests } from './JoinRequests'
 import { ItemList } from './ItemPages'
 
-function OwnerSettings({cache}:{cache:CacheDetail}) {
-  const queryClient=useQueryClient()
-  const [name,setName]=useState(cache.name)
-  const [requiresApproval,setRequiresApproval]=useState(cache.requires_approval)
-  const update=useMutation({
-    mutationFn:()=>apiFetch<CacheInfo>(`/api/caches/${cache.id}`,{method:'PATCH',body:{name,requires_approval:requiresApproval}}),
-    onSuccess:async()=>{
-      await queryClient.invalidateQueries({queryKey:['cache',cache.id]})
-      await queryClient.invalidateQueries({queryKey:['caches']})
-    },
-  })
-  function onSubmit(event:FormEvent) {event.preventDefault();update.mutate()}
-  return <section className="mt-8" aria-labelledby="settings-heading">
-    <h2 id="settings-heading" className="text-xl font-semibold">Owner settings</h2>
-    <form className="mt-4 space-y-4" onSubmit={onSubmit}>
-      <div><label htmlFor="settings-name" className="block text-sm font-medium">Cache name</label>
-        <input id="settings-name" type="text" required maxLength={60} value={name} onChange={event=>setName(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
-      </div>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={requiresApproval} onChange={event=>setRequiresApproval(event.target.checked)} />Require owner approval to join</label>
-      {update.isError && <p role="alert" className="text-red-700">{errorMessage(update.error)}</p>}
-      {update.isSuccess && <p role="status" className="text-emerald-700">Settings saved.</p>}
-      <button type="submit" disabled={update.isPending || !name.trim()} className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60">{update.isPending?'Saving…':'Save settings'}</button>
-    </form>
-  </section>
-}
-
-function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDetail['members'][number] }) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  const client = useQueryClient()
-  const name = member.display_name ?? 'this member'
-  const remove = useMutation({
-    mutationFn: () => apiFetch<void>(`/api/caches/${cache.id}/members/${member.user_id}`, { method: 'DELETE' }),
-    onSuccess: async () => {
-      dialog.current?.close()
-      await Promise.all(['cache', 'items', 'requests'].map(key => client.invalidateQueries({ queryKey: key === 'requests' ? [key] : [key, cache.id] })))
-      // Removal unmounts its trigger; return focus to the still-open members sheet.
-      document.getElementById('close-members')?.focus()
-    },
-  })
-  return <>
-    <button type="button" className="ml-3 text-sm text-red-800 underline" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Remove {name}</button>
-    <dialog ref={dialog} onCancel={event => { if (remove.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby={`remove-${member.user_id}`}>
-      <h3 id={`remove-${member.user_id}`} className="text-lg font-semibold">Remove {name}?</h3>
-      <p className="mt-3">They lose access immediately and cannot rejoin with an invite. Their items are deleted; their pending requests are rejected as “left the cache.”</p>
-      {remove.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(remove.error)}</p>}
-      <div className="mt-6 flex gap-3">
-        <button type="button" autoFocus disabled={remove.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button>
-        <button type="button" disabled={remove.isPending} onClick={() => remove.mutate()} className="rounded-md bg-red-700 px-4 py-2 text-white disabled:opacity-60">{remove.isPending ? 'Removing…' : 'Confirm removal'}</button>
-      </div>
-    </dialog>
-  </>
-}
-
 export function CachePage() {
-  const {cacheId=''}=useParams()
-  const {me}=useAuth()
-  const queryClient=useQueryClient()
-  const membersDialog=useRef<HTMLDialogElement>(null)
-  const rotateDialog=useRef<HTMLDialogElement>(null)
-  const [copyStatus,setCopyStatus]=useState('')
-  const [rotationStatus,setRotationStatus]=useState('')
-  const query=useQuery({queryKey:['cache',cacheId],queryFn:()=>apiFetch<CacheDetail>(`/api/caches/${cacheId}`),enabled:!!me?.display_name})
-  const rotate=useMutation({
-    mutationFn:()=>apiFetch<CacheInfo>(`/api/caches/${cacheId}/invite/rotate`,{body:{}}),
-    onSuccess:async()=>{
-      rotateDialog.current?.close()
-      setCopyStatus('')
-      setRotationStatus('Invite rotated. The old link no longer works.')
-      await queryClient.invalidateQueries({queryKey:['cache',cacheId]})
-    },
-  })
+  const { cacheId = '' } = useParams()
+  const { me } = useAuth()
+  const [status, setStatus] = useState('')
+  const query = useQuery({ queryKey: ['cache', cacheId], queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`), enabled: !!me?.display_name })
+  const joins = useQuery({ queryKey: ['join-requests', cacheId], queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`), enabled: !!me?.display_name && query.data?.owner_id === me.id })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  if (query.isPending) return <main className="mx-auto max-w-md px-4 py-8"><p role="status">Loading cache…</p></main>
-  if (query.isError) return <main className="mx-auto max-w-md px-4 py-8"><Link to="/" className="underline">Your caches</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={()=>void query.refetch()}>Try again</button></main>
-  const cache=query.data
-  const owner=me.id===cache.owner_id
-  const invite=new URL(`/join/${cache.invite_token}`,location.origin).href
-  async function copyInvite() {
-    try {await navigator.clipboard.writeText(invite);setCopyStatus('Invite copied.')}
-    catch {setCopyStatus('Could not copy automatically. Select the invite link below and copy it.')}
+  if (query.isPending) return <main className="cc-page"><p role="status">Loading cache…</p></main>
+  if (query.isError) return <main className="cc-page"><Link to="/" className="text-sm underline">‹ Your caches</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={() => void query.refetch()}>Try again</button></main>
+  const cache = query.data
+  async function invite() {
+    try { setStatus(await shareInvite(new URL(`/join/${cache.invite_token}`, location.origin).href)) }
+    catch { setStatus('Could not share or copy. Open Cache settings to select the invite link.') }
   }
-  return <main className="mx-auto max-w-md px-4 py-8">
-    <Link to="/" className="underline">Your caches</Link>
-    <h1 className="mt-4 text-2xl font-semibold tracking-tight">{cache.name}</h1>
-    <p className="mt-2 text-slate-600">{cache.requires_approval?'New members need owner approval.':'Anyone with the invite can join.'}</p>
-    <button type="button" className="mt-4 rounded-md border border-slate-300 px-4 py-2" onClick={()=>membersDialog.current?.showModal()}>Members ({cache.members.length})</button>
-    <section className="mt-8" aria-labelledby="invite-heading">
-      <h2 id="invite-heading" className="text-xl font-semibold">Share an invite</h2>
-      <p className="mt-2 text-slate-600">Share only with people you trust.</p>
-      <label htmlFor="invite-link" className="mt-3 block text-sm font-medium">Invite link</label>
-      <input id="invite-link" type="text" readOnly value={invite} onFocus={event=>event.currentTarget.select()} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
-      <button type="button" className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-white" onClick={()=>void copyInvite()}>Copy invite</button>
-      {copyStatus && <p role="status" className="mt-3">{copyStatus}</p>}
-      {owner && <button type="button" className="ml-3 rounded-md border border-slate-300 px-4 py-2" onClick={()=>{rotate.reset();rotateDialog.current?.showModal()}}>Rotate invite</button>}
-      {rotationStatus && <p role="status" className="mt-3 text-emerald-700">{rotationStatus}</p>}
-    </section>
-    <ItemList cacheId={cache.id} />
-    {owner && <JoinRequests cacheId={cache.id} />}
-    {owner && <OwnerSettings cache={cache} />}
-    <dialog ref={membersDialog} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="members-heading">
-      <h2 id="members-heading" className="text-xl font-semibold">Members</h2>
-      <ul className="mt-4 space-y-2">{cache.members.map(member=><li key={member.user_id}>{member.display_name??'Member'}{member.user_id===cache.owner_id?' · Owner':''}{owner && member.user_id!==cache.owner_id && <RemoveMember cache={cache} member={member} />}</li>)}</ul>
-      <form method="dialog"><button id="close-members" autoFocus className="mt-6 rounded-md border border-slate-300 px-4 py-2">Close members</button></form>
-    </dialog>
-    <dialog ref={rotateDialog} onCancel={event => { if (rotate.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="rotate-heading">
-      <h2 id="rotate-heading" className="text-xl font-semibold">Rotate this invite?</h2>
-      <p className="mt-3">The old link will stop working. Existing members keep access.</p>
-      {rotate.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(rotate.error)}</p>}
-      <div className="mt-6 flex gap-3">
-        <button type="button" autoFocus disabled={rotate.isPending} onClick={()=>rotateDialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button>
-        <button type="button" disabled={rotate.isPending} onClick={()=>rotate.mutate()} className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60">{rotate.isPending?'Rotating…':'Confirm rotation'}</button>
+  return <main className="cc-page">
+    <Link to="/" className="text-sm underline">‹ Your caches</Link>
+    <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="min-w-0"><h1 className="break-words text-2xl font-semibold tracking-tight">{cache.name}</h1><p className="text-sm text-slate-600">{cache.members.length} {cache.members.length === 1 ? 'member' : 'members'}</p></div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button type="button" className="cc-outline" onClick={() => void invite()}>Invite</button>
+        <Link to={`/caches/${cache.id}/settings`} aria-label="Cache settings" className="flex size-[38px] items-center justify-center rounded-full border border-slate-300 bg-white">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></svg>
+        </Link>
       </div>
-    </dialog>
+    </div>
+    {status && <p role="status" className="mt-3 text-sm">{status}</p>}
+    {cache.owner_id === me.id && joins.isError && <p role="alert" className="mt-4 text-sm text-red-700">Join requests could not be loaded. <Link to={`/caches/${cache.id}/settings`} className="underline">Open settings to try again.</Link></p>}
+    {cache.owner_id === me.id && !!joins.data?.length && <div className="mt-4 flex items-center justify-between gap-2 rounded-[10px] border border-amber-200 bg-amber-100 px-3.5 py-3 text-sm text-amber-900"><span><b>{joins.data.length} {joins.data.length === 1 ? 'person' : 'people'}</b> {joins.data.length === 1 ? 'wants' : 'want'} to join</span><Link to={`/caches/${cache.id}/settings`} className="underline">Review</Link></div>}
+    <ItemList cacheId={cache.id} />
   </main>
 }

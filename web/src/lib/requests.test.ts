@@ -57,7 +57,7 @@ it('uses no quantity for reusable asks and hides self-request controls from the 
 it('does not turn an unavailable item queue into empty data or expose an ask form without availability', () => {
   const markup = render('item', { error: true })
   expect(markup).toContain('role="alert"')
-  expect(markup).toContain('Refresh requests')
+  expect(markup).toContain('Try requests again')
   expect(markup).not.toContain('No visible requests')
   expect(markup).not.toContain('Ask to use')
 })
@@ -81,7 +81,7 @@ it('preserves partial-unavailable warnings and continuation instead of pretendin
   expect(partial).toContain('lists are incomplete')
   expect(partial).toContain('Load more caches')
   expect(partial).toContain('in the loaded caches')
-  expect(partial).toContain('Refresh all requests')
+  expect(partial).toContain('Try unavailable caches again')
   expect(render('all', { requests: [] })).not.toContain('Load more caches')
 })
 

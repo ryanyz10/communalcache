@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { CachePage } from '../pages/CachePage'
+import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { HomePage } from '../pages/HomePage'
 import { ItemEditorPage, ItemList, ItemPage } from '../pages/ItemPages'
 import { JoinRequests } from '../pages/JoinRequests'
@@ -38,11 +39,11 @@ function render(element: ReactElement, options: { route?: string; path?: string;
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('shows distinct empty and failed states for home, items and join queues, with refresh controls', () => {
+it('shows distinct empty and failed states for home, items and join queues, with error recovery controls', () => {
   expect(render(createElement(HomePage))).toContain('No caches yet')
   const homeError = render(createElement(HomePage), { errors: [['caches']] })
   expect(homeError).toContain('Previously loaded caches may be out of date')
-  expect(homeError).toContain('>Refresh</button>')
+  expect(homeError).toContain('Try caches again')
   expect(homeError).not.toContain('No caches yet')
   expect(render(createElement(ItemList, { cacheId: id }))).toContain('Nothing shared yet')
   const itemsError = render(createElement(ItemList, { cacheId: id }), { errors: [['items', id]] })
@@ -62,7 +63,7 @@ it('never presents partial, paginated or failed aggregate lists as complete empt
   for (const options of [{ unavailable: ['cache'] }, { next: 'next' }, { errors: [['requests']] }]) {
     const partial = render(createElement(RequestsPage), options)
     expect(partial).toContain('No incoming requests visible in the loaded caches yet. This list may be incomplete.')
-    expect(partial).toContain('Refresh all requests')
+    expect(partial).not.toContain('Refresh all requests')
   }
 })
 
@@ -81,14 +82,17 @@ it('keeps unavailable cache/item/editor data out of mutation forms and offers re
 })
 
 it('uses named native dialogs with a safe initial focus target, and labels every text input', () => {
-  const markup = render(createElement(CachePage), { route: '/caches/:cacheId', path: `/caches/${id}` })
+  const markup = render(createElement(CacheSettingsPage), { route: '/caches/:cacheId/settings', path: `/caches/${id}/settings` })
   expect(markup).toContain('aria-labelledby="members-heading"')
-  expect(markup).toContain('id="close-members" autofocus=""')
+  expect(markup).toContain('id="members-heading" tabindex="-1"')
   expect(markup).toContain('aria-labelledby="rotate-heading"')
   expect(markup).toContain('aria-labelledby="remove-member"')
-  expect(markup.match(/autofocus=""/g)).toHaveLength(3)
-  expect(markup).toContain('for="settings-name"')
-  expect(markup).toContain('for="invite-link"')
+  expect(markup.match(/autofocus=""/g)).toHaveLength(2)
+  expect(markup).toContain('role="switch"')
+  expect(markup).toContain('Approve new members')
+  const home = render(createElement(HomePage))
+  expect(home).toContain('for="cache-name"')
+  expect(home).toContain('autofocus=""')
   const detail = render(createElement(ItemPage), { route: '/caches/:cacheId/items/:itemId', path: `/caches/${id}/items/${itemId}` })
   expect(detail).toContain('aria-labelledby="delete-item-heading"')
   expect(detail).toContain('autofocus=""')
