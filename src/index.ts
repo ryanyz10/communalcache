@@ -1,4 +1,5 @@
 import { createAuth, type DeliveryResult } from './auth'
+import { magicCallbacks } from './magic-links'
 import { deletePush, displayNames, getProfile, listMyCaches, savePush, setDisplayName, type Profile } from './db'
 import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
@@ -12,6 +13,8 @@ export { Cache } from './cache'
 const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
   '/api/auth/sign-in/email-otp': 'POST',
+  '/api/auth/sign-in/magic-link': 'POST',
+  '/api/auth/magic-link/verify': 'POST',
   '/api/auth/get-session': 'GET',
   '/api/auth/sign-out': 'POST',
 }
@@ -28,9 +31,10 @@ async function dispatch(request: Request, env: Env) {
   const method = request.method
   if (path !== '/api' && !path.startsWith('/api/')) {
     const response = await env.ASSETS.fetch(request)
-    if (!path.startsWith('/join/')) return response
+    if (!path.startsWith('/join/') && path !== '/auth/link') return response
     const headers = new Headers(response.headers)
     headers.set('Referrer-Policy', 'no-referrer')
+    if (path === '/auth/link') headers.set('Cache-Control', 'no-store')
     return new Response(response.body, { status: response.status, headers })
   }
   if (method === 'OPTIONS') return new Response(null, { status: 204 })
@@ -42,11 +46,21 @@ async function dispatch(request: Request, env: Env) {
       const body = await readBody(request)
       if (path.endsWith('/send-verification-otp') && body.type !== 'sign-in') throw new HttpError(400, 'invalid_type')
       if (path.endsWith('/sign-in/email-otp') && (typeof body.otp !== 'string' || !/^\d{6}$/.test(body.otp))) throw new HttpError(400, 'invalid_otp')
-      request = new Request(request, { body: JSON.stringify(body) })
+      if (path === '/api/auth/magic-link/verify') {
+        if (typeof body.token !== 'string' || !/^[A-Za-z]{32}$/.test(body.token)) throw new HttpError(400, 'invalid_magic_link')
+        const url = new URL('/api/auth/magic-link/verify', env.APP_BASE_URL)
+        url.search = new URLSearchParams({ token: body.token, ...magicCallbacks(body, env.APP_BASE_URL) }).toString()
+        // The plugin is GET-only. This internal HTTP adapter retains its D1 limiter;
+        // only our Origin-checked POST is public, and no token enters an incoming URL.
+        request = new Request(url, { method: 'GET', headers: request.headers })
+      } else {
+        const input = path === '/api/auth/sign-in/magic-link' ? { email: body.email, ...magicCallbacks(body, env.APP_BASE_URL) } : body
+        request = new Request(request, { body: JSON.stringify(input) })
+      }
     }
     const delivery: DeliveryResult = { status: 'not_called' }
     const response = await createAuth(env, delivery, path).handler(request)
-    if (path.endsWith('/send-verification-otp') && delivery.status === 'failed') {
+    if ((path.endsWith('/send-verification-otp') || path === '/api/auth/sign-in/magic-link') && delivery.status === 'failed') {
       await response.body?.cancel()
       return json({ error: 'email_unavailable' }, 502)
     }
@@ -56,6 +70,16 @@ async function dispatch(request: Request, env: Env) {
     if (response.status >= 500) {
       await response.body?.cancel()
       return json({ error: 'auth_unavailable' }, 503)
+    }
+    if (path === '/api/auth/magic-link/verify' && response.status >= 300 && response.status < 400) {
+      await response.body?.cancel()
+      // 1.7.7 sets a session cookie only on a successful verification redirect.
+      if (!headers.has('Set-Cookie')) return json({ error: 'invalid_magic_link' }, 400)
+      const destination = headers.get('Location')!
+      if (new URL(destination).origin !== env.APP_BASE_URL) throw new HttpError(400, 'invalid_callback')
+      headers.delete('Location')
+      headers.set('Content-Type', 'application/json')
+      return new Response(JSON.stringify({ success: true, callback_url: destination }), { headers })
     }
     return new Response(response.body, { status: response.status, headers })
   }

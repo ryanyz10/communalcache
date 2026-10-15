@@ -2,7 +2,8 @@
 
 Mobile-first household sharing: React + a TypeScript Cloudflare Worker, one SQLite
 Durable Object per cache and global D1. Foundation implements private cookie-auth
-sessions, six-digit email sign-in codes and display-name onboarding. Caches adds
+sessions, link-first email sign-in with an explicit six-digit code fallback and
+display-name onboarding. Caches adds
 creation, live member/owner access, invites/settings and ordered discovery sync;
 joining, items/private R2 photos, transactional requests, Queue email/push,
 member removal/item deletion and everyday UX polish are implemented locally.
@@ -80,9 +81,12 @@ npm run ui:fixture
 ```
 
 Open `http://127.0.0.1:4173/join/11111111-1111-4111-8111-111111111111.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`.
-Use a test email and the public fixture code `123456`, then choose a name. The
-invite stays on the same page and in sessionStorage; reload it or open `/login`
-to see navigation resume it. Use `failure@example.test` to see a delivery error
+Enter a test email and choose **Email me a sign-in link**. Open
+`http://127.0.0.1:4173/__fixture/magic-link` to read the mock email, follow its link
+and press **Continue**. Just opening the landing page must not sign in. Alternatively,
+choose **Email me a code instead**, enter the public fixture code `123456` and
+choose a name. The invite stays in this tab's sessionStorage; reload it or open
+`/login` to see navigation resume it. Use `failure@example.test` to see a delivery error
 without losing the invite. Cancel clears the pending invite. The fixture does not grant real membership; actual body-only join/approval is proved
 against local DO storage in the runtime suite. **Never deploy or expose this fixture server.**
 
@@ -134,6 +138,32 @@ Real email sign-in requires separately approved Resend/domain setup and a local
 provider key. Delivery is awaited with a 10-second abort deadline. Better Auth
 1.7.7 catches callback rejections, so a request-local delivery result maps failures
 to generic JSON `502 email_unavailable`; a rate-limited request remains 429.
+
+### Email links and code fallback
+
+The default sign-in email contains **only a magic link**, expiring after five
+minutes. Its `/auth/link#token=...` landing page does not verify on load, preview or
+GET; only **Continue** makes an Origin-protected verification POST. The app removes
+the fragment from browser history and never includes its token in incoming server
+URLs. Reloading that page after removal requires a new link. Invalid/expired/used
+links show an error and offer a new link or an email code.
+
+**Email me a code instead** sends the existing six-digit code email and opens code
+entry. The two email types are separate; codes and links are independent
+challenges, not a combined email or cross-invalidated pair. Codes still rotate on
+resend; additional links do not revoke outstanding unexpired links. Use the newest
+link if you requested another. Both auth send paths await bounded Resend HTTP and
+surface a generic 502 on failure, not a background notification Queue job.
+
+A link works in a different/fresh browser without requesting-browser state.
+Pending invites stay in the original tab's sessionStorage: open the mail link in
+that tab to resume automatically, reopen the invite in the other browser, or use
+the code fallback in the original tab. Invite secrets never go into sign-in mail
+or callback data. Auth callbacks must resolve to the exact app origin; public GET
+verification is denied. Both magic-link HTTP paths retain Better Auth's D1-backed
+5/60s trusted-IP/path rate limit through the internal GET adapter. No new config,
+dependency or migration is needed; migration 0003 remains compatible and unchanged.
+Live Resend delivery and real mobile mail-client handoff remain approval-gated.
 
 ### Notification delivery
 

@@ -33,8 +33,9 @@ isProject: false
 
 ## Scope decisions
 
-- Start with six-digit email one-time codes, no passwords. Magic links are a
-  planned follow-up; phone/SMS is deferred and out of scope.
+- Sign in primarily with an email containing only a magic link, no passwords.
+  “Email me a code instead” explicitly sends the six-digit code fallback in a
+  separate email. No combined link+code email; phone/SMS is deferred.
 - Web push for notifications, email via Resend as fallback.
 - No return tracking, holder tracking, or loan state. A request ends at `approved` or `rejected`.
 - Non-consumables have no quantity. Only consumables do.
@@ -139,7 +140,7 @@ reservations; nobody needs to turn a mixer into brown sugar.
 
 ### Display name onboarding
 
-First successful email-code sign-in starts with `display_name = NULL`. Do not derive a name from the
+First successful email-link or code sign-in starts with `display_name = NULL`. Do not derive a name from the
 email's local part: that leaks part of everyone's email to the community.
 `requireProfile` returns `409 profile_incomplete` on cache, item and request writes;
 the SPA routes to "what should neighbors call you?".
@@ -304,12 +305,14 @@ inside the DO; global D1 queries live together in a small auditable module.
   production cookies are HttpOnly, Secure, SameSite=Lax and host-only. Keep session
   cookie caching and secondary storage off so revocation uses D1, not a stale
   stateless snapshot. Core session/user endpoints return only the caller's data.
-- **Surface**: enable only `email-otp`; expose only code send (`type: 'sign-in'`),
-  OTP sign-in, get-session and sign-out under `/api/auth/*`. Deny other paths at
+- **Surface**: enable `magic-link` and `email-otp`; expose link send, an
+  Origin-protected verification POST, code send (`type: 'sign-in'`), OTP sign-in,
+  get-session and sign-out under `/api/auth/*`. The plugin's direct verification
+  GET is not public. Deny other paths at
   dispatch/disabledPaths, including password sign-in/sign-up, raw-OTP helpers,
   reset/change-email/account management and unused plugins/providers. No admin/
   list-users or password flow. Allow automatic new-user registration through
-  successful OTP sign-in; do not disable the one signup path we use.
+  successful link or OTP sign-in; both are email-ownership proofs.
 - **CSRF**: cookies auto-attach. Configure exact `trustedOrigins` and leave Better
   Auth's CSRF/origin checks enabled. Our own mutating routes also require an
   `Origin` equal to `APP_BASE_URL`; reject missing/null/foreign origins. GET/HEAD
@@ -323,7 +326,7 @@ inside the DO; global D1 queries live together in a small auditable module.
   attempts; explicitly set `storeOTP: 'hashed'` and `resendStrategy: 'rotate'`.
   A resend replaces the prior code; show "use the newest code". Hashed storage
   cannot recover/reuse a code. Verification/session/rate-limit records stay in D1.
-- **Sign-in delivery**: `sendVerificationOTP` awaits a bounded Resend fetch from
+- **Sign-in delivery**: `sendMagicLink` and fallback `sendVerificationOTP` await bounded Resend fetches from
   the auth request, not notification Queue/`waitUntil`. Fail visibly on send error;
   sending-domain verification for `communalcache.com` (or its sending subdomain)
   is an approval-gated prerequisite. Never log codes, cookies or auth tokens.
@@ -545,31 +548,56 @@ must follow an explicit user gesture, and on iOS only inside the installed PWA.
 
 ## Auth follow-ups
 
-### Magic links (planned)
+### Magic links (implemented locally)
 
-Add Better Auth's `magic-link` plugin after the code-first Foundation. The long-term
-UX goal is one email containing both a link and the six-digit code, not two emails
-for one login. The plugins do not document a shared challenge/cross-invalidation
-API: that combined lifecycle is **UNVERIFIED**, to be designed and tested in this
-follow-up, not promised by enabling both plugins.
+User-approved product decision: the primary login action sends an email containing
+**only a magic link**. The secondary “Email me a code instead” action sends the
+existing six-digit OTP email and displays code entry. There is no combined email,
+shared challenge or cross-invalidation promise. Both prove email ownership; codes
+retain hashing/rotation/three attempts and migration 0003 unchanged.
 
-Use `sendMagicLink({email, url, token, metadata})`, a 300-second expiry and
-`storeToken: 'hashed'`. The plugin consumes its token **atomically on the first
-verification call**, even if a later step fails; a second call is invalid. Email
-scanners/prefetchers can therefore burn a direct GET verification link. Send a
-same-origin SPA landing link instead: page load consumes nothing, and an explicit
-**Continue** button triggers verification. Never auto-verify on mount or preview.
-Keep tokens out of referrers/logs/analytics, and send `Referrer-Policy: no-referrer`.
+Better Auth 1.7.7's `magic-link` plugin uses `expiresIn: 300`, `storeToken: 'hashed'`
+and `sendMagicLink({email, url, token})`. Its `magic-link:<SHA-256/base64url>` rows
+reuse D1 verification storage and do not match migration 0003's `sign-in-otp-*`
+partial unique index. No migration or dependency upgrade is required. Each token
+is consumed **atomically on the first verification call**, even if later session
+creation fails. Do not enable deprecated multi-attempt redemption. A resend creates
+an independent token; previously sent links remain valid until used or expired.
+“Use the newest link” is guidance, not a claim of latest-link-only rotation.
 
-Resolve `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` against the fixed
-app URL and allow only that exact origin (including rejecting protocol-relative
-foreign URLs). Preserve pending joins in sessionStorage, not auth metadata or
-callback secrets. Keep auth CSRF checks and the plugin's default 5 requests per
-60-second rate limit backed by D1; server-side `auth.api` calls bypass its client
-rate limiter, so a custom verification wrapper must enforce the same limits.
-Do not enable deprecated multi-attempt token redemption. Test scanner GETs,
-Continue, replay/expiry, failed verification, same-origin redirects and code/link
-coordination before release. [Official plugin reference](https://www.better-auth.com/docs/plugins/magic-link.md).
+Mail links to `/auth/link#token=...` on fixed `APP_BASE_URL`, never the plugin's GET
+verify URL. Fragment tokens do not reach HTTP logs/referrers; the landing response
+also sends `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. The page
+captures the fragment in memory and removes it from browser history. Page load,
+preview and scanner GET/HEAD consume nothing. An explicit **Continue** sends the
+token in JSON to `POST /api/auth/magic-link/verify`. Failed verification stays on
+the page and offers a new link or code; reloading after fragment removal also
+requires a new link. Never log tokens, request bodies or auth mail.
+
+The pinned plugin only implements GET verification. The Worker rejects public GET
+and adapts the exact-Origin-checked POST into an **internal HTTP-handler request**,
+not `auth.api` or a network fetch. This retains Better Auth's D1-backed 5/60s
+per trusted-IP/path limiter on both send and verify. Plugin redirects become JSON
+success/callback or a generic invalid-link error, with the session cookie preserved.
+No password/admin/public-user endpoint is enabled. Session cookies and profile
+exemptions remain unchanged; successful account changes discard old private UI
+queries and reconcile any previous-account browser push registration.
+
+Resolve `callbackURL`, `newUserCallbackURL` and `errorCallbackURL` against fixed
+`APP_BASE_URL`, allowing only that exact origin and rejecting protocol-relative,
+credential-bearing and foreign URLs. Relative callbacks are normalized; new-user
+and error callbacks default to the normal callback. Pending joins stay in this
+tab's sessionStorage, never auth metadata, callback secrets or mail. Same-tab
+verification resumes the saved join after name onboarding. A link also works in a
+fresh/different browser without any requesting-browser cookie or challenge state;
+that browser does **not** receive the original tab's saved invite. Reopen the invite
+there, or use the code fallback in the original tab. Actual mobile mail-client
+handoff and live Resend delivery remain **UNVERIFIED** pending approved smoke.
+
+Local runtime/UI proofs cover scanner GET, explicit Continue/session, concurrent
+single redemption, replay/expiry, failure after consumption, Origin/callback
+rejection, provider failure/timeout, D1-backed send/verify limits, code fallback
+and pending-join retention. [Official plugin reference](https://www.better-auth.com/docs/plugins/magic-link.md).
 
 ### SMS (deferred / out of scope)
 
@@ -626,10 +654,11 @@ SQL**. Apply D1 migrations in test setup using `readD1Migrations` and
   next read; R2 never public, private cache headers; orphan cleanup.
 - **Onboarding**: logged-out invite → email code on the same page → display name
   → original join POST body, with sessionStorage preservation and no-referrer.
-- **Magic-link follow-up**: scanner GET of the landing page consumes nothing;
-  Continue verifies once, replay fails, redirects stay same-origin. Combined
-  code/link delivery requires an explicit integration proof, not two assumed
-  interchangeable plugin challenges.
+- **Magic links**: scanner GET/HEAD of the fragment landing page consumes nothing;
+  Continue's Origin-protected POST verifies once; concurrent/replay/expired calls
+  fail without extra sessions; callbacks stay same-origin. Prove D1-backed 5/60s
+  send/verify limits, delivery failure/timeout, fresh-browser redemption, link-only
+  mail, explicit code fallback and tab-local pending-invite preservation.
 - **Aggregation**: discovery drift, capped fan-out, continuation, per-DO visibility
   and honest unavailable states. No app-wide cache scan.
 
@@ -642,7 +671,8 @@ keyboard-reachable sheets/modals and contrast.
 Manual post-deploy smoke (only with approval): Resend sign-in code from the auth
 request, separate Queue-driven notification email, an authorized photo, installed
 iOS push, Queue/Cron recovery and migration-compatible Worker update. A successful
-code email does not prove notification delivery. Magic-link smoke comes later.
+code email does not prove notification delivery. Magic-link smoke separately proves
+scanner-safe Continue, link-only mail and different-browser handoff after approval.
 
 ## Deployment
 
@@ -702,9 +732,11 @@ requires separate approval; no auth/provider settings change in this docs PR.
   live in D1 and sessions can be revoked; cookie caching stays off. Schema/version,
   CSRF, delivery and rate-limit behavior must be tested in the Worker runtime.
   Cache removal still relies on its DO, not auth session metadata.
-- **Code-first UX.** Email codes keep the invite tab in place but require copying
-  digits; delayed messages after a resend need the newest code. Magic links follow
-  only after the scanner-safe verification flow and callback checks are proven.
+- **Link-first with code fallback.** A scanner-safe Continue button adds one click
+  but prevents preview GETs from consuming links. Different-browser links sign in
+  there; sessionStorage invites stay in the original tab. Code fallback keeps that
+  invite tab in place. Links and codes are independent challenges, not a combined
+  or cross-invalidated credential.
 - **Free quotas are ceilings, not a deployment guarantee.** HTTP Worker CPU is
   10 ms on Free; auth/encryption/fan-out must be measured. D1/DO rows, Queue
   operations/retention and R2 operations are separate budgets. Use small batches
@@ -736,7 +768,7 @@ not grounds to quietly weaken authorization or notification recovery.
 | Better Auth native D1/schema | **VERIFIED:** official example uses `database: env.DB`; tagged 1.7.7 source selects its built-in D1 dialect, `transaction = false`. Other-relational docs still list community kysely-d1, but that dependency is unnecessary. Generate/review SQL, then apply hand-written Wrangler migrations. | [Database](https://www.better-auth.com/docs/concepts/database.md), [tagged dialect](https://github.com/better-auth/better-auth/blob/v1.7.7/packages/kysely-adapter/src/dialect.ts#L184-L194), [older community listing](https://www.better-auth.com/docs/adapters/other-relational-databases.md) |
 | Email OTP | **VERIFIED:** otpLength 6, expiresIn 300, allowedAttempts 3; storeOTP supports hashed (default plain); reuse “Falls back to rotate when the OTP is hashed”. Target explicitly hashes and rotates. | [email-otp](https://www.better-auth.com/docs/plugins/email-otp.md) |
 | Cookie sessions/CSRF | **VERIFIED:** HttpOnly/Secure production cookies, SameSite=Lax; trustedOrigins/CSRF guards documented. App Origin checks remain our responsibility; no auth cookie cache. | [Cookies](https://www.better-auth.com/docs/concepts/cookies.md), [security](https://www.better-auth.com/docs/reference/security.md) |
-| Magic-link follow-up | **VERIFIED:** sendMagicLink receives email/url/token/metadata; expiresIn 300; first verify consumes atomically, storeToken hashed, default limit 5/60s; callback/new-user/error URLs supported. **UNVERIFIED:** combined one-email code/link challenge lifecycle; must be designed/tested. | [magic-link](https://www.better-auth.com/docs/plugins/magic-link.md) |
+| Magic links | **VERIFIED in pinned source/local runtime:** sendMagicLink receives email/url/token; expiresIn 300, storeToken hashed, atomic single use and D1-backed 5/60s limits. GET-only plugin is behind an app POST/fragment/Continue adapter; callbacks are exact-origin. Link-only primary and separate OTP fallback are the approved product; no combined lifecycle is claimed. **UNVERIFIED:** live mobile mail-client handoff/delivery. | [magic-link](https://www.better-auth.com/docs/plugins/magic-link.md) |
 | Better Auth rate limits | **VERIFIED:** memory is default; `storage: 'database'` and rateLimit table documented. **UNVERIFIED:** this app's multi-instance D1 counter/redemption behavior; test it rather than infer atomicity from adapter support. | [Rate limits](https://www.better-auth.com/docs/concepts/rate-limit.md) |
 | Resend and deferred SMS | **VERIFIED:** sending domain must be verified; phone-number plugin requires our sendOTP implementation. SMS is deferred; US business sender registration/compliance depends on provider/sender type (not provisioned here). | [Resend domains](https://resend.com/docs/dashboard/domains/introduction.md), [phone-number](https://www.better-auth.com/docs/plugins/phone-number.md), [US A2P 10DLC](https://www.twilio.com/docs/messaging/compliance/a2p-10dlc) |
 | WebCrypto push candidate | **VERIFIED from README/source:** `@block65/webcrypto-web-push` 2.0.0 “works with … Cloudflare Workers”; RFC 8291 `aes128gcm`, RFC 8292 VAPID, WebCrypto rather than Node crypto. Released 2026-09-03; npm reports 443,998 downloads for 2026-09-05–2026-10-04. **UNVERIFIED:** this app's runtime/provider integration and CPU budget, especially installed iOS push. | [Tagged README](https://github.com/block65/webcrypto-web-push/blob/v2.0.0/packages/web-push/README.md), [crypto source](https://github.com/block65/webcrypto-web-push/tree/v2.0.0/packages/web-push/lib), [npm metadata](https://registry.npmjs.org/%40block65%2Fwebcrypto-web-push), [downloads](https://api.npmjs.org/downloads/point/last-month/%40block65%2fwebcrypto-web-push) |
