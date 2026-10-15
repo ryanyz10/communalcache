@@ -3,13 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
 import { PHOTO_READ_ERROR, resizePhoto, uploadPhoto } from '../lib/photos'
+import { invalidateRequestViews } from '../lib/requests'
 
 export function ItemPhoto({ item, thumbnail = false }: { item: Item; thumbnail?: boolean }) {
   const [failed, setFailed] = useState(false)
   if (thumbnail && (!item.photo_version || failed)) return <span role={failed ? 'img' : undefined} aria-label={failed ? 'Photo unavailable' : undefined} aria-hidden={!failed || undefined} className="size-11 shrink-0 rounded-lg bg-linear-to-br from-slate-300 to-slate-200 lg:block lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none" />
   if (!item.photo_version) return <span aria-hidden="true" className="hidden lg:block lg:aspect-[4/3] lg:w-full lg:rounded-[14px] lg:bg-linear-to-br lg:from-slate-300 lg:to-slate-200" />
   if (failed) return <div className="mt-3 text-sm text-slate-600"><p role="status">Photo unavailable. {thumbnail ? 'Open the item or reload to try again.' : ''}</p>{!thumbnail && <button type="button" className="mt-2 underline" onClick={() => setFailed(false)}>Try photo again</button>}</div>
-  return <img src={`/api/caches/${item.cache_id}/items/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}`} alt={`Photo of ${item.title}`} loading={thumbnail ? 'lazy' : 'eager'} onError={() => setFailed(true)} className={thumbnail ? 'size-11 shrink-0 rounded-lg object-cover lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none' : 'mt-3 max-h-80 w-full rounded-lg object-contain lg:mt-0 lg:aspect-[4/3] lg:max-h-none lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white'} />
+  return <img src={`${item.cache_id ? `/api/caches/${item.cache_id}/items` : '/api/me/items'}/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}`} alt={`Photo of ${item.title}`} loading={thumbnail ? 'lazy' : 'eager'} onError={() => setFailed(true)} className={thumbnail ? 'size-11 shrink-0 rounded-lg object-cover lg:aspect-[4/3] lg:h-auto lg:w-full lg:rounded-none' : 'mt-3 max-h-80 w-full rounded-lg object-contain lg:mt-0 lg:aspect-[4/3] lg:max-h-none lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white'} />
 }
 
 export function PhotoUpload({ item }: { item: Item }) {
@@ -19,8 +20,8 @@ export function PhotoUpload({ item }: { item: Item }) {
   const save = useMutation({
     mutationFn: async () => uploadPhoto(item.cache_id, item.id, await resizePhoto(file!)),
     onSuccess: async saved => {
-      queryClient.setQueryData(['item', item.cache_id, item.id], saved)
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ['items'] }), queryClient.invalidateQueries({ queryKey: ['item'] })])
+      if (item.cache_id) queryClient.setQueryData(['item', item.cache_id, item.id], saved)
+      await invalidateRequestViews(queryClient)
       setFile(null)
       if (input.current) input.current.value = ''
     },
@@ -31,7 +32,7 @@ export function PhotoUpload({ item }: { item: Item }) {
     <form className="mt-4 space-y-3" onSubmit={onSubmit}>
       <label htmlFor="item-photo" className="block text-sm font-medium">Choose a photo (JPEG, PNG or WebP)</label>
       <input ref={input} id="item-photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={save.isPending} onChange={event => { setFile(event.target.files?.[0] ?? null); save.reset() }} className="block w-full rounded-md border border-slate-300 bg-white p-2" />
-      <p className="text-sm text-slate-600">Resized to at most 1600 pixels and saved as JPEG. Only cache members can see it.</p>
+      <p className="text-sm text-slate-600">Resized to at most 1600 pixels and saved as JPEG. Private to you and members of caches where you share it.</p>
       {save.isError && <p role="alert" className="text-red-700">{save.error instanceof Error && save.error.message === PHOTO_READ_ERROR ? PHOTO_READ_ERROR : errorMessage(save.error)}</p>}
       {save.isSuccess && <p role="status" className="text-emerald-700">Photo saved.</p>}
       <button type="submit" disabled={!file || save.isPending} className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60">{save.isPending ? 'Saving photo…' : 'Upload photo'}</button>

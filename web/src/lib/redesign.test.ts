@@ -63,17 +63,18 @@ it('restores the pending request badge with the direct-D1 aggregate page', () =>
   expect(markup).toContain('1 request needs your answer')
 })
 
-it('renders caches only on home without a request preview, account controls or invented counts', () => {
+it('renders caches and a library link on home without a request preview, account controls or invented counts', () => {
   const outgoing = { ...row, id: 'outgoing', item_title: 'Ladder', requester_id: 'owner', owner_id: 'member', owner_name: 'Sam', status: 'approved' as const, decided_at: 2 }
   const markup = render(createElement(HomePage), { pages: [{ requests: [outgoing, row], unavailable_cache_ids: ['unavailable'], next_cursor: 'next' }] })
   expect(markup).toContain('Your caches')
   expect(markup).toContain('Maple Street')
-  expect(markup).not.toContain('See all')
+  expect(markup).toContain('See all')
+  expect(markup).toContain('href="/items"')
   expect(markup).not.toContain('Priya wants 1 Starter')
   expect(markup).not.toContain('You asked Sam for Ladder')
   expect(markup).not.toContain('preview-heading')
   expect(markup).not.toContain('minmax(0,1fr)_340px')
-  for (const absent of ['Your items', 'Sign out', 'Push notifications', 'members ·', 'want to join', 'Refresh']) expect(markup).not.toContain(absent)
+  for (const absent of ['Sign out', 'Push notifications', 'members ·', 'want to join', 'Refresh']) expect(markup).not.toContain(absent)
   expect(markup).toContain('aria-labelledby="new-cache-heading"')
   expect(markup).toContain('for="cache-name"')
 })
