@@ -1,10 +1,12 @@
 # One D1 database and private R2 storage
 
-**Target: single D1 authority.** This supersedes PR #29's Cache/Owner DO split.
-Current `src/cache.ts` still has cache-local membership/items/requests; `src/db.ts`
-contains D1 discovery/outbox and `src/sync.ts` registry recovery. The target below
-must be ported, not treated as implemented. No schema/config/application changes,
-Cloudflare command, remote migration or reset is part of this docs-only PR.
+**Single D1 authority.** PRs 2–6 ported the application to guarded SQL in
+`src/db.ts`. PR 7's draft removes historical Cache code/bindings/sweeps and adds
+`0011_retire_cache_projections.sql`, which drops only the unused discovery and
+registry-cursor tables. The canonical data and durable outbox/cleanup work stay.
+**Deploying the appended Wrangler class-deletion migration permanently destroys
+Cache DO data and requires explicit owner approval per environment.** This draft
+runs no remote migration, deployment or staging reset.
 See [plan.md](plan.md) and [D1 PRs 2–7](build-guide.md#d1-implementation-plan).
 
 ## Stores and authorization
@@ -25,17 +27,19 @@ Public enrichment selects only user ID/display_name, never another user's email.
 
 Home joins caches/memberships directly. Library filters items.owner_id; incoming/
 outgoing Requests joins items and filters owner/requester. Index/paginate actual
-rows, not copied discovery tables. Drop my_caches, cache registry role/cursor,
-request_index, listings, owner_targets, revoked tombstones and pending_sync.
-There is no DO namespace, RPC, schema constructor, alarm or sync recovery target.
+rows, not copied discovery tables. Migration 0011 drops my_caches and
+cache_sync_cursor; request_index, listings, owner_targets and revocation copies
+were never added by the D1 port. No app namespace, RPC, schema constructor, alarm
+or projection recovery remains. Historical migrations retain their original DDL.
 
-## Planned D1 schemas
+## D1 schema reference
 
-Illustrative target DDL, **not executable migrations shipped by this PR**. All app
-IDs are UUID text, app timestamps integer Unix milliseconds, parameters bound.
-Better Auth user.id is app identity (`generateId: 'uuid'`); auth types/date
-conversions and migrations remain unchanged. The existing caches projection must
-be upgraded into canonical cache/config rows, not retained alongside a new copy.
+The conceptual DDL below explains the model; `migrations/d1/` is the executable
+schema authority, including request creation tokens and exact indexes/checks.
+All app IDs are UUID text, app timestamps integer Unix milliseconds, parameters
+bound. Better Auth user.id is app identity (`generateId: 'uuid'`); auth types/date
+conversions are unchanged. Migration 0007 upgraded caches into canonical config;
+legacy rows with no join_secret grant no access and are not implicitly reset.
 
 ```sql
 CREATE TABLE caches (
@@ -116,7 +120,7 @@ approval does not clear it. No current-holder/return table or new request status
 - `outbox`: current id, kind, dedupe_key, payload JSON text, attempts >= 0,
   claim_until/token, sent_at, failed_at, created_at; UNIQUE(kind,dedupe_key),
   CHECK(sent_at IS NULL OR failed_at IS NULL), partial unsent index. IDs now come
-  from the domain handler, not DO pending_sync. Snapshot payloads survive deletion.
+  from guarded domain batches. Snapshot payloads survive deletion.
 - `push_subscriptions`: current unique endpoint, user_id, p256dh/auth, ID and
   created_at. Registration ID rotates on refresh/account reassignment.
 - `write_limits`: current four reusable per-user route counters; guarded UPSERT,
@@ -151,9 +155,10 @@ it; crashes expire and retry. Prefix cleanup re-lists its first bounded page aft
 deletion until empty (a cursor over a changing key set can skip keys). Persist a
 fair cleanup scan cursor if needed so repeated failures cannot starve later IDs.
 External duplicates are harmless; cleanup must not delete a currently referenced
-photo. No finite retry budget silently abandons cleanup. Exact budgets/lease and
-cursor migration are **UNVERIFIED implementation gates**, measured with outbox
-recovery against shared invocation limits.
+photo. No finite retry budget silently abandons cleanup. The current sweep uses
+90-second leases, two cursor-paged intents/tick and one 100-key prefix page per
+intent. Local tests prove retry/claim/cursor behavior; production throughput and
+combined resource fit remain unverified.
 
 Owner upload checks item ownership before R2 I/O and uses a guarded finalization
 batch afterward: update photo_path only if caller still owns the item, record
@@ -265,7 +270,8 @@ No registration-before-attachment protocol, target enumeration, eventual tombsto
 delivery or projection cleanup. Request/attach first is included in later removal;
 removal first makes later membership predicates fail. Next cache-data query sees
 removed membership immediately, though a previously authorized stream cannot be
-recalled. PR 5 must prove these races before destructive/shared routes are enabled.
+recalled. Real-D1 PR 5 tests prove these races and rollback boundaries for the
+enabled destructive routes.
 
 ## Notification recovery retained, not DO sync
 
@@ -319,21 +325,26 @@ single-use redemption and code fallback remain as [specified](plan.md#magic-link
 
 ## Migrations, local tests and retirement
 
-Current `migrations/d1/` contains 0001_auth, 0002_app (discovery/push/outbox),
-0003_otp_identifier_unique, 0004_cache_sync_cursor, 0005_notification_sync_cursor
-and 0006_write_limits for the cache-local implementation. D1 port migrations add
-0007_d1_caches, 0008_d1_items and 0009_d1_requests. PR 5 adds
-0010_membership_leave: rebuild memberships while preserving rows/tokens/FKs and
-owner indexes, adding left to the status CHECK. Obsolete discovery/cursor removal
-still belongs to retirement. Never edit already-applied migration history to
-pretend the DO data was in D1 all along.
+Applied history begins with 0001_auth, 0002_app (historical discovery plus retained
+push/outbox), 0003_otp_identifier_unique, 0004_cache_sync_cursor,
+0005_notification_sync_cursor and 0006_write_limits. The D1 port added
+0007_d1_caches, 0008_d1_items, 0009_d1_requests and 0010_membership_leave (preserving
+membership rows/tokens/FKs/owner indexes while adding left).
+
+Draft PR 7 adds **0011_retire_cache_projections**, dropping only `my_caches` and
+`cache_sync_cursor` after removing their runtime callers. It does not delete
+canonical caches (including legacy null-secret rows), memberships, library items,
+attachments, requests, auth/session state, push/outbox, cleanup intents or R2
+bytes. A populated-upgrade test snapshots those tables, preserves claims/cursors,
+and verifies authorization, constraints and private photos afterward. A fresh
+migration test proves the retired tables are absent. Applied history stays intact.
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Do not point it at legacy `internal/db/migrations/`.
 
 The approved database communalcache is binding DB; committed ID
 b4257b89-22d6-40f1-b250-ccd1985bf1d1. Staging uses its distinct named environment
 and database. Local development/test bindings stay local. Example **local-only**
-commands, not run by this docs PR:
+commands; none authorizes a remote operation:
 
 ```bash
 CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations list communalcache --local
@@ -349,19 +360,26 @@ fix-forward/recovery, not namespace recreation.
 
 Tests use @cloudflare/vitest-plugin and real local D1: config readD1Migrations,
 setup applyD1Migrations, concurrent Worker requests against the same DB. No mocked
-SQL, hosted database or target DO helpers. Existing cache-local tests retain DO
-helpers only until their code retires. Test primary guard no-ops and injected SQL
-failure rollback, two-cache overbooking, double-approve, stock edits and all
-removal/detach/delete race orders. Mock Resend/push HTTP; exercise local Queue
-consumer ack/retry via createMessageBatch/getQueueResult. D1-supported batching
-is not implementation proof until these tests exist.
+SQL, hosted database or object helpers/bindings. Historical object-only cases are
+removed; their canonical equivalents are in d1-caches/items/photos/requests/removal
+and domain-api tests. These prove primary guard no-ops, injected SQL rollback,
+two-cache overbooking, double approval, stock edits and destructive race orders.
+Mock Resend/push HTTP; local Queue consumer tests use
+createMessageBatch/getQueueResult. Notification and cleanup recovery remain
+independent even when the other sweep fails.
 
-PR 7 removes obsolete Cache code/bindings/sweeps/helpers and appends a Wrangler
-`deleted_classes` migration. **Class deletion destroys DO data; explicit approval
-is required**. Inventory/backup/approved staging test-data reset must precede it;
-no implicit constructor drop or new empty namespace as migration. PR #29's Owner
-class plan is superseded and must not be deployed. Remote reset/migration/deploy
-needs approval and is not part of this spec.
+Draft PR 7 appends Wrangler `v2-retire-cache` with `deleted_classes: ["Cache"]`
+after the unchanged v1 tag. **Class deletion permanently destroys DO data; explicit
+owner approval is required per environment before merge/deploy.** Inventory,
+backup/recovery evidence and an approved disposition of any old durable work are
+release prerequisites. The separately approval-gated staging test-data reset is
+not included and has not run. PR #29's Owner class must not be deployed.
+
+D1 migration precedes Worker deployment in CI. An old Worker still running the
+retired registry sweep can report a scheduled failure once the two tables drop;
+its independent outbox/cleanup sweeps still run. Do not roll back to code that
+expects those tables: prefer a compatible fix-forward. Worker rollback cannot
+restore deleted class data or undo D1 DDL.
 
 Legacy Go/Supabase migration later maps verified-email users to Better Auth,
 imports caches/memberships/items/item_caches/requests directly to D1 and rewrites
@@ -387,4 +405,4 @@ identity boundaries and migration; there is no promised cross-shard transaction.
 A future per-cache DO could serve WebSocket fan-out only, not canonical data.
 See [plan's sourced facts](plan.md#verified-platform-facts); quotas are ceilings,
 not a promise of free-plan viability. All external upgrade/recovery actions need
-approval. None runs in this docs PR.
+approval. No remote action runs in this retirement draft.

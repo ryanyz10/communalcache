@@ -14,7 +14,6 @@ export default defineConfig(async () => ({
             d1Databases: ['DB'],
             r2Buckets: ['BUCKET'],
             queueProducers: { NOTIFICATIONS: 'test-notifications' },
-            durableObjects: { CACHES: { className: 'Cache', useSQLite: true } },
             bindings: {
               APP_BASE_URL: 'https://communalcache.com',
               BETTER_AUTH_URL: 'https://communalcache.com',

@@ -5,7 +5,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function sweepPhotoCleanup(env: Env) {
   const cursor = await cleanupCursor(env.DB)
   const page = (await cleanupPage(env.DB, cursor)).results
-  // ponytail: two intents (one 100-key prefix page each) leave headroom alongside legacy/outbox sweeps.
+  // ponytail: two intents (one 100-key prefix page each) leave headroom alongside outbox recovery.
   for (const { id } of page) {
     const token = crypto.randomUUID()
     const row = await claimCleanup(env.DB, id, token, Date.now())
