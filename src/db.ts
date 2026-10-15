@@ -213,7 +213,9 @@ export async function joinCache(db: D1Database, cacheId: string, userId: string,
       SELECT c.id,?,'member',CASE WHEN c.requires_approval=1 THEN 'pending' ELSE 'active' END,?,? FROM caches c
       WHERE c.id=? AND c.join_secret=?
       AND EXISTS(SELECT 1 FROM memberships WHERE cache_id=c.id AND role='owner' AND status='active')
-      AND NOT EXISTS(SELECT 1 FROM memberships WHERE cache_id=c.id AND user_id=?)`)
+      AND NOT EXISTS(SELECT 1 FROM memberships WHERE cache_id=c.id AND user_id=? AND status<>'left')
+      ON CONFLICT(cache_id,user_id) DO UPDATE SET status=excluded.status,created_at=excluded.created_at,operation_token=excluded.operation_token
+      WHERE memberships.status='left'`)
       .bind(userId, now, token, cacheId, stored, userId),
     db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
       SELECT ?,'join_requested',?,json_object('event','join_requested','cache_id',c.id,'cache_name',c.name,'recipient_id',owner.user_id,'user_id',m.user_id),?
@@ -224,8 +226,8 @@ export async function joinCache(db: D1Database, cacheId: string, userId: string,
     db.prepare(`SELECT c.id AS cache_id,c.name,m.status FROM caches c JOIN memberships m ON m.cache_id=c.id AND m.user_id=?
       WHERE c.id=? AND c.join_secret=?`).bind(userId, cacheId, stored),
   ])
-  const result = membership.results[0] as { cache_id: string; name: string; status: 'active' | 'pending' | 'removed' } | undefined
-  if (!result) throw new HttpError(404, 'not_found')
+  const result = membership.results[0] as { cache_id: string; name: string; status: 'active' | 'pending' | 'removed' | 'left' } | undefined
+  if (!result || result.status === 'left') throw new HttpError(404, 'not_found')
   if (result.status === 'removed') throw new HttpError(403, 'member_removed')
   // Existing active/pending joins do not emit another notification.
   return { membership: result, notificationId: inserted.meta.changes > 0 && outbox.meta.changes > 0 ? token : null }
@@ -449,6 +451,92 @@ export async function requestsPage(db: D1Database, userId: string, after: string
     .bind(userId,time,time,time,id,userId,time,time,time,id).all<D1Request>()).results
   const requests = rows.slice(0,25), last = requests.at(-1)
   return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
+}
+
+export async function removeCacheMember(db: D1Database, cacheId: string, actorId: string, memberId: string, leaving = false) {
+  const token = crypto.randomUUID(), now = Date.now(), status = leaving ? 'left' : 'removed'
+  const witness = `EXISTS(SELECT 1 FROM memberships m WHERE m.cache_id=? AND m.user_id=? AND m.operation_token=?)`
+  const [removed, _outbox, _requests, _attachments, hints] = await db.batch([
+    db.prepare(`UPDATE memberships SET status=?,operation_token=? WHERE cache_id=? AND user_id=? AND status='active' AND role='member'
+      AND EXISTS(SELECT 1 FROM caches c JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
+        WHERE c.id=? AND c.join_secret IS NOT NULL AND ((?=1 AND caller.user_id=?) OR (?=0 AND caller.role='owner')))`)
+      .bind(status,token,cacheId,memberId,actorId,cacheId,leaving ? 1 : 0,memberId,leaving ? 1 : 0),
+    db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
+      SELECT r.id,'member_removed',?||':'||r.id,json_object('event','member_removed','cache_id',c.id,'cache_name',c.name,
+        'item_id',i.id,'item_title',i.title,'request_id',r.id,'recipient_id',r.requester_id,'user_id',?,'quantity',r.quantity,'reason','left the cache'),?
+      FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
+      WHERE r.cache_id=? AND r.status='pending' AND (r.requester_id=? OR i.owner_id=?) AND ${witness}`)
+      .bind(token,actorId,now,cacheId,memberId,memberId,cacheId,memberId,token),
+    db.prepare(`UPDATE requests SET status='rejected',decision_reason='left the cache',decided_at=?,decision_token=?
+      WHERE cache_id=? AND status='pending' AND (requester_id=? OR item_id IN(SELECT id FROM items WHERE owner_id=?)) AND ${witness}`)
+      .bind(now,token,cacheId,memberId,memberId,cacheId,memberId,token),
+    db.prepare(`DELETE FROM item_caches WHERE cache_id=? AND item_id IN(SELECT id FROM items WHERE owner_id=?) AND ${witness}`)
+      .bind(cacheId,memberId,cacheId,memberId,token),
+    // State/snapshots cover every affected row; only immediate Queue hints are bounded.
+    db.prepare(`SELECT id FROM outbox WHERE kind='member_removed' AND dedupe_key>=? AND dedupe_key<? AND ${witness} ORDER BY dedupe_key LIMIT 25`)
+      .bind(`${token}:`,`${token};`,cacheId,memberId,token),
+  ])
+  if (removed.meta.changes === 0) {
+    const cache = await db.prepare(cacheRead).bind(actorId,cacheId).first<CacheRow>()
+    if (!cache || (!leaving && cache.owner_id !== actorId)) throw new HttpError(404,'not_found')
+    if (leaving && cache.owner_id === actorId) throw new HttpError(409,'owner_cannot_leave')
+    if (!leaving && cache.owner_id === memberId) throw new HttpError(409,'owner_cannot_be_removed')
+    throw new HttpError(404,'not_found')
+  }
+  return (hints.results as {id:string}[]).map(row=>row.id)
+}
+
+export async function detachItem(db: D1Database, itemId: string, cacheId: string, userId: string) {
+  const token = crypto.randomUUID(), now = Date.now()
+  const witness = `EXISTS(SELECT 1 FROM item_caches a WHERE a.item_id=? AND a.cache_id=? AND a.operation_token=?)`
+  const [detached, _outbox, _requests, hints] = await db.batch([
+    db.prepare(`UPDATE item_caches SET operation_token=? WHERE item_id=? AND cache_id=?
+      AND EXISTS(SELECT 1 FROM items WHERE id=item_caches.item_id AND owner_id=?)
+      AND EXISTS(SELECT 1 FROM memberships m JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
+        WHERE m.cache_id=item_caches.cache_id AND m.user_id=? AND m.status='active')`)
+      .bind(token,itemId,cacheId,userId,userId),
+    db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
+      SELECT r.id,'request_rejected',?||':'||r.id,json_object('event','request_rejected','cache_id',c.id,'cache_name',c.name,
+        'item_id',i.id,'item_title',i.title,'request_id',r.id,'recipient_id',r.requester_id,'user_id',?,'quantity',r.quantity,'reason','item no longer shared in this cache','item_detached',json('true')),?
+      FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
+      WHERE r.item_id=? AND r.cache_id=? AND r.status='pending' AND ${witness}`)
+      .bind(token,userId,now,itemId,cacheId,itemId,cacheId,token),
+    db.prepare(`UPDATE requests SET status='rejected',decision_reason='item no longer shared in this cache',decided_at=?,decision_token=?
+      WHERE item_id=? AND cache_id=? AND status='pending' AND ${witness}`)
+      .bind(now,token,itemId,cacheId,itemId,cacheId,token),
+    db.prepare(`SELECT id FROM outbox WHERE kind='request_rejected' AND dedupe_key>=? AND dedupe_key<? AND ${witness} ORDER BY dedupe_key LIMIT 25`)
+      .bind(`${token}:`,`${token};`,itemId,cacheId,token),
+    db.prepare('DELETE FROM item_caches WHERE item_id=? AND cache_id=? AND operation_token=?').bind(itemId,cacheId,token),
+  ])
+  if (detached.meta.changes === 0) throw new HttpError(404,'not_found')
+  return (hints.results as {id:string}[]).map(row=>row.id)
+}
+
+export async function deleteItem(db: D1Database, itemId: string, userId: string, cacheId: string | null = null) {
+  const token = crypto.randomUUID(), now = Date.now()
+  const witness = `EXISTS(SELECT 1 FROM items i WHERE i.id=? AND i.owner_id=? AND i.operation_token=?)`
+  const [deleted, _outbox, _requests, _exact, _prefix, hints] = await db.batch([
+    db.prepare(`UPDATE items AS i SET operation_token=? WHERE i.id=? AND i.owner_id=? AND (${itemAccess})`)
+      .bind(token,itemId,userId,cacheId,userId,userId,cacheId),
+    db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
+      SELECT r.id,'item_deleted',?||':'||r.id,json_object('event','item_deleted','cache_id',c.id,'cache_name',c.name,
+        'item_id',i.id,'item_title',i.title,'request_id',r.id,'recipient_id',r.requester_id,'user_id',?,'quantity',r.quantity,'reason','item deleted'),?
+      FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
+      WHERE i.id=? AND i.owner_id=? AND i.operation_token=? AND r.status='pending'`).bind(token,userId,now,itemId,userId,token),
+    db.prepare(`UPDATE requests SET status='rejected',decision_reason='item deleted',decided_at=?,decision_token=?
+      WHERE item_id=? AND status='pending' AND ${witness}`).bind(now,token,itemId,itemId,userId,token),
+    db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at)
+      SELECT ?,owner_id,id,'exact',photo_path,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND photo_path IS NOT NULL
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),now,itemId,userId,token),
+    db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at)
+      SELECT ?,owner_id,id,'prefix',owner_id||'/'||id||'/',? FROM items WHERE id=? AND owner_id=? AND operation_token=?
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),now,itemId,userId,token),
+    db.prepare(`SELECT id FROM outbox WHERE kind='item_deleted' AND dedupe_key>=? AND dedupe_key<? AND ${witness} ORDER BY dedupe_key LIMIT 25`)
+      .bind(`${token}:`,`${token};`,itemId,userId,token),
+    db.prepare('DELETE FROM items WHERE id=? AND owner_id=? AND operation_token=?').bind(itemId,userId,token),
+  ])
+  if (deleted.meta.changes === 0) throw new HttpError(404,'not_found')
+  return (hints.results as {id:string}[]).map(row=>row.id)
 }
 
 export async function finishItemPhoto(db: D1Database, itemId: string, userId: string, key: string, uploaded: boolean, cacheId: string | null = null) {

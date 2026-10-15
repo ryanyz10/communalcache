@@ -1,6 +1,6 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deletePush, getProfile, itemDetail, itemRequests, joinCache, libraryItems, listMyCaches, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryItems, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto } from './photos'
@@ -93,7 +93,7 @@ async function dispatch(request: Request, env: Env) {
       vapid_public_key: env.VAPID_PUBLIC_KEY,
     })
   }
-  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
+  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/leave|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
   const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/requests)?)?$/i)
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
@@ -113,8 +113,6 @@ async function dispatch(request: Request, env: Env) {
   const profile = await getProfile(env.DB, session.user.id)
   if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
-  // Destructive cascades reopen only with PR 5's complete snapshot/race proofs.
-  if (memberRoute || (method === 'DELETE' && (itemRoute || libraryRoute))) throw new HttpError(503, 'items_moving')
   const writeRoute: WriteRoute | null = method !== 'POST' ? null
     : cacheRoute?.[2] === '/join' ? 'join'
     : cacheRoute?.[3] ? 'join_decision'
@@ -129,6 +127,12 @@ async function dispatch(request: Request, env: Env) {
     const body = await readBody(request)
     if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
     return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
+  }
+  if (memberRoute || cacheRoute?.[2] === '/leave') {
+    if (request.body) await readBody(request)
+    const ids = await removeCacheMember(env.DB, memberRoute?.[1] ?? cacheRoute![1], profile.id, memberRoute?.[2] ?? profile.id, !memberRoute)
+    await enqueueNotifications(env, ids)
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   }
   if (path === '/api/requests') return json(await requestsPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
   if (requestRoute || ownRequestRoute) {
@@ -148,7 +152,13 @@ async function dispatch(request: Request, env: Env) {
     const cacheId = itemRoute?.[1] ?? null, itemId = itemRoute?.[2] ?? libraryRoute?.[1]
     if (libraryRoute?.[3]) {
       if (request.body) await readBody(request)
-      await attachItem(env.DB, itemId!, libraryRoute[3], profile.id)
+      if (method === 'DELETE') await enqueueNotifications(env, await detachItem(env.DB, itemId!, libraryRoute[3], profile.id))
+      else await attachItem(env.DB, itemId!, libraryRoute[3], profile.id)
+      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+    }
+    if (method === 'DELETE') {
+      if (request.body) await readBody(request)
+      await enqueueNotifications(env, await deleteItem(env.DB, itemId!, profile.id, cacheId))
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
     if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
@@ -204,6 +214,12 @@ async function dispatch(request: Request, env: Env) {
 async function enqueueNotification(env: Env, id: string | null) {
   if (!id) return
   try { await env.NOTIFICATIONS.send(id) }
+  catch { console.error('Notification enqueue failed; durable outbox retained') }
+}
+
+async function enqueueNotifications(env: Env, ids: string[]) {
+  if (!ids.length) return
+  try { await env.NOTIFICATIONS.sendBatch(ids.map(body => ({ body }))) }
   catch { console.error('Notification enqueue failed; durable outbox retained') }
 }
 

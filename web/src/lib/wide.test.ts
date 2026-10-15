@@ -80,15 +80,19 @@ it('uses wide-only breadcrumbs, Settings label and photo cards without duplicati
   expect(detail.match(/>Starter<\/h1>/g)).toHaveLength(1)
 })
 
-it('reopens requests and owner availability while keeping destructive controls hidden', () => {
-  const detail = render(createElement(ItemPage, { deletionDisabled: true }), { route: '/caches/:cacheId/items/:itemId', path: `/caches/${id}/items/${itemId}` })
+it('opens destructive controls with distinct global-delete and detach consequences', () => {
+  const detail = render(createElement(ItemPage), { route: '/caches/:cacheId/items/:itemId', path: `/caches/${id}/items/${itemId}` })
   expect(detail).toContain('>Starter</h1>')
   expect(detail).toContain('Edit item')
   expect(detail).toContain('Upload photo')
   expect(detail).toContain('Save availability')
   expect(detail).toContain('for="unavailable-note"')
   expect(detail).toContain('not existing pending requests')
-  expect(detail).not.toContain('Delete item')
+  expect(detail).toContain('Delete item')
+  expect(detail).toContain('your library and every cache')
+  expect(detail).toContain('Stop sharing in this cache')
+  expect(detail).toContain('The item is removed from this cache only')
+  expect(detail).toContain('Your library item, photos, stock and other caches are kept')
   expect(detail).not.toContain('Requests are being moved')
   expect(detail).toContain('Approve request')
   const cache = render(createElement(CachePage), { route: '/caches/:cacheId', path: `/caches/${id}` })
