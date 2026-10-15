@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router'
+import { Navigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { destinationAfterLogin } from '../lib/pendingJoin'
@@ -7,8 +7,9 @@ import { sendSignInEmail } from '../lib/magicLinks'
 import { AuthScreen, BrandMark, MailIcon } from '../components/AuthScreen'
 import { CodeInput } from '../components/CodeInput'
 import { PixelHorizon } from '../components/PixelArt'
+import { landingCopy } from '../lib/landingCopy'
 
-export function LoginForm({ inviteToken }: { inviteToken?: string }) {
+export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: string; inviteHint?: boolean }) {
   const { refresh } = useAuth()
   const emailInput = useRef<HTMLInputElement>(null)
   const [email, setEmail] = useState('')
@@ -53,6 +54,7 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
       <h1 className="cc-auth-heading">{sent === 'link' ? 'Check your email' : 'Enter your code'}</h1>
       <p role="status" className="mt-2 text-slate-600">{sent === 'link' ? 'We sent a sign-in link to' : 'Sent to'}<br /><strong className="break-all text-slate-900">{email.trim()}</strong></p>
     </header>}
+    {inviteHint && !inviteToken && <aside className="mt-6 rounded-xl border border-slate-200 bg-white p-4 text-sm" role="note">{landingCopy.inviteNote}</aside>}
     {inviteToken && <aside className="mt-6 flex items-center gap-3 rounded-[14px] border border-indigo-200 bg-white p-3.5" aria-label="Saved invite">
       <div aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800"><MailIcon /></div>
       <div className="text-sm"><p className="font-semibold">Invite saved in this tab</p><p className="text-slate-600">Open the link in this same tab to keep it, or use a code here.</p></div>
@@ -83,5 +85,6 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
 
 export function LoginPage() {
   const { me } = useAuth()
-  return me ? <Navigate to={destinationAfterLogin()} replace /> : <LoginForm />
+  const [search] = useSearchParams()
+  return me ? <Navigate to={destinationAfterLogin()} replace /> : <LoginForm inviteHint={search.get('invite') === '1'} />
 }

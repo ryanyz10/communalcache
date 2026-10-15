@@ -29,7 +29,8 @@ it('uses sunny/evening system palettes on every existing route and preserves rea
       expect(contrast(palette[`--cc-${tone}`],palette[`--cc-${tone}-bg`]),tone).toBeGreaterThanOrEqual(4.5)
       expect(contrast(palette[`--cc-${tone}`],palette['--cc-bg']),tone+' on body').toBeGreaterThanOrEqual(4.5)
     }
-    for(const sky of ['--cc-sky','--cc-sky2']) expect(contrast(palette['--cc-on-sky'],palette[sky])).toBeGreaterThanOrEqual(4.5)
+    for(const sky of ['--cc-sky','--cc-sky2']) for(const foreground of ['--cc-on-sky','--cc-on-sky-sub']) expect(contrast(palette[foreground],palette[sky])).toBeGreaterThanOrEqual(4.5)
+    expect(contrast('#2a1b22',palette['--cc-box'])).toBeGreaterThanOrEqual(4.5)
   }
   for(const background of AVATAR_COLORS) expect(contrast('#ffffff',background)).toBeGreaterThanOrEqual(4.5)
 })

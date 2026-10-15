@@ -20,9 +20,9 @@ let vite
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost'), path = url.pathname
   if (path === '/__fixture/compare') {
-    const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
+    const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin','landing'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
     // Iframes have real independent viewport widths, including the desktop breakpoint.
-    const width=wide?1280:390, height=wide?800:780, scale=wide?0.75:0.77
+    const width=wide?1280:390, height=screen==='landing'?(wide?1050:1500):(wide?800:780), scale=wide?0.75:0.77
     const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?'Wide':'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
@@ -43,8 +43,8 @@ const server = createServer(async (request, response) => {
     requests.set(row.id,row)
     contacts.set(owner,{kind:'messenger',value:'ryan.zhou',link:'https://m.me/ryan.zhou'})
     contacts.set(member,{kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'})
-    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login'}
-    response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'?'':owner}; HttpOnly; SameSite=Lax; Path=/`)
+    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login',landing:'/'}
+    response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'||screen==='landing'?'':owner}; HttpOnly; SameSite=Lax; Path=/`)
     response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}`});response.end();return
   }
   async function fixtureHtml(html) {
