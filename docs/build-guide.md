@@ -95,6 +95,18 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | D1 5 | Removal / leave / detach / deletion / races | Implemented; in review: guarded atomic cascades/outbox/cleanup, 0010 left-membership rebuild and rejoin semantics, removal/leave/detach/global-delete confirmations; no DO/config retirement. |
 | D1 6 | Library / add sheet / checkboxes / items board | Implemented; in review: owner-scoped paginated library/Home preview, Existing/New cache add sheet, atomic create+attach, Shown in confirmations, shared availability and private photos; items board 1a–1d, supersedes #28. |
 | D1 7 | Retire Durable Objects / staging reset | Implemented for draft review only: Cache code/bindings/RPC/sweeps and historical tests removed; inherited v2-retire-cache deleted_classes and D1 0011 projection-table drop prepared. Explicit owner approval required before merge/deploy. Staging test-data reset is NOT included and remains separately approval-gated. |
+| Readiness 1 | Plans foundation | not started — user/cache plan columns default free; one plan_limits table; free + higher placeholder only; approved manual assignment until admin exists; no plan UI/upgrades/billing |
+| Readiness 2 | Free quotas and limit-reached UX | not started — all-account launch caps, same-write table-driven guards, concurrent boundary proof and clear errors; no copied counters/grants |
+| Readiness 3 | Private profile photo | not started — Account upload/replace/remove, users/{userId}/{uploadUUID}, self/shared-active-cache read guard, durable cleanup and initials fallback |
+| Readiness 4 | Contact after approval | not started — optional single contact and server-built platform links; approved parties + both active in request cache; optional approval message starts empty; auth email stays private |
+| Readiness 5 | Cozy theme and app identity | not started — round-6 pixel horizon, sunny/evening prefers-color-scheme, open-box-with-cat mark and complete icon set; accessible/reduced-motion layouts |
+| Readiness 6 | Turnstile and bot setup | not started — needs owner setup; email sends + cache creation, Worker siteverify; Bot Fight Mode zone toggle separately approved |
+| Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
+| Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
+| Readiness 9 | Supporter tips link | not started — needs owner setup; hosted link only, hidden until configured, no webhooks/app storage/unlocks |
+| Gate 10 | Full user-flow parity and cleanup refactor | not started — final release scope, regression-backed cleanup and phone/wide/theme/accessibility/error checklist |
+| Gate 11 | Independent security review | not started — independent reviewer, exact revision/scope, findings fixed or explicitly accepted; not a CI-only signoff |
+| Gate 12 | Explicit release approval | not started — owner-approved revision/environment/features after parity and security; external setup, destructive retirement/reset and legacy cutover approvals remain separate |
 
 ## D1 implementation plan
 
@@ -336,6 +348,254 @@ owner approval remain outstanding. D1 table drops precede Worker deployment in
 the pipeline: old registry Cron can briefly report failure, although its
 independent outbox/cleanup work still runs. Code requiring the dropped tables is
 not a compatible rollback; fix forward rather than assuming data is restored.
+
+## Production readiness build order
+
+The [approved readiness additions](plan.md#production-readiness-additions--approved-not-implemented)
+are **not implemented by this docs PR**. Build one feature per PR, backend guards,
+its UI slice and tests together. Rows 1–5 are core work; 6–9 are last among features
+and remain **needs owner setup** until the owner supplies the required external
+configuration/approvals. Terminal gates 10 → 11 → 12 cover the final intended
+production revision. If an owner-setup feature is deferred past release, rerun
+these gates when it later ships. No setup row authorizes provisioning, a secret
+change, a plan assignment, draft #37's destructive merge or a staging reset.
+
+### Readiness 1 — Plans foundation
+
+Add app user/cache `plan` columns with free defaults and one `plan_limits` table
+keyed by `free` / internal `higher`. Keep one source for user and cache limits;
+plan choice is not membership, item ownership or an auth-core display name.
+No plan UI, upgrade/billing flow, prices or third tier. Use the
+[future manual command templates](plan.md#plans-foundation-and-launch-limits)
+only for exact owner-approved targets until the protected admin page exists.
+The higher cache member limit is 100; other raised values need approval before
+implementation, not guessed numbers copied from older paid-tier notes.
+
+**Traps:** do not accept plan from signup/cache-create bodies, auto-assign it from
+email/admin status, select it once before a later unguarded write or reset data on
+a downgrade. Preserve reviewed Better Auth migrations and D1 FK/quantity/status
+checks. One table serves both plan dimensions; do not add divergent per-route
+limit maps or implicit unlimited fallbacks for a missing plan row.
+
+**Proving checks:** real-D1 empty/populated upgrade defaults everyone to free;
+constraints reject unknown keys; no-forged-plan tests on public writes; approved
+manual assignment/read-back/reversal documented without auth email disclosure.
+Plan/table changes racing a consuming write must use the plan observed inside
+that same guarded statement/batch. This PR's docs tests are not those proofs.
+
+### Readiness 2 — Free quotas and limit-reached states
+
+Enforce free caps for every account: **3 owned caches; 2 new caches/day; 20 cache
+memberships; 30 members/cache (higher: 100); 100 owned library items; 20 pending
+outgoing requests; 1 current item photo at the existing 5 MB cap; 1 profile photo**.
+User plan controls account caps; cache plan controls its member cap. One item
+shared in two caches counts once; photo replacement/cleanup keys are not extra
+current slots. Read limits from `plan_limits` within the authorized write or
+fresh-token batch; retain stock, membership, state+outbox atomicity and abuse
+budgets. Return structured limit-reached errors and clear accessible UX, not a
+billing upsell or silent partial success.
+
+**Traps:** cover open join, gated activation and `left` rejoin; an owner counts as
+an active member and owned caches count toward the account membership limit.
+`removed` stays valid-secret 403, not a fresh join. Settle/test day boundaries and
+pending-seat accounting in the implementation review; no cache-local item count,
+UI-only quota or auth exemption. A cap failure must not manufacture membership,
+attachments, requests, outbox or cleanup effects. Do not introduce a loan lifecycle
+to count pending requests, or delete existing data when a plan lowers a limit.
+
+**Proving checks:** real-D1 parallel last-slot cache/item/request creation and
+open/gated joins/approvals; quota/plan-change races; failed primary → zero dependent
+effects; rollback on injected failure. Test below/at/over caps, new-day behavior,
+replay/idempotent joins, pending → decided slot release, cross-cache one-item
+counting and no wrong-account limit usage. UI shows specific limit-reached copy,
+loading/error/retry and no upgrade controls.
+
+### Readiness 3 — Private profile photo
+
+Account can upload, replace or remove one private photo at
+`users/{userId}/{uploadUUID}` with initials fallback. Reuse item-photo cap/sniffing,
+immutable upload and guarded post-I/O finalization. A single D1 read authorizes
+self or at least one cache where **both users are active**, before private/no-store
+R2 streaming. Commit pointer changes and cleanup intents together; add an explicit
+profile cleanup scope rather than passing user keys through item validators.
+
+**Traps:** public avatar URLs, cached membership grants, requester history as a
+photo grant, pending/left/removed memberships and cross-user mutation IDs. Losing
+one shared cache must not deny another valid shared cache; losing the last denies
+the next read. Cleanup must preserve the current key across replacement/removal/
+uncertain finalization and must never cross item/user prefix boundaries.
+
+**Proving checks:** real-D1 self/shared-active/other-cache/pending/removed/left
+matrix; last-shared-cache races; ownership recheck after R2 I/O; replacement/remove
+batch rollback and durable cleanup retry. Mock R2 failures, actual-byte/type caps
+and missing image/initials UI; browser cookie/no-store reads, Account controls and
+account-switch stale-photo isolation. Preserve the documented unknown-orphan gap.
+
+### Readiness 4 — Contact reveal and optional approval message
+
+Account stores at most one optional contact: sms, whatsapp, signal, messenger,
+instagram or chosen email. Server validates by kind and constructs only the
+[approved destinations](plan.md#contact-after-approval-not-chat-or-email-relay).
+Owners get a test preview; after approval show a platform icon and **Message X on
+<platform>** button, with a nudge when contact is missing. Contact reveal checks
+approved request + caller party + both parties active in **that request cache** in
+one SQL statement. No chat, relay, auth-email fallback or public contact directory.
+An optional plain-text approval message is separate from rejection reason and
+starts empty; settle its documented text bound before implementation.
+
+**Traps:** another member/admin, a different shared cache, pending/rejected request
+or retained party history is not contact permission. Do not copy contact into
+outbox/push/admin payloads or select Better Auth email for contact enrichment.
+Never accept arbitrary URLs or schemes, malformed phone/usernames, CRLF/mailto
+parameter injection or unescaped labels/messages. Do not prefill the message with
+sample text or a contact value. Keep approval + message + durable effects atomic.
+
+**Proving checks:** real-D1 party/status/cache/membership matrix and approved-read
+races with leave/removal/contact replacement; no auth email selected/returned for
+the other party; private-message party checks. Exact server-built link tests for
+all six kinds, malicious values/schemes and Unicode/length bounds; missing-contact
+and owner preview flows; UI consent/empty message, accessible icons/buttons and
+phone deep-link behavior without initiating real messages or relay email.
+
+### Readiness 5 — Cozy theme and app identity
+
+Apply approved **cozy whiteboard round 6**: decorative pixel horizon with boxes on
+Home, houses in a cache; sunny light/evening dark via `prefers-color-scheme`; open
+box with cat replaces the black house Home mark. Ship SVG + 32px PNG favicon,
+180px apple-touch-icon, 192/512 manifest maskable icons and safe-area artwork.
+No plan-specific theme picker or functional screen redesign.
+
+**Traps:** decorative content must be `aria-hidden`, not a second item list or
+status announcement. Preserve accessible lists, single controls, breadcrumbs,
+Home name, focus rings, error states and existing wide-layout conventions. Honor
+`prefers-reduced-motion`; don't rely on animation or low-contrast pixel art to
+convey meaning. Icons must be actual correct-size assets, not renamed files.
+
+**Proving checks:** browser phone/wide light/dark and reduced-motion screenshots
+against round 6; keyboard/screen-reader structure and contrast; full user flows
+with decoration off. Inspect icon dimensions, favicon/manifest references,
+maskable cropping and installed-PWA appearance; automated layout/asset checks do
+not replace actual rendered/device evidence.
+
+### Readiness 6 — Turnstile (needs owner setup)
+
+Owner supplies approved site configuration/key/secret and intended hostname/action.
+Protect magic-link/code sends/resends and cache creation with server-side
+`siteverify`. Keep Origin/auth/profile, D1 rate limits and same-write quota guards.
+Bot Fight Mode is an owner-approved zone setting, not an automatic code side effect.
+
+**Traps:** widget-only checks, frontend token trust, direct-API/resend bypass,
+missing-secret fail-open, foreign-host/action tokens or provider calls inside a
+D1 batch. Siteverify success is not membership/plan authorization.
+
+**Proving checks:** mock success/missing/invalid/expired/replayed/mismatched tokens,
+provider errors/timeouts and direct API paths with no unsafe state/mail send.
+After setup approval, record live valid/invalid-token browser/provider receipts
+and verify existing sign-in fallback/rate limits. No zone toggle/secret provision
+or live assertion until the owner supplies and approves setup.
+
+### Readiness 7 — Google (needs owner setup)
+
+Owner supplies Google OAuth client credentials and approved redirect origins.
+Use Better Auth social sign-in and link by verified email to the same app user;
+retain magic-link/code fallback. Apple remains deferred for its paid developer
+account requirement. This does not introduce phone/SMS authentication.
+
+**Traps:** unverified-email linking, duplicate app identities, arbitrary callback
+origins, trusting browser provider claims, bypassing display-name onboarding or
+retaining another account's private query/push state. Add only reviewed auth
+provider paths to the allowlist; secrets never reach frontend config/logs.
+
+**Proving checks:** mocked provider verified/unverified/existing/new/collision
+flows, state/callback/CSRF/replay failures, session revocation/profile gates and
+account switching. After owner setup, approved live Google callback/linking and
+fallback receipts; no real provider setup inferred from local test success.
+
+### Readiness 8 — Owner admin (needs owner setup)
+
+Owner supplies Cloudflare Access policy/JWT settings and exact allowlisted app
+user IDs. Guard `/admin` and **every backing API** with Access plus Worker JWT
+verification and current allowlisted app identity. Show names/IDs, plan/usage and
+failed-outbox metadata only; allow guarded plan assignment and suspension. Define
+suspension's enforced effects before exposing the action. Never show auth/contact
+emails, raw outbox/contact payloads or an impersonation/privacy bypass.
+
+**Traps:** protecting only the SPA/edge, workers.dev bypass, forged identity
+headers, JWT-derived fetch origins, wrong issuer/audience, expired tokens, an
+allowlisted Access token without the required app ID, or frontend-only suspension.
+Do not accept arbitrary SQL/plan keys from an admin form. Operational access is
+not permission to expose item-owner library or request-party contact data.
+
+**Proving checks:** invalid signature/issuer/audience/time/config and missing app
+session/ID tests, direct alternate-origin API attempts, CSRF and exact-target plan
+writes; denied access has zero effects. Names/IDs-only query/response snapshots,
+suspension enforcement and operational-data redaction tests. Live Access policy
+and direct-API deny receipts need separately approved owner setup.
+
+### Readiness 9 — Supporter tips (needs owner setup)
+
+Owner supplies an approved hosted link, for example a Stripe Payment Link. Keep
+**Support Communal Cache** hidden until configured. No webhooks, app supporter or
+payment records, plan changes, unlocks or billing/upgrade UI.
+
+**Traps:** donor/entitlement state, analytics carrying app identity/contact data,
+auth tokens in URLs, fake checkout controls or showing an unconfigured link.
+External payment provider storage is not an app payment ledger.
+
+**Proving checks:** hidden/configured states, approved HTTPS destination and no
+app identity/query leakage; clicking cannot mutate D1 or entitlement state.
+After owner setup, manually verify the configured destination without making an
+unapproved payment. Do not provision payment products or providers automatically.
+
+### Gate 10 — Full user-flow parity checklist and cleanup refactor
+
+Freeze the intended release scope and inventory every flow: magic link/scanner/
+Continue and code fallback; invite/name/new account/account switching; cache
+create/open/gated join/approval/rotation/leave/rejoin/removed denial; private library,
+Existing/New create/attach, Shown in confirmation/retry, photos/profile photo;
+all-cache stock, requests/decisions/Lent out/contact/empty approval message;
+quota errors; notification/push/cleanup recovery; Account/preferences/logout;
+owner-setup features only if included in this release. Compare phone/wide,
+light/dark, reduced-motion, keyboard/focus, loading/empty/error/retry and privacy.
+
+**Traps:** cosmetic cleanup that weakens SQL guards/token batches, drops durable
+work or revives holder/return/projection models; calling skipped setup/device/
+provider cases passed; checklist drift from the actual release revision.
+
+**Proving checks:** attach requirement/revision/environment receipts per flow,
+real-D1 races/rollback plus browser coverage, explicit blocked/deferred cases and
+regression-backed removal of obsolete paths. Applicable whole suite/typechecks/
+build/bundles stay green. Complete this gate before the independent review.
+
+### Gate 11 — Independent security review
+
+A reviewer other than the implementation author reviews the exact final release
+revision and enabled features, including new quota, photo/contact, link, social,
+Access/suspension and existing auth/CSRF/D1/stock/durable-effect boundaries.
+
+**Traps:** self-review or green CI relabeled independent signoff, reviewing an old
+revision, untracked findings, or relying only on UI hides/provider edge policy.
+
+**Proving checks:** named reviewer, scope/revision, evidence-backed findings and
+fix verification; owner explicitly accepts any residual risk. Changes after the
+review trigger appropriate parity/re-review before release. This docs PR is not
+the review and makes no claim that new functionality is secure/implemented.
+
+### Gate 12 — Explicit release approval
+
+Owner approves the exact revision, environment and enabled/deferred features only
+after parity and independent security review. Include external setup readiness,
+provider/device smoke where applicable, migration/backup/fix-forward evidence and
+approved monitoring/recovery. DO deletion, staging reset and legacy cutover still
+require their separate explicit approvals.
+
+**Traps:** treating a normal docs PR, feature merge, draft status change, CI success
+or plan assignment as release permission; silently adding a deferred setup feature
+after review; assuming code rollback restores deleted data.
+
+**Proving checks:** durable owner approval with revision/environment/scope and
+links to parity/security/operational receipts. No deploy/promotion/reset without
+that approval. If a deferred owner-setup feature later ships, rerun gates 10–12.
 
 ## Retained regression requirements
 
