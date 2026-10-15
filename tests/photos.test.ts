@@ -32,7 +32,7 @@ async function cleanup(stub: DurableObjectStub<import('../src/cache').Cache>) {
   return runInDurableObject(stub, (_instance, state) => state.storage.sql.exec<{ id: string; payload: string }>("SELECT id, payload FROM pending_sync WHERE kind='r2_delete' ORDER BY sequence").toArray())
 }
 
-it('retains legacy direct-DO photo authorization while its Worker API is gated', async () => {
+it('retains legacy direct-DO photo authorization separately from the canonical D1 Worker API', async () => {
   const { caller, owner, stub, item } = await created()
   await failure(stub.photoKey(caller, item.id), 'not_found')
   for (const user of [owner, 'outsider']) await failure(stub.photoUploadKey(user, item.id), 'not_found')
@@ -160,12 +160,12 @@ it('isolates concurrent immutable replacements and preserves the current key aft
   expect(await env.BUCKET.head(first)).not.toBeNull()
 })
 
-it('keeps Worker photo routes gated and Origin/profile guards intact', async () => {
+it('keeps non-member Worker photo reads 404 and Origin/profile guards intact', async () => {
   const caller = await login(), path = `/api/caches/${crypto.randomUUID()}/items/${crypto.randomUUID()}/photo`
   expect((await worker.fetch(appRequest(path), env)).status).toBe(404)
   expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(409)
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
   for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, origin, body: {} }), env)).status).toBe(403)
-  for (const method of ['GET', 'POST']) expect((await worker.fetch(appRequest(path, { method, cookie: caller.cookie }), env)).status).toBe(503)
+  for (const method of ['GET', 'POST']) expect((await worker.fetch(appRequest(path, { method, cookie: caller.cookie }), env)).status).toBe(404)
   expect((await env.BUCKET.list()).objects).toEqual([])
 })

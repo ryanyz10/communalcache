@@ -58,7 +58,7 @@ function DeleteItem({ item }: { item: Item }) {
   </>
 }
 
-export function ItemPage() {
+export function ItemPage({ requestsDisabled = false, deletionDisabled = false }: { requestsDisabled?: boolean; deletionDisabled?: boolean }) {
   const { cacheId = '', itemId = '' } = useParams()
   const { me } = useAuth()
   const query = useQuery({ queryKey: ['item', cacheId, itemId], queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`), enabled: !!me?.display_name })
@@ -78,10 +78,10 @@ export function ItemPage() {
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
       {me.id === query.data.owner_id && <>
         <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="cc-pill mt-6">Edit item</Link>
-        <DeleteItem item={query.data} />
+        {!deletionDisabled && <DeleteItem item={query.data} />}
         <PhotoUpload item={query.data} />
       </>}
-      <ItemRequests item={query.data} />
+      {requestsDisabled ? <p role="status" className="mt-6">Requests are being moved, back soon</p> : <ItemRequests item={query.data} />}
       </div>
     </div>}
   </main>
@@ -101,7 +101,7 @@ function ItemForm({ cacheId, item }: { cacheId: string; item?: Item }) {
     }),
     onSuccess: async saved => {
       queryClient.setQueryData(['item', cacheId, saved.id], saved)
-      await queryClient.invalidateQueries({ queryKey: ['items', cacheId] })
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['items'] }), queryClient.invalidateQueries({ queryKey: ['item'] })])
       navigate(`/caches/${cacheId}/items/${saved.id}`)
     },
   })

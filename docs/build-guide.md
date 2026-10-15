@@ -87,7 +87,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Historical | Your items cache fan-out | Draft [#28](https://github.com/ryanyz10/communalcache/pull/28) superseded by direct-D1 library, not target design |
 | D1 1 | Single-D1 specification | This docs-only PR; no implementation/migration/resource changes |
 | D1 2 | Caches / membership / joining | Implemented; in review: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
-| D1 3 | Shared items / attachments / photos | Planned; direct own library, one item across caches, private R2 and cleanup |
+| D1 3 | Shared items / attachments / photos | Implemented; in review: 0008 canonical items/attachments/cleanup, own-library APIs, retained atomic cache create+attach and scoped PATCH/photo routes, restored item UI. Requests/destruction remain gated; library/add-sheet/checkbox screens stay PR 6. |
 | D1 4 | Requests / shared stock / Lent out / notifications | Planned; guarded INSERT and token-gated decision batches, direct Requests queries |
 | D1 5 | Removal / detach / deletion / races | Planned; atomic cascades/snapshots and immediate membership enforcement |
 | D1 6 | Library / add sheet / checkboxes / items board | Planned; items board 1a–1d and user flows, supersedes #28 |
@@ -151,6 +151,30 @@ attach vs removal, photo caps/sniff/SVG rejection, ownership recheck/upload-dele
 race, uncertain finalization does not delete current key, known cleanup retry and
 private/no-store streams. No detach/removal deletes library photo. Port source
 routing without retaining old stock writes. Destructive route gate stays closed.
+
+**Approved PR 3 API/UI contract:** expose private GET/POST /api/me/items,
+GET/PATCH /api/me/items/{itemId}, GET/POST .../photo and guarded PUT
+.../attachments/{cacheId} now. Keep POST /api/caches/{cacheId}/items as the real
+“new item inside a cache” flow: create canonical item plus first attachment in one
+atomic guarded batch. Keep cache-context PATCH/photo POST with ownership, active
+membership and attachment checks; PR 6 may move those writes to private routes.
+Restore the current cache list/add/edit/photo screens, not the PR 6 library/add
+sheet/cache checkboxes. Requests, member removal, item deletion and detach stay
+gated. All cache item/photo reads require active caller AND owner membership;
+losing a cache never deletes the canonical item/photo or blocks own-library access.
+
+Manual available/unavailable_note fields are stored and validated now (200 Unicode
+code points); UI controls/approval behavior follow later PRs. With request routes
+gated, new D1 items have no reservations yet; PR 4 must add the all-cache pending
+floor to guarded stock edits before requests open. Cleanup uses two cursor-paged
+intents per Cron tick, one 100-key prefix page each, 90s guarded leases and durable
+retry without an attempt cutoff. A nonempty prefix page retains its intent until
+a later empty confirmation. Its worst normal sweep is seven D1 queries + four R2
+calls, leaving headroom alongside retained legacy registry/outbox recovery.
+Replacement pointer + old-key cleanup commit atomically; rejected-upload cleanup
+is an independent guarded repair that never deletes a currently referenced key.
+A put-before-finalization crash can still orphan unknown bytes; no complete orphan
+sweep or R2/D1 atomicity is claimed.
 
 ### PR 4 — Requests, shared stock, Lent out and notifications
 
