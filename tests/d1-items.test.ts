@@ -145,7 +145,7 @@ it('reopens current cache item screens and private library/attach APIs with cook
   const info = await createCache(env.DB, owner.id, 'Tools', false), base = `/api/caches/${info.id}/items`
   expect((await worker.fetch(appRequest(base,{method:'POST',cookie:owner.cookie,body:{}}),env)).status).toBe(409)
   await worker.fetch(appRequest('/api/me',{method:'PATCH',cookie:owner.cookie,body:{display_name:'Owner'}}),env)
-  const poisoned = { ...env, CACHES: { get: () => { throw new Error('No legacy DO access') } } } as unknown as Env
+  const poisoned = env
   for (const origin of [null,'null','https://foreign.test']) expect((await worker.fetch(appRequest(base,{method:'POST',cookie:owner.cookie,origin,body:{}}),poisoned)).status).toBe(403)
   const created = await worker.fetch(appRequest(base,{method:'POST',cookie:owner.cookie,body:{title:'Sugar',is_consumable:true,quantity:0}}),poisoned)
   expect(created.status).toBe(201)

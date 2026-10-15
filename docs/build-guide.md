@@ -7,10 +7,11 @@ deployable, even when a new route is gated until its full cascade is proved.
 
 **Single D1 replaces PR #29's Owner DO model.** Keep its product decisions (shared
 items/stock, manual Lent out, owner-scoped private photos), not its object split,
-projections, target registration or eventual revocation. Current Cache DO code is
-implementation history to port. Existing tests do not prove the new D1 protocol.
-No code/config/package/migration/resource changes or Cloudflare commands in this
-spec PR. Keep legacy Fly/Supabase live until separately approved cutover.
+projections, target registration or eventual revocation. PRs 2–6 implement the D1
+routes/screens with real SQL tests. Draft PR 7 removes the historical Cache code
+and prepares destructive class deletion; it is **not approved for merge/deploy**.
+No remote migration, deployment, class deletion or staging reset has run as part
+of that draft. Keep legacy Fly/Supabase live until separately approved cutover.
 
 ## Before you start
 
@@ -55,8 +56,8 @@ CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --d
 ```
 
 Test empty and additive/upgrade D1 migrations; preserve auth/OTP and quantity/status
-checks. Target tests need no DO schema/alarm helpers; current cache-local tests keep
-them until retirement. Smoke local health/config, SPA deep links and JSON API 404s
+checks. Tests use real D1 without object bindings/schema/alarm helpers; historical
+object-only tests retire with PR 7 and canonical equivalents remain. Smoke local health/config, SPA deep links and JSON API 404s
 under npm run dev (local bindings; never --remote). `.dev.vars` is gitignored;
 disable fallback to legacy `.env`. Docs-only checks distinguish existing-code
 regression gates from D1 target tests that have not been implemented.
@@ -70,7 +71,8 @@ not deploy. Legacy Go make test/vet is reference validation, not D1 protocol pro
 ## Status
 
 Update the relevant row in its own PR; implementation and review are separate.
-Old cache-local features are regression references, not target D1 completion.
+Old cache-local features are historical references, not the current authority.
+Each feature row records its original rollout boundary; later rows reopen gates.
 PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 
 | # | Feature | Status / target |
@@ -87,12 +89,12 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Historical | Owner DO specification | [#29](https://github.com/ryanyz10/communalcache/pull/29) merged, **superseded** by single-D1 architecture; do not implement its namespaces/protocol |
 | Historical | Your items cache fan-out | Draft [#28](https://github.com/ryanyz10/communalcache/pull/28) superseded by direct-D1 library, not target design |
 | D1 1 | Single-D1 specification | This docs-only PR; no implementation/migration/resource changes |
-| D1 2 | Caches / membership / joining | Implemented; in review: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
-| D1 3 | Shared items / attachments / photos | Implemented; in review: 0008 canonical items/attachments/cleanup, own-library APIs, retained atomic cache create+attach and scoped PATCH/photo routes, restored item UI. Requests/destruction remain gated; library/add-sheet/checkbox screens stay PR 6. |
-| D1 4 | Requests / shared stock / Lent out / notifications | Implemented; in review: 0009 requests, all-cache reservation guards, atomic token-gated decisions/outbox, direct party pagination, Lent out toggle/approval checkbox. Request APIs/screens reopen after race proofs; every destructive route stays gated for PR 5. |
+| D1 2 | Caches / membership / joining | Implemented; merged: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
+| D1 3 | Shared items / attachments / photos | Implemented; merged: 0008 canonical items/attachments/cleanup, own-library APIs, retained atomic cache create+attach and scoped PATCH/photo routes, restored item UI. Requests/destruction remain gated; library/add-sheet/checkbox screens stay PR 6. |
+| D1 4 | Requests / shared stock / Lent out / notifications | Implemented; merged: 0009 requests, all-cache reservation guards, atomic token-gated decisions/outbox, direct party pagination, Lent out toggle/approval checkbox. Request APIs/screens reopen after race proofs; every destructive route stays gated for PR 5. |
 | D1 5 | Removal / leave / detach / deletion / races | Implemented; in review: guarded atomic cascades/outbox/cleanup, 0010 left-membership rebuild and rejoin semantics, removal/leave/detach/global-delete confirmations; no DO/config retirement. |
 | D1 6 | Library / add sheet / checkboxes / items board | Implemented; in review: owner-scoped paginated library/Home preview, Existing/New cache add sheet, atomic create+attach, Shown in confirmations, shared availability and private photos; items board 1a–1d, supersedes #28. |
-| D1 7 | Retire Durable Objects / staging reset | Planned; destructive deleted_classes migration and reset each need explicit approval |
+| D1 7 | Retire Durable Objects / staging reset | Implemented for draft review only: Cache code/bindings/RPC/sweeps and historical tests removed; inherited v2-retire-cache deleted_classes and D1 0011 projection-table drop prepared. Explicit owner approval required before merge/deploy. Staging test-data reset is NOT included and remains separately approval-gated. |
 
 ## D1 implementation plan
 
@@ -302,14 +304,19 @@ availability. Test stable pagination, correct empty/loading/error states, labels
 keyboard/focus/modal behavior and no wrong-account stale private query data. UI
 and browser checks do not replace real-SQL authorization/stock/race proof.
 
-### PR 7 — Retire Durable Objects and reset staging test data
+### PR 7 — Retire Durable Objects; staging reset separately approved
 
-Remove Cache class/RPC/binding use, pending_sync/alarm/registry sweeps, obsolete D1
-my_caches/cache_sync_cursor and old test helpers once no route uses them. No Owner
-class is introduced. Keep outbox Queue/Cron and R2 cleanup Cron. Append Wrangler
-class history with **deleted_classes**; deleting a class destroys its DO data.
-**Explicit human approval is required before the destructive migration/deploy**,
-not implied by approving the single-D1 product decision.
+**Draft only: merging deploys a deleted_classes migration that permanently deletes
+all Cache DO data on staging (and later production). Explicit owner approval is
+required. Do not merge or mark ready without it. The staging test-data reset is
+NOT included.**
+
+Prepared code removes Cache class/RPC/bindings, pending_sync/alarm/registry work,
+legacy request fan-out and object-only tests/helpers. D1 0011 drops only unused
+my_caches/cache_sync_cursor; canonical caches and all app/auth/durable state stay.
+Outbox Queue/Cron and R2 cleanup Cron remain independent. Wrangler preserves v1
+and appends inherited v2-retire-cache with `deleted_classes: ["Cache"]`; there is
+no Owner class. Local checks/dry-runs do not apply that class deletion.
 
 Inventory staging data/R2/outbox/push and retain approved backup/recovery evidence.
 Get separate approval for the staging **test-data reset**, specify exact databases/
@@ -323,7 +330,12 @@ Reviewed migration plan, explicit deletion/reset approvals and staging reset/smo
 receipts are separate from local typecheck/suite/build/dry-runs. Confirm auth,
 private photos, shared stock and delivery recovery after approved staging reset.
 Legacy Fly/Supabase stays live; no legacy teardown is bundled with DO retirement.
-No Cloudflare command, migration/config edit or reset runs in this spec PR.
+This draft prepares code/config/migrations but runs no remote Cloudflare command,
+class deletion or reset. Remote inventory/backup/smoke receipts and per-environment
+owner approval remain outstanding. D1 table drops precede Worker deployment in
+the pipeline: old registry Cron can briefly report failure, although its
+independent outbox/cleanup work still runs. Code requiring the dropped tables is
+not a compatible rollback; fix forward rather than assuming data is restored.
 
 ## Retained regression requirements
 
@@ -365,7 +377,7 @@ After separate explicit approval, smoke real Resend link/code, scanner-safe
 Continue/mobile handoff, Queue email, private photos, installed iOS push, Cron
 rescue/cleanup and migration-compatible Worker update/fix-forward drill. Record
 environment, revision and receipts; local green checks are not remote proof.
-No provisioning, external migration, reset, secret changes or decommissioning in
-this spec PR. Legacy verified-email mapping now imports app rows **straight into
+No provisioning, remote migration, reset, secret changes or decommissioning is
+performed by the retirement draft. Legacy verified-email mapping now imports app rows **straight into
 D1**; reconcile item identity/stock/photos/outbox and keep old sessions invalid.
 See [deploy.md](deploy.md) for approval boundaries and release sequence.

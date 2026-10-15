@@ -5,12 +5,10 @@ import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto } from './photos'
 import { sweepPhotoCleanup } from './cleanup'
-import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
-export { Cache } from './cache'
 
 const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
@@ -243,7 +241,7 @@ export default {
   },
   async scheduled(_controller: ScheduledController, env: Env) {
     // Recovery paths stay independent if one binding is temporarily unavailable.
-    const results = await Promise.allSettled([sweepCacheSync(env), sweepNotifications(env), sweepPhotoCleanup(env)])
+    const results = await Promise.allSettled([sweepNotifications(env), sweepPhotoCleanup(env)])
     if (results.some(result => result.status === 'rejected')) throw new Error('Scheduled recovery incomplete')
   },
   async fetch(request: Request, env: Env): Promise<Response> {

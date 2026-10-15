@@ -1,10 +1,11 @@
 import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
-import { applyD1Migrations, runInDurableObject, type D1Migration } from 'cloudflare:test'
+import { applyD1Migrations, type D1Migration } from 'cloudflare:test'
 import worker from '../src/index'
 import { requireWriteLimit, writeLimits, type WriteRoute } from '../src/rate-limit'
 import { HttpError } from '../src/http'
 import { cacheJoinRequests, createCache, joinCache } from '../src/db'
+import { deliverNotification } from '../src/notifications'
 import { appRequest, login } from './helpers'
 
 async function profile(email = 'owner@example.test') {
@@ -99,23 +100,15 @@ it('counts attempted writes including invalid invites but never unverified, anon
   expect(await env.DB.prepare('SELECT count FROM write_limits WHERE user_id=?').bind(caller.id).first('count')).toBe(1)
 })
 
-it('reports sync retry/backlog age without cache names, payloads or invite secrets', async () => {
-  const owner = await user(), id = crypto.randomUUID(), stub = env.CACHES.get(env.CACHES.idFromName(id))
-  const info = await stub.create(id, owner, 'Private cache name', false)
-  await env.DB.exec("CREATE TRIGGER fail_registry BEFORE INSERT ON caches BEGIN SELECT RAISE(ABORT, 'private injected detail'); END")
-  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-  try {
-    let failure: unknown
-    try { await stub.flushSync() } catch (error) { failure = error }
-    expect(failure).toBeInstanceOf(Error)
-    const message = log.mock.calls.map(row => String(row[0])).find(row => row.includes('cache_sync_failed'))!
-    expect(JSON.parse(message)).toMatchObject({ event: 'cache_sync_failed', failures: 1, retry_at: expect.any(Number), oldest_pending_age_ms: expect.any(Number) })
-    expect(message).not.toContain('Private cache name')
-    expect(message).not.toContain('private injected detail')
-    expect(message).not.toContain(info.invite_token.split('.')[1])
-  } finally { await env.DB.exec('DROP TRIGGER fail_registry'); log.mockRestore() }
-  await stub.flushSync()
-  await runInDurableObject(stub, (_instance, state) => { expect(state.storage.sql.exec('SELECT 1 FROM pending_sync').toArray()).toEqual([]) })
+it('reports durable notification failures without names, payloads, invite secrets or provider details', async () => {
+  const owner = await user(), applicant = await user(), cache = await createCache(env.DB,owner,'Private cache name',true)
+  const joined = await joinCache(env.DB,cache.id,applicant,cache.invite_token.split('.')[1])
+  const log = vi.spyOn(console,'warn').mockImplementation(() => {})
+  vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('private provider detail',{status:503}))
+  expect(await deliverNotification(env,joined.notificationId!)).toBe('retry')
+  const message = String(log.mock.calls[0][0])
+  expect(JSON.parse(message)).toEqual({event:'notification_delivery_failed',outbox_id:joined.notificationId,attempts:1,terminal:false})
+  for (const privateValue of ['Private cache name','private provider detail','example.test',cache.invite_token.split('.')[1]]) expect(message).not.toContain(privateValue)
 })
 
 it('canonicalizes mixed-case D1 cache/applicant/item/request/member IDs', async () => {

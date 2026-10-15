@@ -75,7 +75,7 @@ it('serves the paginated owner library over the authenticated API with no-store,
   const owner = await login()
   await worker.fetch(appRequest('/api/me',{method:'PATCH',cookie:owner.cookie,body:{display_name:'Owner'}}),env)
   const item = await createItem(env.DB,owner.id,itemChanges({title:'Unshared tent',is_consumable:false},true))
-  const poisoned = {...env,CACHES:{get:()=>{throw new Error('No legacy DO')}}} as unknown as Env
+  const poisoned = env
   const response = await worker.fetch(appRequest('/api/me/items',{cookie:owner.cookie}),poisoned)
   expect(response.status).toBe(200)
   expect(response.headers.get('Cache-Control')).toBe('no-store')
