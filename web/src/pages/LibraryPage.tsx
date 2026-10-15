@@ -45,7 +45,7 @@ export function LibraryPage() {
   const { me } = useAuth()
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <WideBreadcrumbs><Link to="/">Home</Link><span aria-hidden="true">›</span><span>Your items</span></WideBreadcrumbs>
     <Link to="/" className="text-sm underline lg:hidden">‹ Home</Link>
     <LibrarySection />

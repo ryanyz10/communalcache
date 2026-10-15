@@ -116,7 +116,7 @@ export function RequestsPage() {
   if (!me.display_name) return <OnboardingPage />
   const requests = query.data?.pages.flatMap(page => page.requests) ?? []
   const unavailable = query.data?.pages.flatMap(page => page.unavailable_cache_ids) ?? []
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <h1 className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Requests</h1>
     {ownContact.isSuccess && !ownContact.data.contact && <aside className="mt-4 rounded-lg border border-slate-200 p-4"><h2 className="font-semibold">Add how to reach you</h2><p className="mt-1 text-sm text-slate-600">The other person sees it after approval, while you're both active in that cache.</p><Link to="/account" className="mt-2 inline-block underline">Add contact</Link></aside>}
     {query.isPending && <p role="status" className="mt-4">Loading requests…</p>}
@@ -128,7 +128,7 @@ export function RequestsPage() {
         { heading: 'Needs your answer', rows: requests.filter(request => request.owner_id === me.id && request.status === 'pending'), empty: 'No requests need your answer in the loaded results.' },
         { heading: 'Answered for your things', rows: requests.filter(request => request.owner_id === me.id && request.status !== 'pending'), empty: 'No answered requests for your things in the loaded results.' },
         { heading: 'Your requests', rows: requests.filter(request => request.requester_id === me.id), empty: 'None of your requests are visible in the loaded results.' },
-      ]).map(({ heading, rows, empty }) => <section key={heading} className="mt-6 lg:mt-6 lg:min-w-0 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-label={heading}>
+      ]).map(({ heading, rows, empty }) => <section key={heading} className={`mt-6 lg:mt-6 lg:min-w-0 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4 ${heading === 'Your requests' ? 'lg:col-start-2 lg:row-span-2 lg:row-start-1' : 'lg:col-start-1'}`} aria-label={heading}>
         <h2 className="cc-section-title lg:mb-0 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">{heading}</h2>
         <ul className="cc-list lg:mt-4 lg:border-0">{rows.map(request => <RequestCard key={request.id} request={request} callerId={me.id} />)}</ul>
         {!rows.length && <p className="mt-3 text-slate-600">{empty}{unavailable.length || query.isError || query.hasNextPage ? ' This list may be incomplete.' : ''}</p>}

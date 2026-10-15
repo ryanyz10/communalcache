@@ -23,8 +23,10 @@ const server = createServer(async (request, response) => {
   if (path === '/__fixture/compare') {
     const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin','landing'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
     // Iframes have real independent viewport widths, including the desktop breakpoint.
-    const width=wide?1280:390, height=screen==='landing'?(wide?1050:1500):(wide?800:780), scale=wide?0.75:0.77
-    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?'Wide':'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}"></iframe></section>`).join('')
+    const requestedWidth=Number(url.searchParams.get('width'))
+    const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
+    const height=screen==='landing'?(wide?1050:1500):(wide?1080:780), scale=wide?Math.min(960/width,600/height):0.77
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
   }
