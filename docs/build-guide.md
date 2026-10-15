@@ -68,7 +68,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 2 | Joining | Implemented; in review (Cloudflare port, no deployment) | [#3](https://github.com/ryanyz10/communalcache/pull/3) (closed Go reference) |
 | 3 | Items (no photos) | Implemented; in review (Cloudflare, pending-reservation stock floor; no deployment) | — |
 | 4 | Photos | Implemented; in review (private local R2, cleanup recovery; remote buckets pending) | — |
-| 5 | Requests | Not started | — |
+| 5 | Requests | Implemented; in review (transactional reservations/decisions, bounded discovery; no deployment) | — |
 | 6 | Notifications + email | Not started | — |
 | 7 | Web push + PWA | Not started | — |
 | 8 | Member removal and item deletion | Not started | — |
@@ -330,7 +330,8 @@ upgrade, not a claimed DO/R2 atomic commit.
 
 ### Scope
 
-- `POST /api/caches/{cacheId}/items/{itemId}/requests`.
+- `POST /api/caches/{cacheId}/items/{itemId}/requests`; the port also exposes
+  `GET` on that path for the item detail's authorized request queue.
 - Owner `POST /api/caches/{cacheId}/requests/{requestId}/approve|reject`.
 - Item detail's public pending queue; decided rows only for requester/item owner.
 - `GET /api/requests` discovers the caller's `my_caches`, then parallel bounded
@@ -364,6 +365,14 @@ approve-after-reject 409; restock/create race loses neither write; stock floor a
 NULL/type quantity rules; rollback leaves no intent. Tamper cache IDs and discovery
 rows; test cap/continuation/partial failures and party visibility. Two-account
 ask/approve/reject UI walkthrough.
+
+The port pages `GET /api/requests?after={cacheId}` through 25 caller-discovered caches
+at a time, with five concurrent DO calls, below the 50-cache ceiling to leave room
+for auth/name bindings. Responses include `next_cursor` and `unavailable_cache_ids`;
+404 drift is skipped, other RPC failures remain explicit. Requests reuse the v2
+schema and existing membership discovery intents; notification delivery remains
+Feature 6. Only approve/reject ship: cancellation is not in the settled product
+scope or request status model.
 
 ---
 

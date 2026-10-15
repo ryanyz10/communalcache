@@ -19,6 +19,9 @@ The Worker derives the cache DO from `/api/caches/{cacheId}/...`; UUID item/requ
 IDs need no global locator. Joins carry `{cacheId}.{secret}`, compared in that DO.
 Names are fetched from D1 after cache authorization. Cross-cache requests discover
 the caller's my_caches, but each DO separately checks membership and party visibility.
+`GET /api/requests?after={cacheId}` reads at most 25 caches per page with five RPCs
+at once. Its continuation cursor is scoped by caller in D1, never an authorization
+token; stale 404s are skipped and failed RPCs are returned as unavailable caches.
 
 `my_caches` and registry are eventual projections. A stale index is a missing/404
 entry, not a permission. There are no cross-store foreign keys or transactions.
@@ -160,6 +163,12 @@ and sets the attachment together with old/rejected-key cleanup intents in one lo
 transaction. The ordered drain deletes R2 keys idempotently before removing intents.
 The key-layout deviation and pre-finalization crash window are documented in the
 [Photos build guide](build-guide.md#feature-4--photos).
+
+Requests also reuses v2: pending reservations are summed before insertion, and
+pending-only approval/rejection plus stock deduction and notification intent share
+one `transactionSync`. The stable intent ID becomes the D1 outbox ID through the
+existing ordered drain. Pending item queues are member-public; decided rows and
+cross-cache aggregation are restricted to the requester/item owner by local SQL.
 
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not

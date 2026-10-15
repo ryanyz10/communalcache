@@ -15,6 +15,11 @@ export function listMyCaches(db: D1Database, userId: string) {
     .bind(userId).all<{ id: string; name: string }>()
 }
 
+export function requestCachePage(db: D1Database, userId: string, after: string | null) {
+  return db.prepare('SELECT cache_id FROM my_caches WHERE user_id = ? AND (? IS NULL OR cache_id > ?) ORDER BY cache_id LIMIT 26')
+    .bind(userId, after, after).all<{ cache_id: string }>()
+}
+
 export async function displayNames(db: D1Database, userIds: string[]) {
   // Bound pages keep each query small; no email is selected for public enrichment.
   const names = new Map<string, string | null>()
