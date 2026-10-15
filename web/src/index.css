@@ -69,12 +69,21 @@
 .cc-horizon { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .cc-horizon svg { display: block; }
 .cc-horizon a { cursor: pointer; }
+.cc-horizon .cc-horizon-desktop { display: none; }
 .cc-walking-cat { animation: cc-walk 26s linear infinite; }
 @keyframes cc-walk { from { x: -24px; } to { x: 100%; } }
 @media (min-width: 640px) { .cc-sheet { margin: auto; border-radius: 16px; } }
 @media (min-width: 1024px) {
   .cc-hero { margin: -32px -32px 0; padding: 24px 32px 0; border-radius: 0 0 18px 18px; }
   .cc-hero .cc-horizon { margin: 0 -32px; }
+  .cc-hero::before { top: 24px; right: 40px; width: 24px; height: 24px; }
+  .cc-horizon .cc-horizon-phone { display: none; }
+  .cc-horizon .cc-horizon-desktop { display: block; height: auto; }
+  .cc-auth-brand { overflow: hidden; color: var(--cc-on-sky); }
+  .cc-auth-story { width: 100%; max-width: 760px; margin: auto; padding: clamp(40px,6vh,80px) clamp(40px,4vw,80px) 0; }
+  .cc-auth-story h2 { font-size: clamp(48px,4vw,72px); line-height: 1.05; }
+  .cc-auth-story p { color: var(--cc-on-sky-sub); }
+  .cc-auth-brand .cc-horizon { flex: none; width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .cc-walking-cat { animation: none; x: 20px; } }
 

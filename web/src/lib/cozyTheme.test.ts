@@ -39,7 +39,7 @@ it('keeps 2px art decorative with no duplicate keyboard targets and reduces walk
   const entries=[{id:'maple',name:'Maple St',to:'/caches/maple'},{id:'garden',name:'Garden Club',to:'/caches/garden'}]
   const markup=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(PixelHorizon,{kind:'boxes',entries})))
   expect(markup).toContain('aria-hidden="true"')
-  expect(markup.match(/tabindex="-1"/g)).toHaveLength(2)
+  expect(markup.match(/tabindex="-1"/g)).toHaveLength(4)
   expect(markup).not.toContain('tabindex="0"')
   expect(markup).toContain('href="/caches/maple"')
   expect(markup).toContain('width="2" height="2"')

@@ -14,9 +14,18 @@ export function CacheBox({ name }: { name: string }) {
   return <svg aria-hidden="true" focusable="false" width="30" height="30" viewBox="0 0 30 30" shapeRendering="crispEdges"><g transform="translate(4 10)"><Pixels rows={BOX} colors={boxColors} /></g><g transform="translate(8 0)"><Pixels rows={LOAF} colors={{...fur,e:'#2a1b22',n:'#f08a9c'}} /></g></svg>
 }
 
-export function PixelHorizon({ kind, entries }: { kind: 'boxes'|'houses'; entries: {id:string;name:string;to?:string}[] }) {
+type HorizonProps = { kind: 'boxes'|'houses'; entries: {id:string;name:string;to?:string}[]; tall?: boolean }
+export function PixelHorizon({ kind, entries, tall = false }: HorizonProps) {
   return <div className="cc-horizon" aria-hidden="true">
-    <svg width="100%" height="96" style={{minWidth:Math.max(280,entries.length*40)}} focusable="false" data-horizon={kind}>
+    <HorizonScene kind={kind} entries={entries} />
+    <HorizonScene kind={kind} entries={entries} tall={tall} desktop />
+  </div>
+}
+
+function HorizonScene({ kind, entries, tall = false, desktop = false }: HorizonProps & { desktop?: boolean }) {
+  const width = Math.max(440, entries.length * 40)
+  return <svg className={desktop ? 'cc-horizon-desktop' : 'cc-horizon-phone'} width="100%" height="96" viewBox={desktop ? `0 ${tall ? -100 : 0} ${width} ${tall ? 196 : 96}` : undefined} style={{minWidth:desktop ? tall ? 0 : width*2 : Math.max(280,entries.length*40)}} focusable="false" data-horizon={kind}>
+      {desktop && tall && <g><rect x={width-64} y="-55" width="18" height="18" fill="var(--cc-sun)" /><path d="M28-24h24v6H28zM40-30h10v6H40zM160-50h28v6h-28zM168-56h12v6h-12z" fill="var(--cc-cloud)" /></g>}
       {Array.from({length:24},(_,index)=><svg key={index} x={`${index*100/24}%`} y={68-(index%3)*4} width="5%" height="28" overflow="visible"><rect width="100%" height="28" fill={index%2?'var(--cc-hill)':'var(--cc-hill2)'} /></svg>)}
       {[0,1,2].map(index=><svg key={index} x={`${(index+0.5)*100/3}%`} y="69" width="16" height="16" overflow="visible"><Pixels rows={TREE} colors={{g:'var(--cc-hill2)',G:'var(--cc-grass-dark)',t:'#6b4a2f'}} /></svg>)}
       <path d="M0 86h10000v10H0z" fill="var(--cc-grass)" /><path d="M0 86h10000v2H0z" fill="var(--cc-grass-dark)" />
@@ -29,5 +38,4 @@ export function PixelHorizon({ kind, entries }: { kind: 'boxes'|'houses'; entrie
       })}
       <svg className="cc-walking-cat" y="74" width="24" height="18" overflow="visible"><Pixels rows={WALK} colors={{...FURS[entries.length%FURS.length],e:'#2a1b22',n:'#f08a9c'}} /></svg>
     </svg>
-  </div>
 }
