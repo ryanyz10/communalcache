@@ -3,14 +3,14 @@ import { useAuth } from '../auth/AuthProvider'
 import { pendingIncomingCount, useRequests } from '../lib/requests'
 import { AccountMenu } from './AccountMenu'
 
-export function AppHeader() {
+export function AppHeader({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { me } = useAuth()
   const { pathname } = useLocation()
   const visible = !!me?.display_name && pathname !== '/login' && pathname !== '/auth/link'
-  const requests = useRequests(visible)
+  const requests = useRequests(visible && !itemsMoving)
   if (!visible || !me) return null
   // ponytail: first discovery page only; the full Requests page paginates the rest.
-  const count = pendingIncomingCount(requests.data?.pages[0]?.requests ?? [], me.id)
+  const count = itemsMoving ? 0 : pendingIncomingCount(requests.data?.pages[0]?.requests ?? [], me.id)
   return <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
     <div className="mx-auto flex max-w-md items-center justify-between px-4 py-2.5 lg:h-[60px] lg:max-w-[1120px] lg:gap-7 lg:px-8 lg:py-0">
       <Link to="/" aria-label="Home" className="flex min-h-11 items-center gap-2.5">

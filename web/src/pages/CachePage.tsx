@@ -10,7 +10,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { ItemList } from './ItemPages'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 
-export function CachePage() {
+export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams()
   const { me } = useAuth()
   const [status, setStatus] = useState('')
@@ -36,12 +36,12 @@ export function CachePage() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className="lg:hidden"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></svg>
           <span className="hidden lg:inline">Settings</span>
         </Link>
-        <Link to={`/caches/${cache.id}/items/new`} className="hidden lg:inline-flex lg:items-center lg:rounded-full lg:bg-slate-900 lg:px-3.5 lg:py-1.5 lg:text-sm lg:font-medium lg:text-white">+ Add item</Link>
+        {!itemsMoving && <Link to={`/caches/${cache.id}/items/new`} className="hidden lg:inline-flex lg:items-center lg:rounded-full lg:bg-slate-900 lg:px-3.5 lg:py-1.5 lg:text-sm lg:font-medium lg:text-white">+ Add item</Link>}
       </div>
     </div>
     {status && <p role="status" className="mt-3 text-sm">{status}</p>}
     {cache.owner_id === me.id && joins.isError && <p role="alert" className="mt-4 text-sm text-red-700">Join requests could not be loaded. <Link to={`/caches/${cache.id}/settings`} className="underline">Open settings to try again.</Link></p>}
     {cache.owner_id === me.id && !!joins.data?.length && <div className="mt-4 flex items-center justify-between gap-2 rounded-[10px] border border-amber-200 bg-amber-100 px-3.5 py-3 text-sm text-amber-900"><span><b>{joins.data.length} {joins.data.length === 1 ? 'person' : 'people'}</b> {joins.data.length === 1 ? 'wants' : 'want'} to join</span><Link to={`/caches/${cache.id}/settings`} className="underline">Review</Link></div>}
-    <ItemList cacheId={cache.id} />
+    {itemsMoving ? <p role="status" className="mt-6">Items are being moved, back soon</p> : <ItemList cacheId={cache.id} />}
   </main>
 }

@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
 import worker from '../src/index'
 import { authOptions } from '../src/auth'
+import { cacheDetail, createCache } from '../src/db'
 import { authRequest, appRequest, base, login } from './helpers'
 
 type Mail = { text: string; html?: string; subject: string; to: string[] }
@@ -250,9 +251,10 @@ it('preserves caller-scoped profile onboarding and joins after link verification
   expect((await worker.fetch(appRequest('/api/caches', { method: 'POST', cookie, body: { name: 'Tools' } }), env)).status).toBe(409)
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie, body: { display_name: 'Neighbor' } }), env)
   const me = await (await worker.fetch(appRequest('/api/me', { cookie }), env)).json() as { id: string }
-  const owner = crypto.randomUUID(), id = crypto.randomUUID(), stub = env.CACHES.get(env.CACHES.idFromName(id))
-  const cache = await stub.create(id, owner, 'Tools', false)
-  const join = await worker.fetch(appRequest(`/api/caches/${id}/join`, { method: 'POST', cookie, body: { secret: cache.invite_token.split('.')[1] } }), env)
-  expect(await join.json()).toMatchObject({ cache_id: id, status: 'active' })
-  expect((await stub.detail(me.id)).members.some(row => row.user_id === me.id)).toBe(true)
+  const owner = crypto.randomUUID(), now = new Date().toISOString()
+  await env.DB.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,1,?,?)').bind(owner,'Owner',`${owner}@example.test`,now,now).run()
+  const cache = await createCache(env.DB, owner, 'Tools', false)
+  const join = await worker.fetch(appRequest(`/api/caches/${cache.id}/join`, { method: 'POST', cookie, body: { secret: cache.invite_token.split('.')[1] } }), env)
+  expect(await join.json()).toMatchObject({ cache_id: cache.id, status: 'active' })
+  expect((await cacheDetail(env.DB, cache.id, me.id)).members.some(row => row.user_id === me.id)).toBe(true)
 })

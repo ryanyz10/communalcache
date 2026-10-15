@@ -20,7 +20,6 @@ export function HomePage() {
     onSuccess: cache => {
       dialog.current?.close()
       void client.invalidateQueries({ queryKey: ['caches'] })
-      // Creation is authoritative; do not wait for the discovery projection.
       navigate(`/caches/${cache.id}`)
     },
   })
@@ -41,7 +40,7 @@ export function HomePage() {
         <span aria-hidden="true" className="hidden lg:flex lg:size-10 lg:items-center lg:justify-center lg:rounded-[10px] lg:bg-indigo-100 lg:font-bold lg:text-indigo-800">{Array.from(cache.name.trim())[0]?.toUpperCase() ?? '?'}</span>
         <span className="min-w-0 flex-1 break-words font-semibold lg:col-span-2 lg:row-start-2">{cache.name}</span><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:col-start-2 lg:row-start-1">›</span>
       </Link></li>)}</ul>}
-      {caches.isSuccess && !caches.data.length && <div className="mt-3 rounded-[10px] border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">No caches yet. Create one to start sharing. New entries can take a moment to appear.</p><button type="button" className="cc-outline mt-3" onClick={openCreate}>New cache</button></div>}
+      {caches.isSuccess && !caches.data.length && <div className="mt-3 rounded-[10px] border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">No caches yet. Create one to start sharing.</p><button type="button" className="cc-outline mt-3" onClick={openCreate}>New cache</button></div>}
     </section>
     {/* Your items belongs here once its caller-scoped API ships in a separate PR. */}
     <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="new-cache-heading" onCancel={event => { if (create.isPending) event.preventDefault() }}>

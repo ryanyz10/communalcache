@@ -57,6 +57,12 @@ it('renders accessible header destinations, avatar and a first-page-only badge, 
   expect(render(createElement(AppHeader), { route: '/login', path: '/login' })).toBe('')
 })
 
+it('hides stale request counts in the header while the aggregate API is gated', () => {
+  const markup = render(createElement(AppHeader, { itemsMoving: true }))
+  expect(markup).not.toContain('pending incoming on the first page')
+  expect(markup).not.toContain('1 request needs your answer')
+})
+
 it('renders caches only on home without a request preview, account controls or invented counts', () => {
   const outgoing = { ...row, id: 'outgoing', item_title: 'Ladder', requester_id: 'owner', owner_id: 'member', owner_name: 'Sam', status: 'approved' as const, decided_at: 2 }
   const markup = render(createElement(HomePage), { pages: [{ requests: [outgoing, row], unavailable_cache_ids: ['unavailable'], next_cursor: 'next' }] })
