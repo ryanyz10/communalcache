@@ -1,4 +1,30 @@
-import { HttpError } from './http'
+import { finishItemPhoto, itemDetail, readItem } from './db'
+import { HttpError, json } from './http'
+
+export async function serveItemPhoto(request: Request, env: Env, itemId: string, userId: string, cacheId: string | null = null) {
+  const item = await readItem(env.DB, itemId, userId, cacheId, request.method === 'POST')
+  if (request.method === 'GET') {
+    if (!item.photo_path) throw new HttpError(404, 'not_found')
+    const object = await env.BUCKET.get(item.photo_path)
+    if (!object) throw new HttpError(404, 'not_found')
+    return new Response(object.body, { headers: {
+      'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream',
+      'Content-Length': String(object.size), 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+    } })
+  }
+  const key = `${userId}/${itemId}/${crypto.randomUUID()}`
+  const { bytes, contentType } = await readPhoto(request)
+  let attached = false
+  try {
+    await env.BUCKET.put(key, bytes, { httpMetadata: { contentType } })
+    attached = await finishItemPhoto(env.DB, itemId, userId, key, true, cacheId)
+  } catch (error) {
+    await finishItemPhoto(env.DB, itemId, userId, key, false, cacheId)
+    throw error
+  }
+  if (!attached) throw new HttpError(404, 'not_found')
+  return json(await itemDetail(env.DB, itemId, userId, cacheId))
+}
 
 export const MAX_PHOTO_BYTES = 5 * 1024 * 1024
 

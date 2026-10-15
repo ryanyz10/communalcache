@@ -1,4 +1,5 @@
 import { HttpError } from './http'
+import type { ItemChanges } from './items'
 
 export function consumeWriteLimit(db: D1Database, userId: string, route: string, windowStart: number, limit: number) {
   // The guarded UPSERT is one atomic D1 statement, including concurrent Worker attempts.
@@ -250,6 +251,146 @@ export async function decideCacheJoin(db: D1Database, cacheId: string, userId: s
     throw new HttpError(409, 'join_not_pending')
   }
   return { status: decision === 'approve' ? 'active' : 'rejected', notificationId: token }
+}
+
+type ItemRow = {
+  id: string; owner_id: string; owner_name: string | null; title: string; description: string | null
+  photo_path: string | null; is_consumable: number; quantity: number | null; available: number
+  unavailable_note: string | null; created_at: number
+}
+
+function itemInfo(row: ItemRow, cacheId: string | null) {
+  const { photo_path, ...item } = row
+  return { ...item, cache_id: cacheId, is_consumable: row.is_consumable === 1, available: row.available === 1, photo_version: photo_path?.split('/').at(-1) ?? null }
+}
+
+const itemRead = `SELECT i.id,i.owner_id,i.title,i.description,i.photo_path,i.is_consumable,i.quantity,
+  i.available,i.unavailable_note,i.created_at,u.display_name AS owner_name FROM items i JOIN user u ON u.id=i.owner_id`
+const itemAccess = `(? IS NULL AND i.owner_id=?) OR EXISTS(
+  SELECT 1 FROM item_caches a JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
+  JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
+  JOIN memberships owner ON owner.cache_id=c.id AND owner.user_id=i.owner_id AND owner.status='active'
+  WHERE a.item_id=i.id AND a.cache_id=?)`
+
+export async function libraryItems(db: D1Database, userId: string) {
+  const rows = await db.prepare(`${itemRead} WHERE i.owner_id=? ORDER BY i.created_at DESC,i.id`).bind(userId).all<ItemRow>()
+  return rows.results.map(row => itemInfo(row, null))
+}
+
+export async function cacheItems(db: D1Database, cacheId: string, userId: string) {
+  const [cache, items] = await db.batch([
+    db.prepare(cacheRead).bind(userId, cacheId),
+    db.prepare(`${itemRead} WHERE ${itemAccess} ORDER BY i.created_at DESC,i.id`).bind(cacheId, userId, userId, cacheId),
+  ])
+  if (!cache.results.length) throw new HttpError(404, 'not_found')
+  return (items.results as ItemRow[]).map(row => itemInfo(row, cacheId))
+}
+
+export async function readItem(db: D1Database, itemId: string, userId: string, cacheId: string | null = null, ownerOnly = false) {
+  const row = await db.prepare(`${itemRead} WHERE i.id=? AND (?=0 OR i.owner_id=?) AND (${itemAccess})`)
+    .bind(itemId, ownerOnly ? 1 : 0, userId, cacheId, userId, userId, cacheId).first<ItemRow>()
+  if (!row) throw new HttpError(404, 'not_found')
+  return row
+}
+
+export async function itemDetail(db: D1Database, itemId: string, userId: string, cacheId: string | null = null) {
+  return itemInfo(await readItem(db, itemId, userId, cacheId), cacheId)
+}
+
+export async function createItem(db: D1Database, userId: string, changes: ItemChanges, cacheId: string | null = null) {
+  const id = crypto.randomUUID(), token = crypto.randomUUID(), now = Date.now()
+  const [created] = await db.batch([
+    db.prepare(`INSERT INTO items(id,owner_id,title,description,is_consumable,quantity,available,unavailable_note,created_at,operation_token)
+      SELECT ?,?,?,?,?,?,?,?,?,? WHERE ? IS NULL OR EXISTS(
+        SELECT 1 FROM memberships m JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
+        WHERE m.cache_id=? AND m.user_id=? AND m.status='active')`)
+      .bind(id, userId, changes.title!, changes.description ?? null, changes.is_consumable ? 1 : 0, changes.quantity ?? null, changes.available === false ? 0 : 1, changes.unavailable_note ?? null, now, token, cacheId, cacheId, userId),
+    db.prepare(`INSERT INTO item_caches(item_id,cache_id,attached_at)
+      SELECT id,?,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND ? IS NOT NULL`)
+      .bind(cacheId, now, id, userId, token, cacheId),
+  ])
+  if (created.meta.changes === 0) throw new HttpError(404, 'not_found')
+  return itemDetail(db, id, userId, cacheId)
+}
+
+export async function attachItem(db: D1Database, itemId: string, cacheId: string, userId: string) {
+  const result = await db.prepare(`INSERT INTO item_caches(item_id,cache_id,attached_at)
+    SELECT i.id,m.cache_id,? FROM items i JOIN memberships m ON m.user_id=i.owner_id AND m.status='active'
+    JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
+    WHERE i.id=? AND i.owner_id=? AND m.cache_id=?
+    ON CONFLICT(item_id,cache_id) DO UPDATE SET attached_at=item_caches.attached_at`)
+    .bind(Date.now(), itemId, userId, cacheId).run()
+  if (result.meta.changes === 0) throw new HttpError(404, 'not_found')
+}
+
+export async function updateItem(db: D1Database, itemId: string, userId: string, changes: ItemChanges, cacheId: string | null = null) {
+  // Requests stay gated; PR 4 adds the all-cache reservation floor with its D1 request table.
+  const token = crypto.randomUUID()
+  const result = await db.prepare(`UPDATE items AS i SET title=COALESCE(?,title),
+    description=CASE WHEN ? THEN ? ELSE description END,quantity=CASE WHEN ? THEN ? ELSE quantity END,
+    available=COALESCE(?,available),unavailable_note=CASE WHEN ? THEN ? ELSE unavailable_note END,operation_token=?
+    WHERE i.id=? AND i.owner_id=? AND (${itemAccess}) AND (?=0 OR i.is_consumable=(? IS NOT NULL))`)
+    .bind(changes.title ?? null, changes.description !== undefined ? 1 : 0, changes.description ?? null,
+      changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.available === undefined ? null : changes.available ? 1 : 0,
+      changes.unavailable_note !== undefined ? 1 : 0, changes.unavailable_note ?? null, token, itemId, userId,
+      cacheId, userId, userId, cacheId, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null).run()
+  if (result.meta.changes === 0) {
+    await readItem(db, itemId, userId, cacheId, true)
+    throw new HttpError(400, 'invalid_quantity')
+  }
+  return itemDetail(db, itemId, userId, cacheId)
+}
+
+export async function finishItemPhoto(db: D1Database, itemId: string, userId: string, key: string, uploaded: boolean, cacheId: string | null = null) {
+  const prefix = `${userId}/${itemId}/`
+  if (!key.startsWith(prefix) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key.slice(prefix.length))) throw new HttpError(404, 'not_found')
+  const token = crypto.randomUUID(), now = Date.now()
+  const [marked] = await db.batch([
+    db.prepare(`UPDATE items AS i SET operation_token=? WHERE i.id=? AND i.owner_id=? AND ?=1 AND (${itemAccess})
+      AND NOT EXISTS(SELECT 1 FROM r2_cleanup WHERE (kind='exact' AND target=?) OR (kind='prefix' AND substr(?,1,length(target))=target))`)
+      .bind(token, itemId, userId, uploaded ? 1 : 0, cacheId, userId, userId, cacheId, key, key),
+    db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at)
+      SELECT ?,owner_id,id,'exact',photo_path,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND photo_path IS NOT NULL AND photo_path<>?
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(), now, itemId, userId, token, key),
+    db.prepare('UPDATE items SET photo_path=? WHERE id=? AND owner_id=? AND operation_token=?').bind(key, itemId, userId, token),
+  ])
+  if (marked.meta.changes === 0) {
+    // Independent guarded repair for bytes already written, not a grant from the failed mutation.
+    await db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at)
+      SELECT ?,?,?,'exact',?,? WHERE NOT EXISTS(SELECT 1 FROM items WHERE photo_path=?)
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(), userId, itemId, key, now, key).run()
+  }
+  return marked.meta.changes > 0
+}
+
+export type CleanupRow = { id: string; owner_id: string; item_id: string; kind: 'exact' | 'prefix'; target: string; created_at: number }
+
+export function cleanupCursor(db: D1Database) {
+  return db.prepare('SELECT cleanup_id FROM r2_cleanup_cursor WHERE singleton=1').first<string | null>('cleanup_id')
+}
+
+export function cleanupPage(db: D1Database, after: string | null) {
+  return db.prepare('SELECT id FROM r2_cleanup WHERE (? IS NULL OR id>?) ORDER BY id LIMIT 2').bind(after, after).all<{ id: string }>()
+}
+
+export async function claimCleanup(db: D1Database, id: string, token: string, now: number) {
+  const result = await db.prepare(`UPDATE r2_cleanup SET claim_token=?,claim_until=? WHERE id=? AND (claim_until IS NULL OR claim_until<=?)
+    AND NOT EXISTS(SELECT 1 FROM items WHERE (r2_cleanup.kind='exact' AND photo_path=r2_cleanup.target)
+      OR (r2_cleanup.kind='prefix' AND substr(photo_path,1,length(r2_cleanup.target))=r2_cleanup.target))
+    RETURNING id,owner_id,item_id,kind,target,created_at`).bind(token, now + 90_000, id, now).all<CleanupRow>()
+  return result.meta.changes > 0 ? result.results[0] : null
+}
+
+export function finishCleanup(db: D1Database, id: string, token: string, done: boolean) {
+  const now = Date.now()
+  return db.prepare(done
+    ? 'DELETE FROM r2_cleanup WHERE id=? AND claim_token=? AND claim_until>?'
+    : 'UPDATE r2_cleanup SET claim_token=NULL,claim_until=NULL WHERE id=? AND claim_token=? AND claim_until>?')
+    .bind(id, token, now).run()
+}
+
+export function advanceCleanupCursor(db: D1Database, previous: string | null, next: string | null) {
+  return db.prepare('UPDATE r2_cleanup_cursor SET cleanup_id=? WHERE singleton=1 AND cleanup_id IS ?').bind(next, previous).run()
 }
 
 export function syncCursor(db: D1Database) {

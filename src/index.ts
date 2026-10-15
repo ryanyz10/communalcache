@@ -1,6 +1,9 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { cacheDetail, cacheJoinRequests, createCache, decideCacheJoin, deletePush, getProfile, joinCache, listMyCaches, savePush, setDisplayName, updateCache, type Profile } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, decideCacheJoin, deletePush, getProfile, itemDetail, joinCache, libraryItems, listMyCaches, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
+import { itemChanges } from './items'
+import { serveItemPhoto } from './photos'
+import { sweepPhotoCleanup } from './cleanup'
 import { sweepCacheSync } from './sync'
 import { HttpError, json, readBody, requireOrigin } from './http'
 import { consumeNotifications, sweepNotifications } from './notifications'
@@ -93,21 +96,24 @@ async function dispatch(request: Request, env: Env) {
   const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/requests)?)?$/i)
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
-  // UUIDs are case-insensitive; DO names and SQLite text keys are not.
-  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute]) {
+  const libraryRoute = path.match(/^\/api\/me\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?)?$/i)
+  // UUIDs are case-insensitive; SQLite text keys are not.
+  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute]) {
     if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
   }
-  const photoRoute = itemRoute?.[3] === '/photo'
-  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute) throw new HttpError(404, 'not_found')
-  const methods = memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  const photoRoute = itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
+  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute) throw new HttpError(404, 'not_found')
+  const methods = libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
+    : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   const profile = await getProfile(env.DB, session.user.id)
   if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
-  // No D1-to-DO membership bridge: these routes reopen with their canonical D1 ports.
-  if (itemRoute || requestRoute || memberRoute || path === '/api/requests') throw new HttpError(503, 'items_moving')
+  // Requests and destructive cascades reopen only with their D1 protocol proofs.
+  if (requestRoute || memberRoute || path === '/api/requests' || itemRoute?.[3] === '/requests'
+    || (method === 'DELETE' && (itemRoute || libraryRoute))) throw new HttpError(503, 'items_moving')
   const writeRoute: WriteRoute | null = method !== 'POST' ? null
     : cacheRoute?.[2] === '/join' ? 'join'
     : cacheRoute?.[3] ? 'join_decision' : null
@@ -120,6 +126,19 @@ async function dispatch(request: Request, env: Env) {
     const body = await readBody(request)
     if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
     return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
+  }
+  if (libraryRoute || itemRoute) {
+    const cacheId = itemRoute?.[1] ?? null, itemId = itemRoute?.[2] ?? libraryRoute?.[1]
+    if (libraryRoute?.[3]) {
+      if (request.body) await readBody(request)
+      await attachItem(env.DB, itemId!, libraryRoute[3], profile.id)
+      return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
+    }
+    if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
+    if (!itemId && method === 'GET') return json(cacheId ? await cacheItems(env.DB, cacheId, profile.id) : await libraryItems(env.DB, profile.id))
+    if (method === 'POST') return json(await createItem(env.DB, profile.id, itemChanges(await readBody(request), true), cacheId), 201)
+    if (method === 'PATCH') return json(await updateItem(env.DB, itemId!, profile.id, itemChanges(await readBody(request), false), cacheId))
+    return json(await itemDetail(env.DB, itemId!, profile.id, cacheId))
   }
   if (path === '/api/caches' && method === 'GET') return json((await listMyCaches(env.DB, profile.id)).results)
   if (path === '/api/push/subscribe') {
@@ -190,8 +209,8 @@ export default {
     await consumeNotifications(batch, env)
   },
   async scheduled(_controller: ScheduledController, env: Env) {
-    // Both recovery paths run even if one binding is temporarily unavailable.
-    const results = await Promise.allSettled([sweepCacheSync(env), sweepNotifications(env)])
+    // Recovery paths stay independent if one binding is temporarily unavailable.
+    const results = await Promise.allSettled([sweepCacheSync(env), sweepNotifications(env), sweepPhotoCleanup(env)])
     if (results.some(result => result.status === 'rejected')) throw new Error('Scheduled recovery incomplete')
   },
   async fetch(request: Request, env: Env): Promise<Response> {

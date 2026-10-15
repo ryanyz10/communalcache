@@ -20,7 +20,7 @@ export function PhotoUpload({ item }: { item: Item }) {
     mutationFn: async () => uploadPhoto(item.cache_id, item.id, await resizePhoto(file!)),
     onSuccess: async saved => {
       queryClient.setQueryData(['item', item.cache_id, item.id], saved)
-      await queryClient.invalidateQueries({ queryKey: ['items', item.cache_id] })
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['items'] }), queryClient.invalidateQueries({ queryKey: ['item'] })])
       setFile(null)
       if (input.current) input.current.value = ''
     },
