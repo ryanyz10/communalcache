@@ -3,12 +3,12 @@ import { env } from 'cloudflare:workers'
 import worker, { requireProfile } from '../src/index'
 import { HttpError } from '../src/http'
 import { authOptions, createAuth } from '../src/auth'
-import { appRequest, authRequest, login, base, mailMock } from './helpers'
+import { appRequest, authRequest, login, base, mailMock, turnstileMock } from './helpers'
 
 it('serves health/config without secrets and keeps unknown APIs JSON', async () => {
   expect(await (await worker.fetch(appRequest('/api/healthz'), env)).json()).toEqual({status: 'ok'})
   const config = await (await worker.fetch(appRequest('/api/config'), env)).json()
-  expect(config).toEqual({app_base_url: base, better_auth_url: base, vapid_public_key: ''})
+  expect(config).toEqual({app_base_url: base, better_auth_url: base, vapid_public_key: '',turnstile_site_key:env.TURNSTILE_SITE_KEY})
   for (const path of ['/api', '/api/missing', '/api/auth/missing']) {
     const res = await worker.fetch(appRequest(path), env)
     expect(res.status).toBe(404)
@@ -139,7 +139,7 @@ it('bounds actual streamed JSON bytes and rejects malformed bodies', async () =>
 })
 
 it('surfaces Resend HTTP failure without a Queue or background dependency', async () => {
-  vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('provider failed',{status:503}))
+  vi.spyOn(globalThis,'fetch').mockImplementation(async (input,init) => turnstileMock(input,init) ?? new Response('provider failed',{status:503}))
   const response = await worker.fetch(authRequest('/email-otp/send-verification-otp',{email:'failure@example.test',type:'sign-in'}),env)
   expect(response.status).toBe(502)
   expect(await response.json()).toEqual({error:'email_unavailable'})
@@ -147,6 +147,8 @@ it('surfaces Resend HTTP failure without a Queue or background dependency', asyn
 
 it('keeps concurrent delivery results isolated per request', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    const verified = turnstileMock(_input,init)
+    if (verified) return verified
     const mail = JSON.parse(init!.body as string) as { to: string[] }
     if (mail.to[0] === 'failure@example.test') return new Response('private provider detail', { status: 500 })
     return Response.json({ id: 'sent' })
@@ -161,7 +163,7 @@ it('keeps concurrent delivery results isolated per request', async () => {
 })
 
 it('passes rate-limited send responses through without claiming delivery failed', async () => {
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ id: 'sent' }))
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input,init) => turnstileMock(input,init) ?? Response.json({ id: 'sent' }))
   const statuses: number[] = []
   for (let i = 0; i < 4; i++) {
     const response = await worker.fetch(authRequest('/email-otp/send-verification-otp', {
@@ -170,14 +172,16 @@ it('passes rate-limited send responses through without claiming delivery failed'
     statuses.push(response.status)
   }
   expect(statuses).toEqual([200, 200, 200, 429])
-  expect(fetchMock).toHaveBeenCalledTimes(3)
+  expect(fetchMock.mock.calls.filter(([url]) => url === 'https://api.resend.com/emails')).toHaveLength(3)
 })
 
 it('waits for bounded Resend timeout before returning a visible auth error', async () => {
   const started = Date.now()
-  vi.spyOn(globalThis,'fetch').mockImplementation(async (_input, init) => new Promise((_resolve, reject) => {
-    init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason),{once:true})
-  }))
+  vi.spyOn(globalThis,'fetch').mockImplementation(async (_input, init) => {
+    const verified = turnstileMock(_input,init)
+    if (verified) return verified
+    return new Promise((_resolve, reject) => { init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason),{once:true}) })
+  })
   const response = await worker.fetch(authRequest('/email-otp/send-verification-otp',{email:'timeout@example.test',type:'sign-in'}),env)
   expect(response.status).toBe(502)
   expect(await response.json()).toEqual({error:'email_unavailable'})

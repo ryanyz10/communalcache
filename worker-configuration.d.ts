@@ -12,6 +12,9 @@ interface __BaseEnv_Env {
 	BETTER_AUTH_URL: string;
 	BETTER_AUTH_SECRET: string;
 	RESEND_API_KEY: string;
+	TURNSTILE_SITE_KEY: string;
+	TURNSTILE_HOSTNAMES: string;
+	TURNSTILE_SECRET?: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -29,6 +32,9 @@ declare namespace Cloudflare {
 		BETTER_AUTH_URL: string;
 		BETTER_AUTH_SECRET: string;
 		RESEND_API_KEY: string;
+		TURNSTILE_SITE_KEY: string;
+		TURNSTILE_HOSTNAMES: string;
+		TURNSTILE_SECRET?: string;
 	}
 	interface ProductionEnv {
 		BUCKET: R2Bucket;
@@ -41,6 +47,9 @@ declare namespace Cloudflare {
 		BETTER_AUTH_URL: string;
 		BETTER_AUTH_SECRET: string;
 		RESEND_API_KEY: string;
+		TURNSTILE_SITE_KEY: string;
+		TURNSTILE_HOSTNAMES: string;
+		TURNSTILE_SECRET?: string;
 	}
 	interface Env extends __BaseEnv_Env {}
 }
@@ -49,7 +58,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "EMAIL_FROM" | "VAPID_PUBLIC_KEY" | "APP_BASE_URL" | "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "RESEND_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "EMAIL_FROM" | "VAPID_PUBLIC_KEY" | "APP_BASE_URL" | "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "RESEND_API_KEY" | "TURNSTILE_SITE_KEY" | "TURNSTILE_HOSTNAMES" | "TURNSTILE_SECRET">> {}
 }
 
 // Begin runtime types

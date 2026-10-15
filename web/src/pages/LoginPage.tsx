@@ -8,10 +8,13 @@ import { AuthScreen, BrandMark, MailIcon } from '../components/AuthScreen'
 import { CodeInput } from '../components/CodeInput'
 import { PixelHorizon } from '../components/PixelArt'
 import { landingCopy } from '../lib/landingCopy'
+import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 
 export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: string; inviteHint?: boolean }) {
   const { refresh } = useAuth()
   const emailInput = useRef<HTMLInputElement>(null)
+  const botCheck = useRef<TurnstileHandle>(null)
+  const [botToken, setBotToken] = useState('')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [pending, setPending] = useState(false)
@@ -23,11 +26,11 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
     setPending(true)
     setError(null)
     try {
-      await sendSignInEmail(email, mode, inviteToken)
+      await sendSignInEmail(email, mode, inviteToken, botToken)
       setSent(mode)
       setCode('')
     } catch (error) { setError(errorMessage(error)) }
-    finally { setPending(false) }
+    finally { setPending(false); botCheck.current?.reset() }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -68,16 +71,17 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
         </div>
         {sent === 'link' && <div><p>Open the email and tap <b>Continue</b> on the page it opens. The link works for 5 minutes.</p><p className="mt-2 text-xs text-slate-600">Use the newest link if you requested another.</p></div>}
         {sent === 'code' && <CodeInput value={code} onChange={setCode} />}
+        <Turnstile ref={botCheck} action="signin" onToken={setBotToken} />
         {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
-        <button type="submit" disabled={pending} className={`${sent === 'link' ? 'cc-auth-secondary' : 'cc-auth-primary'} mt-4`}>
+        <button type="submit" disabled={pending || (sent !== 'code' && !botToken)} className={`${sent === 'link' ? 'cc-auth-secondary' : 'cc-auth-primary'} mt-4`}>
           {pending ? 'Please wait…' : sent === 'code' ? 'Sign in' : sent === 'link' ? 'Resend link' : 'Email me a sign-in link'}
         </button>
         <div className={sent === 'code' ? 'mt-2 flex flex-wrap justify-between gap-x-2' : 'mt-2'}>
-          <button type="button" disabled={pending} onClick={() => void sendEmail('code')} className={`cc-auth-text ${sent === 'code' ? '' : 'w-full'}`}>{sent === 'code' ? 'Resend code' : 'Use a 6-digit code instead'}</button>
-          {sent === 'code' && <button type="button" disabled={pending} onClick={() => void sendEmail('link')} className="cc-auth-text">Email a link instead</button>}
+          <button type="button" disabled={pending || !botToken} onClick={() => void sendEmail('code')} className={`cc-auth-text ${sent === 'code' ? '' : 'w-full'}`}>{sent === 'code' ? 'Resend code' : 'Use a 6-digit code instead'}</button>
+          {sent === 'code' && <button type="button" disabled={pending || !botToken} onClick={() => void sendEmail('link')} className="cc-auth-text">Email a link instead</button>}
         </div>
       </div>
-      {sent && <button type="button" disabled={pending} onClick={() => { setSent(null); setCode(''); setError(null); emailInput.current?.focus() }} className="cc-auth-text mt-4 w-full text-slate-600">Wrong email? Change it</button>}
+      {sent && <button type="button" disabled={pending} onClick={() => { setSent(null); setCode(''); setError(null); botCheck.current?.reset(); emailInput.current?.focus() }} className="cc-auth-text mt-4 w-full text-slate-600">Wrong email? Change it</button>}
     </form>
     {!sent && !inviteToken && <p className="mt-6 text-center text-[13px] leading-[18px] text-slate-600">Your email stays private. Neighbors only see the name you choose.</p>}
   </AuthScreen>

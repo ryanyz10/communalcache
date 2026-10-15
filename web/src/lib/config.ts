@@ -2,6 +2,7 @@ export type AppConfig = {
   better_auth_url: string
   vapid_public_key: string
   app_base_url: string
+  turnstile_site_key: string
 }
 
 let cached: AppConfig | null = null

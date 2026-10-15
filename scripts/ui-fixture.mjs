@@ -51,6 +51,22 @@ const server = createServer(async (request, response) => {
     response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}`});response.end();return
   }
   async function fixtureHtml(html) {
+    // Presentation-only bot widget: never loads Cloudflare or proves a real verdict.
+    html=html.replace('</head>',`<script>
+      const fixtureWidgets=new Map();
+      window.turnstile={
+        ready:callback=>callback(),
+        render:(root,options)=>{
+          const id=crypto.randomUUID(),button=document.createElement('button');
+          button.type='button';button.textContent='Complete fixture bot check';
+          root.dataset.action=options.action;root.dataset.theme=options.theme;
+          button.onclick=()=>{button.textContent='Fixture bot check complete';options.callback('fixture-'+options.action)};
+          root.append(button);fixtureWidgets.set(id,{root,button});return id;
+        },
+        reset:id=>{const widget=fixtureWidgets.get(id);if(widget)widget.button.textContent='Complete fixture bot check'},
+        remove:id=>{fixtureWidgets.get(id)?.root.replaceChildren();fixtureWidgets.delete(id)}
+      };
+    </script></head>`)
     const theme=url.searchParams.get('theme')
     if (theme!=='sunny' && theme!=='evening') return html
     const css=await readFile(fileURLToPath(new URL('../web/src/index.css',import.meta.url)),'utf8')
@@ -83,9 +99,11 @@ const server = createServer(async (request, response) => {
     catch { json({error: 'invalid_json'}, 400); return }
     if (path === '/api/config') {
       const origin=`http://${request.headers.host}`
-      json({app_base_url:origin,better_auth_url:origin,vapid_public_key:''})
+      json({app_base_url:origin,better_auth_url:origin,vapid_public_key:'',turnstile_site_key:'fixture-site-key'})
       return
     }
+    const botAction=request.method!=='POST'?null:path==='/api/caches'?'create_cache':['/api/auth/sign-in/magic-link','/api/auth/email-otp/send-verification-otp'].includes(path)?'signin':null
+    if(botAction && request.headers['x-turnstile-token']!=='fixture-'+botAction){json({error:'turnstile_failed'},403);return}
     const sessionId = request.headers.cookie?.match(/(?:^|;\s*)ui_fixture=([^;]+)/)?.[1]
     let me = [...users.values()].find(user=>user.id===sessionId) ?? null
     const authenticated = !!me
