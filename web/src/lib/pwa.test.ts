@@ -22,7 +22,8 @@ function worker() {
 it('links an installable standalone manifest and reuses a local icon without caching authenticated responses', () => {
   const manifest = JSON.parse(readFileSync(new URL('../../public/manifest.webmanifest', import.meta.url), 'utf8'))
   expect(manifest).toMatchObject({ name: 'Communal Cache', start_url: '/', scope: '/', display: 'standalone' })
-  expect(manifest.icons).toEqual([expect.objectContaining({ src: '/favicon.svg', type: 'image/svg+xml' })])
+  expect(manifest.icons).toContainEqual(expect.objectContaining({ src: '/favicon.svg', type: 'image/svg+xml' }))
+  for (const size of [192,512]) expect(manifest.icons).toContainEqual(expect.objectContaining({ src: `/icon-${size}.png`, sizes: `${size}x${size}`, purpose: 'any maskable' }))
   expect(readFileSync(new URL('../../public/favicon.svg', import.meta.url), 'utf8')).toContain('<svg')
   expect(readFileSync(new URL('../../index.html', import.meta.url), 'utf8')).toContain('/manifest.webmanifest')
   expect(worker().handlers.has('fetch')).toBe(false)

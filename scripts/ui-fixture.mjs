@@ -18,7 +18,44 @@ const magicLinks = new Map()
 let lastMagicLink = ''
 let vite
 const server = createServer(async (request, response) => {
-  const path = new URL(request.url, 'http://localhost').pathname
+  const url = new URL(request.url, 'http://localhost'), path = url.pathname
+  if (path === '/__fixture/compare') {
+    const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
+    // Iframes have real independent viewport widths, including the desktop breakpoint.
+    const width=wide?1280:390, height=wide?800:780, scale=wide?0.75:0.77
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?'Wide':'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}"></iframe></section>`).join('')
+    response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
+    response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
+  }
+  if (path === '/__fixture/cozy') {
+    // Stable presentation samples only. This server is never the application.
+    const owner='11111111-1111-4111-8111-111111111111', member='22222222-2222-4222-8222-222222222222', sam='99999999-9999-4999-8999-999999999999'
+    const cacheId='33333333-3333-4333-8333-333333333333', itemId='44444444-4444-4444-8444-444444444444'
+    const members=['Ryan','Priya','Sam','Lee','Kai','Ana'].map((display_name,index)=>({user_id:index===0?owner:index===1?member:index===2?sam:`fixture-member-${index}`,display_name}))
+    users.set('ryan@fixture.test',{id:owner,email:'ryan@fixture.test',display_name:'Ryan'})
+    users.set('priya@fixture.test',{id:member,email:'priya@fixture.test',display_name:'Priya'})
+    users.set('sam@fixture.test',{id:sam,email:'sam@fixture.test',display_name:'Sam'})
+    for (const [id,name,cacheOwner] of [[cacheId,'Maple St',owner],['55555555-5555-4555-8555-555555555555','Garden Club',member],['66666666-6666-4666-8666-666666666666','Book Swap',sam]]) caches.set(id,{id,name,members,owner_id:cacheOwner,requires_approval:false,invite_token:`${id}.${'A'.repeat(43)}`})
+    const item={id:itemId,cache_id:cacheId,cache_ids:[cacheId],owner_id:owner,owner_name:'Ryan',title:'Pressure washer',description:'Electric, 1800 psi. Comes with two nozzles. Happy to share!',is_consumable:false,quantity:null,available:true,unavailable_note:null,created_at:1,photo_version:null}
+    items.set(itemId,item)
+    items.set('77777777-7777-4777-8777-777777777777',{...item,id:'77777777-7777-4777-8777-777777777777',title:'Sourdough starter',is_consumable:true,quantity:3})
+    const row={id:'88888888-8888-4888-8888-888888888888',cache_id:cacheId,cache_name:'Maple St',item_id:itemId,item_title:'Pressure washer',owner_id:owner,owner_name:'Ryan',requester_id:member,requester_name:'Priya',quantity:null,status:'approved',decision_reason:null,approval_message:'It is by my side gate.',decided_at:2,created_at:1}
+    requests.set(row.id,row)
+    contacts.set(owner,{kind:'messenger',value:'ryan.zhou',link:'https://m.me/ryan.zhou'})
+    contacts.set(member,{kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'})
+    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login'}
+    response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'?'':owner}; HttpOnly; SameSite=Lax; Path=/`)
+    response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}`});response.end();return
+  }
+  async function fixtureHtml(html) {
+    const theme=url.searchParams.get('theme')
+    if (theme!=='sunny' && theme!=='evening') return html
+    const css=await readFile(fileURLToPath(new URL('../web/src/index.css',import.meta.url)),'utf8')
+    const palettes=[...css.matchAll(/:root\s*\{([^}]+)\}/g)]
+    const tokens=palettes[theme==='evening'?1:0]?.[1]??''
+    // Force only fixture screenshots; production responds to the browser media query.
+    return html.replace('</head>',`<style id="fixture-theme">html:root{${tokens};color-scheme:${theme==='evening'?'dark':'light'}}</style></head>`)
+  }
   response.setHeader('Referrer-Policy', 'no-referrer')
   function json(value, status = 200) {
     response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
@@ -291,21 +328,28 @@ const server = createServer(async (request, response) => {
         if (body.name !== undefined) cache.name=body.name.trim()
         if (body.requires_approval !== undefined) cache.requires_approval=body.requires_approval
       }
-      json({...cache,members:[{user_id:me.id,display_name:me.display_name,profile_photo_version:avatar(me.id)}]})
+      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id)}))})
       return
     }
     json({error:'not_found'},404)
     return
   }
-  if (vite) { vite.middlewares(request,response,()=>{response.writeHead(404);response.end()}); return }
+  if (vite) {
+    if (!extname(path) && !path.startsWith('/@')) {
+      const source=await readFile(fileURLToPath(new URL('../web/index.html',import.meta.url)),'utf8')
+      response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
+      response.end(await fixtureHtml(await vite.transformIndexHtml(request.url,source)));return
+    }
+    vite.middlewares(request,response,()=>{response.writeHead(404);response.end()}); return
+  }
   try {
     const file = resolve(dist, '.' + path)
     if (file !== resolve(dist) && !file.startsWith(dist)) { response.writeHead(404); response.end(); return }
-    const isAsset = path.startsWith('/assets/') || ['/favicon.svg','/sw.js','/manifest.webmanifest'].includes(path)
+    const isAsset = path.startsWith('/assets/') || ['/favicon.svg','/favicon-32.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png','/sw.js','/manifest.webmanifest'].includes(path)
     const data = await readFile(isAsset ? file : resolve(dist, 'index.html'))
-    const types = {'.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.html':'text/html','.webmanifest':'application/manifest+json'}
+    const types = {'.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.html':'text/html','.webmanifest':'application/manifest+json'}
     response.writeHead(200, { 'Content-Type': types[extname(isAsset ? file : 'index.html')] ?? 'application/octet-stream' })
-    response.end(data)
+    response.end(isAsset ? data : await fixtureHtml(data.toString()))
   } catch { response.writeHead(404); response.end() }
 })
 if (process.env.UI_FIXTURE_DEV === '1') {
