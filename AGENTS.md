@@ -2,12 +2,15 @@
 
 Mobile-first household sharing for a close community. A directory and lightweight
 ask/approve handshake, not a logistics system. Handoffs happen in real life; no
-addresses, loan state, return tracking or holder tracking.
+addresses, return/holder tracking or loan lifecycle. Lent out is only a manual
+owner availability flag/note, not a borrower or return record.
 
 Target: one TypeScript Cloudflare Worker serves `/api/*` and React static assets.
-One SQLite-backed Durable Object (DO) per cache owns membership/items/requests.
-D1 holds global users, discovery projections, push subscriptions and outbox; R2
-holds private photos; Queues plus alarms/Cron recover notifications and sync.
+Cache DOs own membership, permanent owner-target registration and display-only
+listings. One SQLite Owner DO per user owns canonical items, cache attachments,
+shared stock, requests and revocation tombstones. D1 holds auth/discovery/outbox,
+including requester-to-owner request_index; R2 holds owner-scoped private photos.
+Queues plus both DOs' alarms/Cron recovery drain durable work.
 Better Auth runs in our Worker, with D1 users/sessions and six-digit email codes
 sent through Resend fetch. Magic links are a planned follow-up; SMS is deferred.
 Intended production URL is https://communalcache.com; provisioning needs approval.
@@ -43,21 +46,35 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 
 ## Non-negotiable invariants
 
-1. **The cache DO is the authorization source of truth.** Active membership and
-   data are checked in the same synchronous operation; a check-then-write uses
-   the same `transactionSync`. Non-members get 404, not 403 on cache-data routes.
-   The valid-secret join route alone keeps removed-member 403 semantics.
-2. **No await inside check-then-write.** Every cache mutation checks and changes
-   local SQL inside one `ctx.storage.transactionSync`; throw means rollback.
-   Awaiting D1/fetch can interleave other requests. Single-threaded is not a mutex
-   around a whole async handler.
-3. **Never overbook.** Inside that transaction: active member, not item owner,
-   valid item-type quantity, `quantity - pending_sum >= requested`, request plus
-   durable notification intent. Pending-only decisions deduct exactly once;
-   stock edits cannot fall below reservations. Lost decision races return 409.
-4. **Destructive cascades are one local transaction.** Snapshot pending recipients
-   before deletion, reject requests on surviving items, and record notification,
-   reverse-index and R2 cleanup intents atomically. No early destructive endpoints.
+1. **Split authority, never a projection grant.** Cache DO synchronously authorizes
+   membership; Owner DO authorizes canonical item/attachment/stock/revocation state.
+   Cache-context reads check both. Requests first check R/O active plus listing in
+   Cache, then all Owner guards locally; no browser-supplied admission flag bypass.
+   Cache pending queues never disclose another cache's requester identities. Non-members get 404; only valid-secret
+   removed joins retain 403. A listing or D1 row routes a call, never authorizes it.
+2. **No await inside local check-then-write.** Each Cache/Owner mutation uses one
+   `ctx.storage.transactionSync`; throw rolls back its local state and intents.
+   No cross-object RPC/D1/R2/Queue await belongs inside it. Completed admission
+   RPCs may precede an Owner transaction; they are not a distributed transaction
+   or timeless membership grant. Tombstones reconcile the removal race eventually.
+3. **One stock count across caches; never overbook.** Owner request transaction:
+   item exists/attached to C, neither (C,R) nor (C,O) revoked, R != O, valid quantity,
+   manual available flag on, `quantity - pending_sum >= requested` across ALL caches,
+   request + notification + request_index intent. Pending-only decisions deduct
+   once; stock edits respect the global reservation floor; lost races return 409.
+   Lent out blocks new requests, not existing pending rows. The reusable approval
+   checkbox sets that flag/note and projection intents in the same transaction.
+4. **Register targets before attachments; cascade locally, deliver durably.** Cache
+   attach admission checks O active and inserts `owner_targets(O)` in one transaction
+   BEFORE the Owner attachment commits. Never delete registrations while C exists.
+   Cache removal marks R removed plus revocation intents for EVERY registered owner,
+   not eventual listings. Each target atomically inserts permanent `revoked(C,R)`,
+   rejects R's pending requests via C, and if R is that owner detaches all from C and
+   rejects pending via those attachments. Either delivery order must converge with
+   no surviving pending row. No instant rollback of completed approvals is claimed.
+   Losing C preserves library items/photos/other caches. Global item deletion
+   snapshots all pending recipients and records listing/notification/R2 cleanup
+   before local cascade. No destructive route before its full protocol is proved.
 5. **State plus `pending_sync` commits atomically; external effects are idempotent.**
    Stable intent/outbox IDs, ordered single drain per DO, no pending-row deletion
    until D1/R2/Queue effects succeed. Alarm and `flushSync` must not reorder work.
@@ -65,9 +82,11 @@ Intended production URL is https://communalcache.com; provisioning needs approva
    reschedules; every DO entry point re-arms pending work. Six automatic retries
    are not indefinite recovery. Registry Cron flushes and outbox Cron re-enqueues
    expired nonterminal work. Test the new-cache commit/alarm scheduling window.
-7. **D1 discovery never authorizes.** `my_caches` discovers home entries and the
-   caller's bounded requests fan-out; registry discovers caches for sync sweeps.
-   Each DO still checks membership. Drift means a missing entry/404, never access.
+7. **D1 discovery never authorizes.** `my_caches` discovers Home caches;
+   `request_index(requester_id, owner_id)` discovers outgoing request targets, each
+   Owner DO filtering requester/party, never bypassing cache item/photo gates.
+   Incoming requests and Your items use the caller's own Owner DO, not cache fan-out. Registry/known owner IDs discover
+   recovery work only. Missing/stale rows mean delayed/empty/404 results, never access.
 8. **Outbox eligibility is bounded by `failed_at`, never `attempts`.** A guarded
    expiring claim decides who sends; zero D1 `meta.changes` means ack/skip. Both
    terminal writes require `AND sent_at IS NULL AND failed_at IS NULL`, plus current
@@ -83,10 +102,12 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 11. **`requireProfile` exempts `PATCH /api/me`, push routes and `/api/auth/*`.**
     Otherwise a new user cannot authenticate/set a name. Never use an email-derived
     or auth-core name to bypass the nullable app display-name profile.
-12. **Photos remain private.** DO checks membership/item state for every photo read;
-    Worker streams R2 with private cache headers. Upload/attachment is owner-only,
-    with a DO re-check after R2 I/O. Same-origin image requests carry session cookies;
-    no public bucket, signed URL or bearer/blob workaround needed.
+12. **Photos remain private and owner-scoped.** Cache reads check Cache membership/
+    listing, then Owner attachment and caller/owner tombstones before private R2
+    streaming. Own-library reads authenticate its owner directly. Upload is owner-only
+    with an Owner item/ownership re-check after R2 I/O; immutable keys are
+    ownerId/itemId/uploadUUID. Detach/removal alone never deletes a shared photo.
+    Same-origin cookies suffice; no public bucket, signed URL or bearer/blob route.
 13. **Cookie auth requires app CSRF protection.** HttpOnly/Secure/SameSite=Lax
     production cookies, exact Better Auth trustedOrigins and Origin checks on app
     mutations; reject missing/null/foreign origins. Auth guards do not cover unrelated
@@ -102,11 +123,11 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 | --- | --- | --- |
 | 1 app schema/RLS | Dropped | New data is private D1/DO storage, not PostgREST; leave legacy protections intact. |
 | 2 no port 6543 | Dropped | Bindings/Wrangler migrations replace connection pools and advisory locks. |
-| 3 over-booking | Changed | One synchronous local SQL transaction replaces lock-then-read. |
-| 4 lock order | Dropped | Cache-local atomic transactions need no Postgres row locks. |
-| 5 lock before snapshot | Dropped | Snapshot/cascade/intents share one transaction. |
+| 3 over-booking | Changed | One Owner DO transaction guards shared stock/pending sum across all caches. |
+| 4 lock order | Dropped | Object-local transactions need no Postgres row locks; no transaction spans objects. |
+| 5 lock before snapshot | Changed | Each local snapshot/cascade/intents is atomic; registered-target revocation spans objects durably, not atomically. |
 | 6 outbox recovery | Kept + extended | Failed-at eligibility/terminal guards remain; durable DO→D1 intents and self-re-arming alarms are added. |
-| 7 membership/404 | Kept, implementation changed | Same synchronous DO operation/transaction; D1 never authorizes. |
+| 7 membership/404 | Kept, implementation changed | Cache membership plus Owner item/tombstone authority; no projection grant or global transaction. |
 | 8 email privacy | Kept | Own auth user email only; Better Auth session/user endpoints remain caller-scoped. |
 | 9 untrusted push | Changed | Origin/HTTPS/manual redirects remain; no resolved-IP fetch hook or assumed platform SSRF immunity. |
 | 10 profile exemptions | Kept + extended | Name onboarding, push and `/api/auth/*` cannot be gated out. |
@@ -114,9 +135,11 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 ## Conventions
 
 - Plain TypeScript Worker dispatch and DO RPC, no router library or ORM. Cache
-  routes include `/api/caches/{cacheId}` so UUID item/request IDs need no D1 locator.
-- Hand-written bound SQL. Cache-local membership checks live with the DO queries;
-  global D1 queries stay in one auditable module. D1 cannot transact with DO/R2.
+  context includes `/api/caches/{cacheId}`; its authorized listing routes to an Owner
+  DO. Private library routes use the caller's Owner DO. No D1 item locator.
+- Hand-written bound SQL. Membership/target registration stays in Cache SQL;
+  canonical item/attachment/request/stock/tombstone checks stay in Owner SQL.
+  Global D1 queries stay auditable. No transaction spans objects or D1/R2.
 - UUID app keys; Better Auth user.id is the app identity (`generateId: 'uuid'`).
   App timestamps are integer Unix milliseconds; auth columns follow its reviewed
   generated schema. SQLite booleans have 0/1 checks; nullable columns are explicit;
@@ -170,9 +193,14 @@ Go foundation is live. Go Features 1–2 are implemented in open reference PRs
 ports and will be superseded. Existing Go source, dependencies and deployment
 files stay untouched by this docs PR; old commands/config are not new-stack gates.
 
-**Next: Foundation port**, then Caches and Joining ports, then Features 3–9.
-Implementation/review status lives in the [build-guide table](docs/build-guide.md#status).
+**Next: shared-items PRs 2–6**, following the approved Owner DO spec in plan.md.
+Current app code still stores canonical items/requests in Cache DOs; that is the
+old implementation, not permission to use it for new shared-stock writes. Target
+registration/revocation and Owner runtime proof are not implemented by this docs PR.
+Draft #28 is superseded by shared-items PR 5's owner library. Implementation/review
+status lives in the [build-guide table](docs/build-guide.md#status).
 The legacy Fly app and Supabase remain live until approved cutover; the target
 has no Supabase dependency. Migration maps legacy users by verified email into
-Better Auth user rows and rewrites all D1/DO identity references; old sessions do
-not transfer. No resource/config/secret/decommissioning changes in this spec PR.
+Better Auth user rows and rewrites all D1/DO identity references; canonical items/
+requests go to Owner DOs and cache relationships become attachments/listings.
+Old sessions do not transfer. No resource/config/secret/decommissioning changes in this spec PR.

@@ -1,31 +1,133 @@
-# D1 and cache Durable Object storage
+# D1, Cache and Owner Durable Object storage
 
-Foundation supplies the local Worker/D1/DO schema. Caches adds authoritative local
-cache operations, ordered D1 projection sync and the registry recovery sweep.
-Joining adds transactional memberships and notification intents materialized in D1
-outbox. The approved `communalcache` D1 database exists and its real ID is committed;
-remote migrations and deployment still require separate approval.
-[plan.md](plan.md) defines semantics; this page explains the mechanics.
+**Shared target: option B (2026-10-15).** Current app code still keeps items/requests
+in Cache DOs. The schemas/protocol below are the approved replacement, not code or
+migrations shipped by this docs PR. Existing cache-local tests do not prove Owner
+behavior. See [plan.md](plan.md) and the
+[shared implementation plan](build-guide.md#shared-items-implementation-plan).
+The approved D1 database exists; further resources, migrations, resets and deployment
+still need separate approval. No Cloudflare operation is part of this docs change.
 
-## Two stores, two jobs
+## Stores and authorities
 
 | Store | Owns | Never used for |
 | --- | --- | --- |
-| One SQLite DO per cache | Membership/owner role, settings/join secret, items, requests, pending_sync | Global email/subscription storage |
-| Global D1 | Better Auth users/sessions/challenges/rate limits, app profiles, cache registry, my_caches discovery, push subscriptions, outbox | Authorizing cache membership |
-| Private R2 | Immutable photos under cacheId/itemId/uploadUUID | Public access or membership decisions |
+| One Cache DO per cache | Membership/settings, permanent owner_targets, display listings, local pending_sync | Canonical stock/request decisions |
+| One Owner DO per user | Items/library, attachments, ONE stock ledger, requests, revoked tombstones, local pending_sync | Fresh cache membership authority |
+| Global D1 | Auth/profiles/rate limits, cache/my_caches discovery, request_index, push subscriptions, outbox | Item, membership or stock authorization |
+| Private R2 | Immutable ownerId/itemId/uploadUUID photos | Public access or permission decisions |
 
-The Worker derives the cache DO from `/api/caches/{cacheId}/...`; UUID item/request
-IDs need no global locator. Joins carry `{cacheId}.{secret}`, compared in that DO.
-Names are fetched from D1 after cache authorization. Cross-cache requests discover
-the caller's my_caches, but each DO separately checks membership and party visibility.
-`GET /api/requests?after={cacheId}` reads at most 25 caches per page with five RPCs
-at once. Its continuation cursor is scoped by caller in D1, never an authorization
-token; stale 404s are skipped and failed RPCs are returned as unavailable caches.
+Cache context routes to the Cache DO. Its authorized listing identifies an Owner
+DO; private library routes use the authenticated caller's own Owner DO selected by
+`idFromName(user_id)`. Owner identity is fixed metadata, not a body-supplied owner.
+There is no D1 item locator. Joins keep cacheId.secret and compare only in Cache.
+Public display-name enrichment happens after authorization and never selects email.
 
-`my_caches` and registry are eventual projections. A stale index is a missing/404
-entry, not a permission. There are no cross-store foreign keys or transactions.
-D1 foreign keys relate only D1 tables; DO references relate only that cache's tables.
+`my_caches` discovers Home caches. Incoming requests and Your items are local to the
+caller's Owner DO. Outgoing requests discover owners through D1 request_index, with
+bounded owner pages/concurrency and per-target requester filtering. Missing/stale
+rows delay/hide results or yield 404, never access. Cache listings are display
+projections, not request permissions or a second stock count. There is no FK or
+transaction across these stores; each SQLite FK stays within its own database.
+
+## Planned shared schemas
+
+Illustrative target DDL only: implementation PRs hand-write/review migrations and
+prove upgrades. Do not execute this against staging from this docs PR. All app IDs
+are UUID text and timestamps integer Unix milliseconds; all application SQL binds
+inputs. Cache config/members retain their existing role/status/secret constraints.
+
+### Cache projection and permanent routing targets
+
+The target replaces cache-local canonical items/requests with these tables;
+physical retirement of old staging tables/data belongs to the migration plan.
+
+```sql
+CREATE TABLE listings (
+  item_id TEXT PRIMARY KEY NOT NULL, owner_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  is_consumable INTEGER NOT NULL CHECK(is_consumable IN (0,1)),
+  available INTEGER NOT NULL CHECK(available IN (0,1)),
+  unavailable_note TEXT, photo_version TEXT, updated_at INTEGER NOT NULL
+);
+CREATE TABLE owner_targets (
+  owner_id TEXT PRIMARY KEY NOT NULL, registered_at INTEGER NOT NULL
+);
+```
+
+`owner_targets` is not a listing, membership copy or display count. Attach admission
+checks O active and inserts O here in the **same Cache transaction**, before its
+Owner attachment can commit. Never delete the registration while the cache exists,
+even after detach. Listing timestamps are display metadata, not permission or a
+platform total-order guarantee. Projection replay must not restore canonical access.
+
+### Owner canonical state
+
+Ownership is implicit in the fixed user namespace; no requester's FK reaches Cache
+members or D1 users. Only local item dependencies use foreign keys.
+
+```sql
+CREATE TABLE items (
+  id TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL, description TEXT,
+  photo_path TEXT,
+  is_consumable INTEGER NOT NULL CHECK(is_consumable IN (0,1)),
+  quantity INTEGER,
+  available INTEGER NOT NULL DEFAULT 1 CHECK(available IN (0,1)),
+  unavailable_note TEXT, created_at INTEGER NOT NULL,
+  CHECK(is_consumable = (quantity IS NOT NULL)),
+  CHECK(quantity IS NULL OR (typeof(quantity) = 'integer' AND quantity BETWEEN 0 AND 9999))
+);
+CREATE TABLE attachments (
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  cache_id TEXT NOT NULL, attached_at INTEGER NOT NULL,
+  PRIMARY KEY(item_id, cache_id)
+);
+CREATE TABLE requests (
+  id TEXT PRIMARY KEY NOT NULL,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  cache_id TEXT NOT NULL, requester_id TEXT NOT NULL, quantity INTEGER,
+  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),
+  decision_reason TEXT, decided_at INTEGER, created_at INTEGER NOT NULL,
+  CHECK(quantity IS NULL OR (typeof(quantity) = 'integer' AND quantity BETWEEN 1 AND 9999)),
+  CHECK((status = 'pending') = (decided_at IS NULL)),
+  CHECK(status <> 'rejected' OR decision_reason IS NOT NULL)
+);
+CREATE INDEX pending_requests ON requests(item_id) WHERE status = 'pending';
+CREATE INDEX requests_cache_requester ON requests(cache_id, requester_id, status);
+CREATE INDEX requests_requester ON requests(requester_id, created_at, id);
+CREATE TABLE revoked (
+  cache_id TEXT NOT NULL, user_id TEXT NOT NULL, revoked_at INTEGER NOT NULL,
+  PRIMARY KEY(cache_id, user_id)
+);
+```
+
+Type/quantity consistency remains a runtime Owner transaction check as well as the
+schema rules. `requests` deliberately does not FK to attachments: detaching rejects
+pending rows but can retain decided rows. Global item deletion may cascade them
+after recipient snapshots. `revoked(C,R)` and `revoked(C,O)` permanently block late
+request/attachment work; removed cache memberships cannot rejoin.
+
+Both DO classes keep independent schema-version metadata and the ordered
+`pending_sync(sequence, id UNIQUE, kind, payload, created_at)` table. Fixed Owner
+identity initialization/namespace checks must be proved in PR 2. No Owner schema,
+class migration or binding is added here.
+
+### D1 outgoing-owner discovery
+
+```sql
+CREATE TABLE request_index (
+  requester_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE,
+  PRIMARY KEY(requester_id, owner_id)
+);
+```
+
+Request creation records its stable index-upsert intent in the same Owner
+transaction as request/notification state; the drain does an idempotent pair insert.
+This is discovery only. Stale pairs may remain after decisions/deletion and return
+no canonical rows; never use them to bypass requester/party checks or item/photo
+checks. Do not delete a pair merely because one request ended while another may
+still need it. Row/cursor budgets and any later cleanup require runtime proof.
 
 App UUIDs come from `crypto.randomUUID()`; app user ID equals Better Auth user.id
 with its UUID generator configured. App timestamps are integer Unix milliseconds;
@@ -43,7 +145,7 @@ The older other-relational-databases page lists that community dialect, but the
 [specific D1 example](https://www.better-auth.com/docs/concepts/database.md) and
 [tagged implementation](https://github.com/better-auth/better-auth/blob/v1.7.7/packages/kysely-adapter/src/dialect.ts#L184-L194)
 show native support. It explicitly disables interactive transactions; do not
-assume auth operations inherit cache-DO transaction semantics.
+assume auth operations inherit object-local DO transaction semantics.
 
 D1 contains Better Auth's `user`, `session`, `account`, `verification` and
 `rateLimit` tables. Add nullable `user.display_name` as the app profile concept,
@@ -82,14 +184,30 @@ Tests cover wrong-code/resend overlap and overlapping resends with equal timesta
 
 ## Local transactions
 
-Each cache check-then-write is one synchronous local transaction:
+Each object's check-then-write is one synchronous local transaction:
 
 ```typescript
-ctx.storage.transactionSync(() => {
-  // Read membership/item/requests, decide, then write state and pending_sync.
-  // Throw an expected 404/409 to roll back all local changes.
+// Cache DO attach admission, before any Owner attachment exists:
+cache.storage.transactionSync(() => {
+  requireActiveMember(ownerId);
+  registerOwnerTargetIfAbsent(ownerId);
+});
+// After that RPC completes, a separate Owner DO operation:
+owner.storage.transactionSync(() => {
+  requireOwnerCallerAndItem();
+  requireNotRevoked(cacheId, ownerId);
+  insertAttachmentAndListingIntent();
 });
 ```
+
+Illustrative shape, not a shared storage handle or distributed transaction.
+“Writes never await between objects” forbids external awaits **inside** either
+local check/write transaction; admission and canonical operations are separate
+completed RPCs. A previous membership read is not an atomic global grant. Owner
+requests recheck item/attachment, both cache/user tombstones, manual availability,
+type/quantity and the all-cache pending sum locally, then insert request,
+notification and request_index intents together. No cache_id predicate belongs in
+the stock reservation sum.
 
 No async callback, Promise, D1 call, R2 call, Queue send or await inside it.
 `sql.exec()` runs synchronously; consume its cursor before returning/awaiting.
@@ -104,8 +222,48 @@ Its timeout resets the DO after 30 seconds. Never hold local auth/quantity decis
 across network calls.
 
 No Postgres pool, session advisory lock, row-lock order, app schema or RLS is needed
-for these bindings. They are not exposed through a browser database API. Legacy
+for these bindings. No two-object transaction is supplied or assumed. They are not exposed through a browser database API. Legacy
 Supabase/Postgres must retain its protections until separately approved retirement.
+
+## Registered-target revocation
+
+A display projection cannot enumerate revocation destinations: it may be missing
+when an attachment already exists. `owner_targets` closes that gap:
+
+1. Cache attach admission atomically checks O active and registers O if absent.
+2. Only after that returns does O's Owner DO check its permanent owner tombstone
+   and commit the attachment/listing intent. Never remove the target on detach.
+3. Member removal atomically marks R removed and records durable revocation work
+   covering **every registered owner**, independent of listings. A bounded drain
+   must retain complete target coverage/cursor state until all acknowledgments.
+4. Each Owner receiver atomically inserts `revoked(C,R)`, rejects R's pending
+   requests via C and records recipient/notification intents. If R is that owner,
+   also detach all from C and reject all pending through those attachments.
+
+A listing implies a prior attachment and therefore prior registration. Any request
+admitted before removal routes to a registered target; admission afterward fails
+Cache membership. Tombstone first refuses late creation; request/attach first is
+rejected/detached by later delivery. Both orders converge under durable retry.
+Registrations/tombstones are permanent for this model; re-attachment cannot erase
+a removed membership. Other caches, canonical library items and photos survive.
+
+This is **at-least-once/eventual**, not instant revocation across objects or an undo
+of an already completed approval. The next Cache check blocks removed users, while
+already authorized in-flight work may finish before delivery. PR 4 must prove both
+orders, registration/removal before listing sync, owner removal before attachment
+commit, detach/re-attach, replay, eviction and recovery beyond six failures. These
+are **UNVERIFIED implementation gates** until that code and its runtime tests exist.
+
+## Manual availability, not loan state
+
+Confirmed semantics: `items.available` is an owner-only 0/1 toggle plus optional
+short note. Project “Lent out” to every attachment. New requests check the flag and
+return 409 when off; existing pending rows remain pending. A reusable approval's
+**Mark as lent out** checkbox sets the flag/note and listing intents in the same
+Owner transaction as its pending-only decision. Unchecked approval does not clear
+the flag; the owner manually marks available again. No current-holder, borrower,
+due-date, return or loan-status table/column is added. Computed consumable
+`available_quantity` still uses one all-cache pending sum, not this boolean.
 
 ## D1 migrations
 
@@ -124,6 +282,10 @@ guarded UPSERT admits and increments atomically; changing a window reuses the ro
 This is an abuse budget, not D1 cache authorization. User deletion cascades counters;
 there is no time-window garbage sweep or in-memory bucket. See the
 [Polish guide](build-guide.md#feature-9--polish) for limits and boundary behavior.
+The listed files describe the current cache-local port. Owner tables, cache
+listings/owner_targets, request_index and recovery cursor changes require future
+reviewed PR 2–4 migrations; this docs PR adds none. Existing auth SQL/OTP uniqueness
+is unrelated to item placement and stays unchanged.
 Auth date columns store adapter-produced ISO strings;
 app timestamps are integer milliseconds. `wrangler.jsonc` commits the approved
 `communalcache` D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1`. Tests and default dev
@@ -166,25 +328,23 @@ snapshot the recipient ID and cache name without emails or invite secrets.
 Notifications now sends each materialized outbox ID to Queue before deleting its
 local intent, so either external boundary can be replayed without resetting state.
 
-Photos reuses the existing nullable `items.photo_path`, so it needs no schema bump.
-Worker uploads use an immutable key, then the DO re-checks live membership/ownership
-and sets the attachment together with old/rejected-key cleanup intents in one local
-transaction. The ordered drain deletes R2 keys idempotently before removing intents.
-The key-layout deviation and pre-finalization crash window are documented in the
-[Photos build guide](build-guide.md#feature-4--photos).
+**Historical cache-local v2:** Photos/Requests/Removal reused its items/requests
+schema, local cascade and cacheId/itemId/uploadUUID keys. Those tests remain
+current-code reference, not the Owner schema or shared-stock proof. Do not transplant
+that single-cache stock/cascade assumption into new Owner operations.
 
-Requests also reuses v2: pending reservations are summed before insertion, and
-pending-only approval/rejection plus stock deduction and notification intent share
-one `transactionSync`. The stable intent ID becomes the D1 outbox ID through the
-existing ordered drain. Pending item queues are member-public; decided rows and
-cross-cache aggregation are restricted to the requester/item owner by local SQL.
+**Shared target:** PR 2 introduces Owner identity/versioning, items, attachments,
+listings/owner_targets and ownerId/itemId/uploadUUID photo keys. PR 3 moves request
+state/global reservation sums and adds request_index. PR 4 proves registered-target
+removal and local detach/global-delete cascades under both message orders. Constructors
+must not silently discard old staging data; its separately approved reset/migration
+is PR 6. Keep mixed old/new writes gated until the corresponding protocol is safe.
 
-Removal/deletion also reuses v2. Each destructive transaction checks live authority,
-snapshots pending recipients, records notification, `discovery_delete`, exact R2
-and trailing-slash `r2_delete_prefix` intents, then cascades local SQL. A thrown step
-rolls all of it back. The drain repeatedly lists/deletes 100-key prefix pages and
-deletes that intent only after an empty list; failed D1/R2/Queue effects remain
-durable with the existing backoff. Stale `my_caches` rows still 404 at the DO.
+Owner photo finalization rechecks canonical owner/item state after R2 I/O, commits
+photo/listing/cleanup intents locally and never deletes the image just because one
+cache detached. Request cache queues disclose only cache C's pending rows; stock
+checks sum across every cache. The item owner can decide/see its own requests;
+outgoing targets filter the requester. No email lookup is part of those responses.
 
 DO namespace/class deployment configuration is separate from SQL schema migration.
 Creating/renaming/deleting classes is an approval-gated operator action. Do not
@@ -196,28 +356,39 @@ prefer fixing forward for incompatible migrations.
 
 ## Durable sync, not distributed transactions
 
-A mutation writes state plus ordered pending_sync rows locally, then sets an alarm.
-For each pending row, apply its D1/R2 effects idempotently; insert outbox by the
-stable DO-generated ID, send that ID to Queue, then delete the local pending row.
-Queue failure or a crash after send leaves the stable intent replayable.
-Replay cannot reset an existing outbox's attempts/claim/sent/failed state.
+Both classes commit state plus ordered pending_sync rows locally, then arm recovery.
+Cache effects include registry/membership discovery, joins and registered-target
+revocation RPCs. Owner effects include cache listing projections, request_index,
+notifications and R2 cleanup. Receiver revocation commits its own tombstone/cascade/
+intents before acknowledging. No object holds a transaction across that RPC.
+Outbox materialization keeps the stable source-DO ID and preserves claim/terminal
+state, then enqueues the ID. A failed effect or uncertain response leaves its source
+intent replayable; only acknowledged effects permit deletion.
 
-- One ordered bounded drain per DO, even if alarm and `flushSync` overlap.
-- Registry upsert precedes reverse-index inserts; removal/name changes cannot be
-  undone by an older intent finishing late.
-- Catch failures and set another alarm while work remains. Built-in alarm retries
-  stop after six; every entry point re-arms pending work.
-- Registry Cron invokes each known DO's `flushSync`; outbox Cron repairs failed
-  Queue handoff, expired messages or claims. Neither uses D1 as authorization.
+- One ordered bounded drain per object, including alarm/flush overlap; replay must
+  not restore attachments, permissions or deleted item state.
+- Local source state/intents and receiver state/intents are each atomic, never one
+  distributed commit. Delivery is at-least-once and idempotent.
+- Catch failures and keep alarms armed while work remains, beyond six built-in
+  retries. Every entry point re-arms its pending work.
+- Cache registry and known Owner IDs support bounded recovery sweeps; outbox Cron
+  repairs Queue handoff/expired claims. Discovery never supplies permission.
 
 [Alarms are at-least-once and finite-retry](https://developers.cloudflare.com/durable-objects/api/alarms/index.md).
-The Caches implementation serializes all drains through one per-object promise,
+**Current cache-local implementation:** Caches serializes all drains through one per-object promise,
 processes at most 25 intent rows per drain (up to 50 external binding calls when
 rows each insert D1 then send Queue), and keeps work armed while it remains.
 Registry Cron sweeps 25 caches per tick using a persisted guarded cursor; failures
 on one cache do not block others. `triggers.crons` declares the intended five-minute
 schedule but no production trigger has been installed. Mutations with no external
 effect (approval setting/invite rotation) need no projection intent.
+
+**Owner target:** add a bounded sweep over known Owner IDs, for example D1 user-ID
+pages selecting only `id`, with durable cursor/retry progress. Do not expose auth
+user enumeration or acquire management credentials to list namespaces. Share total
+Cache/Owner/outbox invocation budgets with headroom; adding 25 more Owner RPCs to
+the existing sweep blindly is not quota proof. Exact cursor migrations, row/page
+limits and CPU/subrequest fit remain **UNVERIFIED** PR 2–3 checks.
 
 Sync failures persist `sync_retry` metadata in DO storage, doubling alarm delay from
 five seconds to one hour; success clears it. Entry points preserve that delay and
@@ -259,6 +430,9 @@ Use Vitest + `@cloudflare/vitest-plugin`, which runs tests inside the local Work
 runtime. The old `vitest-pool-workers` package is renamed/deprecated. No production
 bindings, real-provider calls or hosted database are needed for invariant tests.
 
+The current harness covers Cache DOs; future shared PRs must register Owner test
+bindings and migration fixtures. Existing green checks are not Owner protocol proof.
+
 1. Config reads D1 SQL migrations via `readD1Migrations` from the plugin's config
    helpers and passes the migration array as a test-only binding.
 2. A test setup file calls `applyD1Migrations(env.DB, migrations)` from
@@ -293,8 +467,14 @@ Bound sync/outbox/registry batches and requests fan-out. Watch unsent/pending ag
 not only error counts; a healthy HTTP API can still have a broken notification path.
 Recovery/export/restore on production storage is an operator action needing approval,
 not a test fixture. A data migration from legacy storage is a separate cutover plan:
-map legacy Supabase users by verified email into inserted Better Auth user rows,
-preserve profiles and rewrite user_id/owner_id/requester_id references throughout
-D1, DO tables and pending-sync/outbox payloads. Reject ambiguous/unverified email
-mappings; do not migrate old sessions. No automatic teardown, destructive reset
-or implicit dual-write migration here.
+map legacy Supabase users by verified email into Better Auth rows, preserve names,
+and rewrite identity references throughout D1, both DO classes and pending/outbox
+payloads. Import each canonical item/request into its owner's DO, create attachments
+and listings, rebuild request_index and convert owner-scoped photo references.
+Do not merge equal-title legacy rows without an explicit approved mapping. Reject
+ambiguous/unverified identities and do not transfer old sessions.
+
+The new stack has no production data yet. Staging test data may be reset or migrated
+by a reviewed one-off procedure in PR 6, with explicit approval/inventory/recovery
+checks; no automatic constructor drop/reset or implicit dual write. Legacy production
+remains live until the separately approved cutover. No such command runs in this PR.
