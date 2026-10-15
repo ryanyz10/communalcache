@@ -9,6 +9,9 @@ import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
 import { MagicLinkPage } from './pages/MagicLinkPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { AccountPage } from './pages/AccountPage'
+import { CacheSettingsPage } from './pages/CacheSettingsPage'
+import { AppHeader } from './components/AppHeader'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
@@ -24,12 +27,15 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Ready>
+          <AppHeader />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/link" element={<MagicLinkPage />} />
             <Route path="/join/:token" element={<JoinPage />} />
             <Route path="/" element={<HomePage />} />
             <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/account" element={<AccountPage />} />
+            <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
             <Route path="/caches/:cacheId" element={<CachePage />} />
             <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
             <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />

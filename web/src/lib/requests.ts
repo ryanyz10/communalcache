@@ -1,4 +1,5 @@
-import type { QueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, type QueryClient } from '@tanstack/react-query'
+import { apiFetch } from './api'
 
 export type ItemRequest = {
   id: string; cache_id: string; cache_name: string; item_id: string; item_title: string
@@ -7,6 +8,25 @@ export type ItemRequest = {
   created_at: number; decided_at: number | null
 }
 export type RequestsPageData = { requests: ItemRequest[]; unavailable_cache_ids: string[]; next_cursor: string | null }
+
+export function useRequests(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: ['requests'], initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => apiFetch<RequestsPageData>(`/api/requests${pageParam ? `?after=${encodeURIComponent(pageParam)}` : ''}`),
+    getNextPageParam: page => page.next_cursor ?? undefined, enabled,
+  })
+}
+
+export function pendingIncomingCount(rows: ItemRequest[], userId: string) {
+  return rows.filter(row => row.owner_id === userId && row.status === 'pending').length
+}
+
+export function requestPreview(rows: ItemRequest[], userId: string) {
+  return [
+    ...rows.filter(row => row.owner_id === userId && row.status === 'pending'),
+    ...rows.filter(row => row.requester_id === userId),
+  ].slice(0, 3)
+}
 
 export function invalidateRequestViews(client: QueryClient, cacheId: string, itemId: string) {
   return Promise.all([
