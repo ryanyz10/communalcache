@@ -3,12 +3,14 @@ import { env } from 'cloudflare:workers'
 import worker from '../src/index'
 import { authOptions } from '../src/auth'
 import { cacheDetail, createCache } from '../src/db'
-import { authRequest, appRequest, base, login } from './helpers'
+import { authRequest, appRequest, base, login, turnstileMock } from './helpers'
 
 type Mail = { text: string; html?: string; subject: string; to: string[] }
 function mailMock() {
   const mails: Mail[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const verified = turnstileMock(input,init)
+    if (verified) return verified
     expect(input).toBe('https://api.resend.com/emails')
     expect(init?.redirect).toBe('manual')
     expect(init?.signal).toBeInstanceOf(AbortSignal)
@@ -238,6 +240,8 @@ it('retains the plugin verification D1 rate limit through the POST adapter witho
 
 it('maps bounded Resend HTTP/network failures to 502 and isolates concurrent send outcomes', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    const verified = turnstileMock(_input,init)
+    if (verified) return verified
     const mail = JSON.parse(init!.body as string) as Mail
     if (mail.to[0] === 'network@example.test') throw new Error('private transport detail')
     return mail.to[0] === 'failed@example.test' ? new Response('private provider detail', { status: 503 }) : Response.json({ id: 'sent' })
@@ -251,9 +255,11 @@ it('maps bounded Resend HTTP/network failures to 502 and isolates concurrent sen
 })
 
 it('waits for a 10-second magic-link delivery timeout and reports email_unavailable', async () => {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => new Promise((_resolve, reject) => {
-    init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true })
-  }))
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    const verified = turnstileMock(_input,init)
+    if (verified) return verified
+    return new Promise((_resolve, reject) => { init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true }) })
+  })
   const started = Date.now()
   const response = await sendLink()
   expect(response.status).toBe(502)

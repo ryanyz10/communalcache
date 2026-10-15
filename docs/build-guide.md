@@ -102,7 +102,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 5 | Cozy theme and app identity | Implemented; in review: round-6 sunny/evening CSS tokens via prefers-color-scheme, 2px Home boxes/cache-member houses, decorative reduced-motion cat, open-box/cat Home mark and reproducible SVG/32/180/192/512 icon set. Phone/wide fixture comparisons cover key screens in both palettes; native installed-PWA/device proof remains separate. No API, plan UI or dependency changes. |
 | Readiness 5a | Desktop cozy pass | Implemented; in review: 1200px desktop content, width-scaled pixel scenes/taller sign-in illustration, cache members sidebar, outgoing request column and two-column Account. Original phone geometry/classes retained below 1024px; native-viewport screenshot receipts in the PR body. No API/dependency changes. |
 | Readiness 5b | Cozy motion | Implemented; in review: shared 400ms stepped cache opening for horizon/cards and Enter, one two-frame integer-pixel walker with edge pauses/turns, idle blink/ear/sky motion, small card lift, 140ms route opacity fade and sheet entrance. Reduced motion skips all animation/navigation delay; hidden tabs suspend motion. No API/dependency changes; recordings stay in the PR body. |
-| Readiness 6 | Turnstile and bot setup | not started — needs owner setup; email sends + cache creation, Worker siteverify; Bot Fight Mode zone toggle separately approved |
+| Readiness 6 | Turnstile and bot setup | Implemented; in review: one strict Worker siteverify guard for magic-link/OTP sends and cache creation, explicit action/theme widgets, one-use token reset and fail-closed errors. Owner-approved shared public sitekey with separate staging/production hostname lists; secrets remain owner-managed. Real-token staging validation pending after deploy; Bot Fight Mode remains separate. |
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
 | Readiness 9 | Supporter tips link | not started — needs owner setup; hosted link only, hidden until configured, no webhooks/app storage/unlocks |
@@ -545,7 +545,7 @@ receipts cover all six screens; extra wide layouts and the rendered 512px icon
 were inspected. These screenshots are mock-API presentation proof, not native
 system-setting, installed-PWA or real-device proof.
 
-### Readiness 6 — Turnstile (needs owner setup)
+### Readiness 6 — Turnstile (live validation pending)
 
 Owner supplies approved site configuration/key/secret and intended hostname/action.
 Protect magic-link/code sends/resends and cache creation with server-side
@@ -561,6 +561,31 @@ provider errors/timeouts and direct API paths with no unsafe state/mail send.
 After setup approval, record live valid/invalid-token browser/provider receipts
 and verify existing sign-in fallback/rate limits. No zone toggle/secret provision
 or live assertion until the owner supplies and approves setup.
+
+Implementation: `src/turnstile.ts` is the single siteverify function, called before
+Better Auth email-send handlers and the guarded cache-create write. It sends a
+form-encoded secret/response/CF-Connecting-IP request with a 10s abort deadline and
+requires boolean success, exact `signin` / `create_cache` action and configured
+hostname. Missing token/config, provider failures and replay all return generic
+403 `turnstile_failed`; Origin, auth/profile, rate limits and D1 quotas stay intact.
+Continue, OTP verification, session reads and sign-out are not gated. Better Auth
+1.7.7's captcha plugin supports action/host checks but uses JSON/truthy success and
+different provider-failure behavior; this stricter shared guard leaves it unused.
+
+The owner replaced the original widgets with shared public sitekey
+`0x4AAAAAAFX8jA_m3iHxQbuL`. Production accepts only communalcache.com; staging only
+communalcache-staging.ryanyz10-be6.workers.dev. Local `.dev.vars` uses that real
+widget/owner-provided secret and localhost; the example contains no secret value.
+Official dummy test keys return example.com without an action, so they cannot
+bypass these checks. Automated tests mock siteverify with exact claims. The owner
+reports staging-secret provisioning separately; live valid/invalid-token staging
+proof is still pending after this revision deploys. This PR provisions no secret.
+
+The client loads one explicit async script, chooses the rendered cozy light/dark
+palette, mounts cache widgets only while the sheet is open, clears expired/error
+callbacks, and resets after each protected attempt. `GET /api/config` exposes only
+the public sitekey. No existing CSP was found. The UI fixture uses a clearly
+labeled mock widget and never contacts Cloudflare; it is not live-token evidence.
 
 ### Readiness 7 — Google (needs owner setup)
 

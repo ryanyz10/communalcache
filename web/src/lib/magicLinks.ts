@@ -2,11 +2,11 @@ import { apiFetch } from './api'
 import { isInvitePath } from '../../../shared/invites'
 import { destinationAfterLogin, peekJoinToken, stashJoinToken } from './pendingJoin'
 
-export function sendSignInEmail(email: string, mode: 'link' | 'code', inviteToken?: string) {
+export function sendSignInEmail(email: string, mode: 'link' | 'code', inviteToken: string | undefined, turnstileToken: string) {
   if (inviteToken) stashJoinToken(inviteToken)
   const token = peekJoinToken()
-  return mode === 'link' ? apiFetch('/api/auth/sign-in/magic-link', { body: { email: email.trim(), ...(token ? {callbackURL:`/join/${token}`} : {}) } })
-    : apiFetch('/api/auth/email-otp/send-verification-otp', { body: { email: email.trim(), type: 'sign-in' } })
+  return mode === 'link' ? apiFetch('/api/auth/sign-in/magic-link', { body: { email: email.trim(), ...(token ? {callbackURL:`/join/${token}`} : {}) }, turnstileToken })
+    : apiFetch('/api/auth/email-otp/send-verification-otp', { body: { email: email.trim(), type: 'sign-in' }, turnstileToken })
 }
 
 export function magicLinkDestination(callbackUrl: string, origin: string) {

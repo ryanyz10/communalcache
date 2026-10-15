@@ -14,6 +14,8 @@
     "APP_BASE_URL": "https://communalcache.com",
     "BETTER_AUTH_URL": "https://communalcache.com",
     "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
+    "TURNSTILE_HOSTNAMES": "communalcache.com",
     "VAPID_PUBLIC_KEY": ""
   },
   "d1_databases": [{
@@ -40,6 +42,8 @@
         "APP_BASE_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
         "BETTER_AUTH_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
+        "TURNSTILE_HOSTNAMES": "communalcache-staging.ryanyz10-be6.workers.dev",
         "VAPID_PUBLIC_KEY": "BDc7hJ9A4t13ANKe0ifevZBjiewe1vNnn6zJEQUpxBJBzq1Y_PLCepOAIIZaIdsQTgUTEfgNon3XjSLNjigr-5Y"
       },
       "d1_databases": [{
@@ -64,6 +68,8 @@
         "APP_BASE_URL": "https://communalcache.com",
         "BETTER_AUTH_URL": "https://communalcache.com",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
+        "TURNSTILE_HOSTNAMES": "communalcache.com",
         "VAPID_PUBLIC_KEY": ""
       },
       "d1_databases": [{
