@@ -90,7 +90,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | D1 2 | Caches / membership / joining | Implemented; in review: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
 | D1 3 | Shared items / attachments / photos | Implemented; in review: 0008 canonical items/attachments/cleanup, own-library APIs, retained atomic cache create+attach and scoped PATCH/photo routes, restored item UI. Requests/destruction remain gated; library/add-sheet/checkbox screens stay PR 6. |
 | D1 4 | Requests / shared stock / Lent out / notifications | Implemented; in review: 0009 requests, all-cache reservation guards, atomic token-gated decisions/outbox, direct party pagination, Lent out toggle/approval checkbox. Request APIs/screens reopen after race proofs; every destructive route stays gated for PR 5. |
-| D1 5 | Removal / detach / deletion / races | Planned; atomic cascades/snapshots and immediate membership enforcement |
+| D1 5 | Removal / leave / detach / deletion / races | Implemented; in review: guarded atomic cascades/outbox/cleanup, 0010 left-membership rebuild and rejoin semantics, removal/leave/detach/global-delete confirmations; no DO/config retirement. |
 | D1 6 | Library / add sheet / checkboxes / items board | Planned; items board 1a–1d and user flows, supersedes #28 |
 | D1 7 | Retire Durable Objects / staging reset | Planned; destructive deleted_classes migration and reset each need explicit approval |
 
@@ -238,7 +238,7 @@ server's shared available_quantity, not a sum of the visible cache queue; edits,
 decisions and availability changes invalidate item/request views across caches.
 No holder/return lifecycle or cancellation status is added.
 
-### PR 5 — Removal, detach, deletion and race tests
+### PR 5 — Removal, leave, detach, deletion and race tests
 
 Each destructive operation is ONE guarded atomic batch, not a JS loop or partial
 paginated commits. Primary token marker establishes authorization; INSERT ...
@@ -256,8 +256,26 @@ convergence protocol.
 
 Next SQL statement sees removal immediately. Racing creates either commit first
 and are included, or fail after removal/detach/delete; no sync-delivery wait.
-Completed approvals and previously authorized streams are not recalled. No new
-self-leave endpoint; a future approved leave must share the same batch protocol.
+Completed approvals and previously authorized streams are not recalled.
+
+**Approved leave semantics:** POST /api/caches/{cacheId}/leave runs the same cleanup
+as removal but sets status=left; owners get 409 and cannot leave. Migration 0010
+rebuilds memberships while preserving rows, timestamps, operation tokens, FKs and
+owner indexes. Older PR 4 code does not implement left-member rejoin; prefer a
+compatible fix-forward rather than assuming a code rollback restores that flow.
+Left is non-active (cache-data 404), but a valid-current-secret join
+behaves like a new member: open → active, gated → pending. Old attachments and
+rejected requests are never restored. Only removed retains valid-secret 403.
+
+Enable private DELETE /api/me/items/{itemId} as global delete, guarded cache-context
+DELETE .../items/{itemId} as its global-delete alias, and DELETE private item
+.../attachments/{cacheId} as detach-only. Current screens get owner Remove member,
+member Leave, an explicit every-cache/library global-delete confirmation and a
+small Stop sharing in this cache confirmation. Full checkbox/library UI stays PR 6.
+Membership/remove/leave and detach each use five fixed statements; global delete
+uses seven, independent of recipient count. All affected relational rows/outbox
+snapshots commit together. At most 25 Queue hints are sent after commit; Cron
+rescues the remaining durable outbox without splitting the destructive batch.
 
 **Proof:** real concurrent request/removal, attach/removal, decision/removal,
 request/detach and request/delete in both orders; no affected pending survivor;

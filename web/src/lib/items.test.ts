@@ -62,7 +62,10 @@ it('shows item details to members but edit, upload and confirmed delete controls
   expect(member).not.toContain('Edit item')
   expect(member).not.toContain('Upload photo')
   expect(member).not.toContain('Delete item')
+  expect(member).not.toContain('Stop sharing in this cache')
   expect(owner).toContain('Delete item')
+  expect(owner).toContain('Stop sharing in this cache')
+  expect(owner).toContain('your library and every cache')
   expect(owner).toContain('Confirm deletion')
   expect(owner).toContain('Neighbors with pending requests will be notified')
   expect(owner).toContain('Upload photo')
@@ -126,8 +129,10 @@ it('sends cookie-auth item CRUD to nested routes, without owner assignment or ed
   expect(JSON.parse(fetchMock.mock.calls[3][1]?.body as string)).not.toHaveProperty('is_consumable')
 })
 
-it('deletes through the same-origin nested item route without a request body', async () => {
+it('uses separate private global-delete and attachment-detach routes without choosing an owner', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
-  await apiFetch(`/api/caches/${cacheId}/items/${item.id}`, { method: 'DELETE' })
-  expect(fetchMock).toHaveBeenCalledWith(`/api/caches/${cacheId}/items/${item.id}`, expect.objectContaining({ method: 'DELETE', credentials: 'same-origin', body: undefined }))
+  await apiFetch(`/api/me/items/${item.id}`, { method: 'DELETE' })
+  await apiFetch(`/api/me/items/${item.id}/attachments/${cacheId}`, { method: 'DELETE' })
+  expect(fetchMock.mock.calls.map(call=>call[0])).toEqual([`/api/me/items/${item.id}`,`/api/me/items/${item.id}/attachments/${cacheId}`])
+  expect(fetchMock.mock.calls.every(call=>call[1]?.method==='DELETE' && call[1]?.credentials==='same-origin' && call[1]?.body===undefined)).toBe(true)
 })
