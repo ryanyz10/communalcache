@@ -7,7 +7,7 @@ function cache() { return env.CACHES.get(env.CACHES.newUniqueId()) }
 
 it('creates empty D1 auth/application schemas and records Wrangler migrations idempotently', async () => {
   const tables = (await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all<{name: string}>()).results.map(row => row.name)
-  for (const table of ['user','session','account','verification','rateLimit','caches','memberships','items','item_caches','r2_cleanup','r2_cleanup_cursor','my_caches','push_subscriptions','outbox','write_limits','d1_migrations']) expect(tables).toContain(table)
+  for (const table of ['user','session','account','verification','rateLimit','caches','memberships','items','item_caches','requests','r2_cleanup','r2_cleanup_cursor','my_caches','push_subscriptions','outbox','write_limits','d1_migrations']) expect(tables).toContain(table)
   const columns = (await env.DB.prepare('PRAGMA table_info(user)').all<{name: string; notnull: number}>()).results
   expect(columns.find(column => column.name === 'display_name')?.notnull).toBe(0)
   const migrations = (env as unknown as { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS

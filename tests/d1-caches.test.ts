@@ -195,15 +195,13 @@ it('retains committed outbox after Queue enqueue failure and Cron rescues it wit
   expect(batch).toHaveBeenCalledWith([{ body: rows[0].id }])
 })
 
-it('keeps request/destructive APIs gated without consulting DO membership or mutating data', async () => {
+it('keeps destructive APIs gated without consulting DO membership or mutating data', async () => {
   const caller = await login()
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
-  const cache = await createCache(env.DB, caller.id, 'Tools', false), item = crypto.randomUUID(), request = crypto.randomUUID()
+  const cache = await createCache(env.DB, caller.id, 'Tools', false), item = crypto.randomUUID()
   const base = `/api/caches/${cache.id}`
   const paths: [string, string[]][] = [
-    [base + `/items/${item}`, ['DELETE']], [base + `/items/${item}/requests`, ['GET', 'POST']],
-    [base + `/requests/${request}/approve`, ['POST']], [base + `/requests/${request}/reject`, ['POST']],
-    [base + `/members/${caller.id}`, ['DELETE']], ['/api/requests', ['GET']],
+    [base + `/items/${item}`, ['DELETE']], [base + `/members/${caller.id}`, ['DELETE']],
   ]
   const get = vi.fn(() => { throw new Error('Must not call legacy DO') })
   const gatedEnv = { ...env, CACHES: { ...env.CACHES, get } } as unknown as Env
