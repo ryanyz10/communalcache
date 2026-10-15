@@ -1,6 +1,6 @@
 # Copy to .dev.vars (gitignored). Generate a fresh local-only auth secret there.
-APP_BASE_URL=http://127.0.0.1:8787
-BETTER_AUTH_URL=http://127.0.0.1:8787
+APP_BASE_URL=http://localhost:8787
+BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=
 RESEND_API_KEY=
 EMAIL_FROM=Communal Cache <signin@send.communalcache.com>
@@ -10,3 +10,11 @@ VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 # For Vite development, change BOTH URLs above to http://localhost:5173.
 # Tests/UI fixture mock email; real Resend/domain setup needs approval.
+# The owner-configured real widget allows localhost. Put its real secret ONLY in
+# your gitignored .dev.vars; never commit it or copy deployment secrets into tests.
+TURNSTILE_SITE_KEY=0x4AAAAAAFX8jA_m3iHxQbuL
+TURNSTILE_SECRET=
+TURNSTILE_HOSTNAMES=localhost
+# Cloudflare dummy keys do not satisfy our strict action/hostname checks (their
+# verdict has hostname example.com and no action). Tests mock exact claims instead.
+# Official docs: https://developers.cloudflare.com/turnstile/troubleshooting/testing/

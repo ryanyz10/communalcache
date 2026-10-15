@@ -341,6 +341,31 @@ signin@send.communalcache.com on verified send.communalcache.com; domain ownersh
 alone is not verification. Auth success does not prove notification delivery.
 No legacy Supabase Auth/SMTP/provider settings change with this target.
 
+### Turnstile (owner-managed setup; live smoke pending)
+
+The public sitekey `0x4AAAAAAFX8jA_m3iHxQbuL` is owner-approved for both staging
+and production. `TURNSTILE_HOSTNAMES` remains environment-specific:
+`communalcache.com` for production/default, and
+`communalcache-staging.ryanyz10-be6.workers.dev` for staging. Never add localhost
+to a production allowlist. Only `TURNSTILE_SITE_KEY` is exposed by `/api/config`;
+`TURNSTILE_SECRET` is an owner-managed Worker secret, never a committed variable.
+Missing secret/hostnames fails closed with 403. This feature PR runs no secret or
+remote Cloudflare setup command; owner provisioning is separate.
+
+For local development, use localhost and the real widget's secret in gitignored
+`.dev.vars` as described by `.dev.vars.example` (no secret value in that example).
+Official dummy keys do not include the required hostname/action verdicts; do not
+add a local/test bypass to the Worker. Automated tests mock strict siteverify
+responses, including the documented always-fail and spent-token outcomes.
+
+The owner reports staging-secret provisioning; after approved merge/deploy,
+validate real widget tokens for magic-link sends, code fallback/resends and cache
+creation, plus missing/replayed/wrong-context rejection. Continue, code redemption,
+GET session and sign-out must still work without a challenge. Check expired/error
+recovery and sunny/evening widget appearance. Record exact revision/environment
+receipts; local tests/fixtures and a secret being present do not prove real-token
+verification. Bot Fight Mode/domain/provider changes remain separately approved.
+
 ### Web push
 
 @block65/webcrypto-web-push@2.0.0 retained after local RFC 8291/VAPID proof. Separate
@@ -361,9 +386,10 @@ push/production CPU require separately approved proof.
 
 ### Public values and secret handling
 
-Public: APP_BASE_URL, BETTER_AUTH_URL, VAPID_PUBLIC_KEY, EMAIL_FROM; /api/config
+Public: APP_BASE_URL, BETTER_AUTH_URL, VAPID_PUBLIC_KEY, EMAIL_FROM,
+TURNSTILE_SITE_KEY and environment-local TURNSTILE_HOSTNAMES; /api/config
 exposes only intended public fields. Secrets: BETTER_AUTH_SECRET, RESEND_API_KEY,
-VAPID_PRIVATE_KEY, explicitly passed as Worker bindings. No target DATABASE_URL,
+VAPID_PRIVATE_KEY, TURNSTILE_SECRET, explicitly passed as Worker bindings. No target DATABASE_URL,
 Supabase credential, browser R2 credential or provider anon key. Never put secret
 values on argv, in git, screenshots or logs. Approved operator secret updates use
 interactive Wrangler prompts and explicit named environment, not guessed login.

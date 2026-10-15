@@ -11,17 +11,21 @@ import { CacheBox, PixelHorizon } from '../components/PixelArt'
 import { LandingPage } from './LandingPage'
 import { JoinInviteSheet } from './JoinInviteSheet'
 import { CacheLink } from '../components/CacheLink'
+import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 
 export function HomePage() {
   const { me } = useAuth()
   const navigate = useNavigate()
   const client = useQueryClient()
   const dialog = useRef<HTMLDialogElement>(null), joinDialog = useRef<HTMLDialogElement>(null)
+  const botCheck = useRef<TurnstileHandle>(null)
+  const [createOpen, setCreateOpen] = useState(false), [botToken, setBotToken] = useState('')
   const [name, setName] = useState('')
   const [requiresApproval, setRequiresApproval] = useState(false)
   const caches = useQuery({ queryKey: ['caches'], queryFn: () => apiFetch<CacheSummary[]>('/api/caches'), enabled: !!me?.display_name })
   const create = useMutation({
-    mutationFn: () => apiFetch<CacheInfo>('/api/caches', { body: { name, requires_approval: requiresApproval } }),
+    mutationFn: () => apiFetch<CacheInfo>('/api/caches', { body: { name, requires_approval: requiresApproval }, turnstileToken: botToken }),
+    onSettled: () => botCheck.current?.reset(),
     onSuccess: cache => {
       dialog.current?.close()
       void client.invalidateQueries({ queryKey: ['caches'] })
@@ -31,7 +35,7 @@ export function HomePage() {
   if (!me) return <LandingPage />
   if (peekJoinToken()) return <Navigate to={destinationAfterLogin()} replace />
   if (!me.display_name) return <OnboardingPage />
-  function openCreate() { create.reset(); dialog.current?.showModal() }
+  function openCreate() { create.reset(); setCreateOpen(true); dialog.current?.showModal() }
   function onCreate(event: FormEvent) { event.preventDefault(); create.mutate() }
   return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <section aria-labelledby="caches-heading">
@@ -50,14 +54,15 @@ export function HomePage() {
     </section>
     <LibrarySection preview />
     <JoinInviteSheet dialog={joinDialog} />
-    <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="new-cache-heading" onCancel={event => { if (create.isPending) event.preventDefault() }}>
+    <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="new-cache-heading" onClose={() => { setCreateOpen(false); setBotToken('') }} onCancel={event => { if (create.isPending) event.preventDefault() }}>
       <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 lg:hidden" />
       <h2 id="new-cache-heading" className="text-xl font-semibold">New cache</h2>
       <form className="mt-4 space-y-4" onSubmit={onCreate}>
         <div><label htmlFor="cache-name" className="block text-sm font-medium">Name</label><input autoFocus id="cache-name" type="text" required maxLength={60} value={name} onChange={event => setName(event.target.value)} className="cc-input" /></div>
         <label className="flex items-center justify-between gap-3"><span><span className="block font-medium">Approve new members</span><span className="block text-sm text-slate-600">Off: anyone with the invite joins right away.</span></span><input type="checkbox" role="switch" aria-checked={requiresApproval} checked={requiresApproval} onChange={event => setRequiresApproval(event.target.checked)} className="cc-switch" /></label>
+        {createOpen && <Turnstile ref={botCheck} action="create_cache" onToken={setBotToken} />}
         {create.isError && <p role="alert" className="text-red-700">{errorMessage(create.error)}</p>}
-        <div className="flex gap-3 lg:flex-row-reverse lg:justify-start"><button type="submit" disabled={create.isPending || !name.trim()} className="flex-1 rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60 lg:flex-none">{create.isPending ? 'Creating…' : 'Create cache'}</button><button type="button" disabled={create.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button></div>
+        <div className="flex gap-3 lg:flex-row-reverse lg:justify-start"><button type="submit" disabled={create.isPending || !name.trim() || !botToken} className="flex-1 rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60 lg:flex-none">{create.isPending ? 'Creating…' : 'Create cache'}</button><button type="button" disabled={create.isPending} onClick={() => dialog.current?.close()} className="rounded-md border border-slate-300 px-4 py-2">Cancel</button></div>
       </form>
     </dialog>
   </main>
