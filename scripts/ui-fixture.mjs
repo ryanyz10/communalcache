@@ -12,6 +12,8 @@ const caches = new Map()
 const items = new Map()
 const photos = new Map()
 const requests = new Map()
+const magicLinks = new Map()
+let lastMagicLink = ''
 let vite
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname
@@ -19,6 +21,11 @@ const server = createServer(async (request, response) => {
   function json(value, status = 200) {
     response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
     response.end(JSON.stringify(value))
+  }
+  if (path === '/__fixture/magic-link') {
+    response.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' })
+    response.end(`<!doctype html><html lang="en"><meta name="referrer" content="no-referrer"><title>Mock sign-in email</title><main><h1>Mock sign-in email</h1>${lastMagicLink ? `<a href="${lastMagicLink}">Open latest fixture sign-in link</a>` : '<p>Request a link from the login page first.</p>'}</main></html>`)
+    return
   }
   if (path.startsWith('/api/')) {
     const chunks = []
@@ -35,6 +42,25 @@ const server = createServer(async (request, response) => {
     const sessionId = request.headers.cookie?.match(/(?:^|;\s*)ui_fixture=([^;]+)/)?.[1]
     let me = [...users.values()].find(user=>user.id===sessionId) ?? null
     const authenticated = !!me
+    if (path === '/api/auth/sign-in/magic-link') {
+      if (body.email === 'failure@example.test') { json({error:'email_unavailable'},502); return }
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+      const token = [...randomBytes(32)].map(byte => alphabet[byte % alphabet.length]).join('')
+      magicLinks.set(token,{email:body.email,expiresAt:Date.now()+300000})
+      lastMagicLink = `http://${request.headers.host}/auth/link#token=${token}`
+      json({status:true})
+      return
+    }
+    if (path === '/api/auth/magic-link/verify') {
+      const link = magicLinks.get(body.token)
+      magicLinks.delete(body.token)
+      if (request.method !== 'POST' || !link || link.expiresAt <= Date.now()) { json({error:'invalid_magic_link'},400); return }
+      me = users.get(link.email) ?? {id:randomUUID(),email:link.email,display_name:null}
+      users.set(link.email,me)
+      response.setHeader('Set-Cookie',`ui_fixture=${me.id}; HttpOnly; SameSite=Lax; Path=/`)
+      json({success:true,callback_url:`http://${request.headers.host}/`})
+      return
+    }
     if (path === '/api/auth/email-otp/send-verification-otp') {
       json(body.email === 'failure@example.test' ? {error: 'email_unavailable'} : {success:true}, body.email === 'failure@example.test' ? 502 : 200)
       return

@@ -1,5 +1,7 @@
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { emailOTP } from 'better-auth/plugins/email-otp'
+import { magicLink } from 'better-auth/plugins/magic-link'
+import { magicLandingUrl } from './magic-links'
 import { APIError } from 'better-auth/api'
 
 export type AuthEnv = {
@@ -92,6 +94,30 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
         })
         await response.body?.cancel()
         if (!response.ok) throw new Error('Could not send sign-in code')
+        if (delivery) delivery.status = 'sent'
+      },
+    }), magicLink({
+      expiresIn: 300,
+      storeToken: 'hashed',
+      disableSignUp: false,
+      rateLimit: { window: 60, max: 5 },
+      async sendMagicLink({ email, url, token }) {
+        const link = magicLandingUrl(env.APP_BASE_URL, token, url)
+        if (delivery) delivery.status = 'failed'
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          redirect: 'manual',
+          signal: AbortSignal.timeout(10_000),
+          headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: env.EMAIL_FROM,
+            to: [email],
+            subject: 'Your Communal Cache sign-in link',
+            text: `Sign in to Communal Cache:\n${link}\n\nThis link expires in 5 minutes. Use the newest link if you requested another. Open it, then press Continue to sign in.`,
+          }),
+        })
+        await response.body?.cancel()
+        if (!response.ok) throw new Error('Could not send sign-in link')
         if (delivery) delivery.status = 'sent'
       },
     })],
