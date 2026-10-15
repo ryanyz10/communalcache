@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router'
+import { Navigate, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
@@ -10,6 +10,7 @@ import { LibrarySection } from './LibraryPage'
 import { CacheBox, PixelHorizon } from '../components/PixelArt'
 import { LandingPage } from './LandingPage'
 import { JoinInviteSheet } from './JoinInviteSheet'
+import { CacheLink } from '../components/CacheLink'
 
 export function HomePage() {
   const { me } = useAuth()
@@ -41,10 +42,10 @@ export function HomePage() {
       <PixelHorizon kind="boxes" entries={(caches.data ?? []).map(cache=>({...cache,to:`/caches/${cache.id}`}))} /></div>
       {caches.isPending && <p role="status" className="mt-3">Loading caches…</p>}
       {caches.isError && <div className="mt-3"><p role="alert" className="text-red-700">{errorMessage(caches.error)} Previously loaded caches may be out of date.</p><button className="mt-2 text-sm underline" onClick={() => void caches.refetch()}>Try caches again</button></div>}
-      {!!caches.data?.length && <ul className="cc-list mt-3 lg:mt-6 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{caches.data.map(cache => <li key={cache.id} className="border-t border-slate-100 first:border-t-0 lg:border-0"><Link to={`/caches/${cache.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:grid lg:min-h-[118px] lg:grid-cols-[1fr_auto] lg:gap-y-3.5 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-[18px]">
-        <span aria-hidden="true" className="hidden lg:flex lg:size-10 lg:items-center lg:justify-center lg:rounded-[10px] lg:bg-indigo-100 lg:font-bold lg:text-indigo-800"><CacheBox name={cache.name} /></span>
+      {!!caches.data?.length && <ul className="cc-list mt-3 lg:mt-6 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{caches.data.map(cache => <li key={cache.id} className="border-t border-slate-100 first:border-t-0 lg:border-0"><CacheLink to={`/caches/${cache.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:grid lg:min-h-[118px] lg:grid-cols-[1fr_auto] lg:gap-y-3.5 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-[18px]">
+        <span aria-hidden="true" className="cc-cache-icon hidden lg:flex lg:size-10 lg:items-center lg:justify-center lg:rounded-[10px] lg:bg-indigo-100 lg:font-bold lg:text-indigo-800"><CacheBox name={cache.name} /></span>
         <span className="min-w-0 flex-1 break-words font-semibold lg:col-span-2 lg:row-start-2">{cache.name}</span><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:col-start-2 lg:row-start-1">›</span>
-      </Link></li>)}</ul>}
+      </CacheLink></li>)}</ul>}
       {caches.isSuccess && !caches.data.length && <div className="mt-3 rounded-[10px] border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">No caches yet. Create one to start sharing.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="cc-outline min-h-11" onClick={openCreate}>New cache</button><button type="button" className="cc-outline min-h-11" aria-haspopup="dialog" onClick={()=>joinDialog.current?.showModal()}>Join with an invite</button></div></div>}
     </section>
     <LibrarySection preview />
