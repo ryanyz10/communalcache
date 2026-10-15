@@ -4,7 +4,7 @@ import worker from '../src/index'
 import { authOptions } from '../src/auth'
 import { authRequest, appRequest, base, login } from './helpers'
 
-type Mail = { text: string; subject: string; to: string[] }
+type Mail = { text: string; html?: string; subject: string; to: string[] }
 function mailMock() {
   const mails: Mail[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -49,6 +49,29 @@ it('sends only a fixed-origin fragment landing link, hashes 300s tokens and keep
   const plugin = authOptions(env).plugins.find(row => row.id === 'magic-link')!
   expect(plugin.options).toMatchObject({ expiresIn: 300, storeToken: 'hashed', rateLimit: { window: 60, max: 5 } })
   expect(plugin.options).not.toHaveProperty('allowedAttempts')
+})
+
+it('sends a responsive inline/table HTML sign-in button with an escaped landing href and unchanged text fallback', async () => {
+  const mails = mailMock()
+  expect((await sendLink('neighbor@example.test', { callbackURL: '/requests?source=email&view=mine' })).status).toBe(200)
+  const mail = mails[0], url = link(mail)
+  expect(url.href).toContain('&')
+  const escaped = url.href.replaceAll('&', '&amp;')
+  expect(mail.html).toContain(`href="${escaped}"`)
+  expect(mail.html).not.toContain(`href="${url.href}"`)
+  expect(mail.html).toMatch(/<a [^>]+>Sign in<\/a>/)
+  expect(mail.html).toContain('<table role="presentation"')
+  expect(mail.html).toContain('Sign in to Communal Cache')
+  expect(mail.html).toContain('Tap the button, then press Continue.')
+  expect(mail.html).toContain('This link works once and expires in 5 minutes.')
+  expect(mail.html).toContain('use the newest email')
+  expect(mail.html).toContain("Didn't ask for this? You can ignore it.")
+  expect(mail.html).not.toMatch(/<img\b|<svg\b|<script\b|<style\b|<link\b/)
+  expect(mail.html).not.toContain('/api/auth/magic-link/verify')
+  expect(mail.html).not.toContain('neighbor@example.test')
+  expect(mail.text).toContain(url.href)
+  expect(mail.text).toContain('Open it, then press Continue')
+  expect(mail.text).not.toMatch(/\b\d{6}\b/)
 })
 
 it('scanner GET/HEAD and public GET verification consume nothing; explicit POST creates a private session without prior browser state', async () => {
