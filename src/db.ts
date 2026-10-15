@@ -277,9 +277,39 @@ const itemAccess = `(? IS NULL AND i.owner_id=?) OR EXISTS(
   JOIN memberships owner ON owner.cache_id=c.id AND owner.user_id=i.owner_id AND owner.status='active'
   WHERE a.item_id=i.id AND a.cache_id=?)`
 
+type LibraryRow = ItemRow & { caches_json: string; pending_count: number }
+const libraryRead = `SELECT library.*,
+  (SELECT json_group_array(json_object('id',c.id,'name',c.name)) FROM item_caches a
+    JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
+    JOIN memberships m ON m.cache_id=c.id AND m.user_id=library.owner_id AND m.status='active'
+    WHERE a.item_id=library.id) AS caches_json,
+  (SELECT COUNT(*) FROM requests WHERE item_id=library.id AND status='pending') AS pending_count
+  FROM (${itemRead} WHERE i.owner_id=?) library`
+
+function libraryItemInfo(row: LibraryRow) {
+  const { caches_json, pending_count, ...item } = row
+  const caches = JSON.parse(caches_json) as { id: string; name: string }[]
+  caches.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+  return { ...itemInfo(item, null), caches, pending_count }
+}
+
 export async function libraryItems(db: D1Database, userId: string) {
-  const rows = await db.prepare(`${itemRead} WHERE i.owner_id=? ORDER BY i.created_at DESC,i.id`).bind(userId).all<ItemRow>()
-  return rows.results.map(row => itemInfo(row, null))
+  const rows = await db.prepare(`${libraryRead} ORDER BY library.created_at DESC,library.id DESC`).bind(userId).all<LibraryRow>()
+  return rows.results.map(libraryItemInfo)
+}
+
+export async function libraryPage(db: D1Database, userId: string, after: string | null) {
+  let time: number | null = null, id: string | null = null
+  if (after !== null) {
+    const match = after.match(/^([0-9]{1,16})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
+    if (!match || !Number.isSafeInteger(Number(match[1]))) throw new HttpError(400, 'invalid_cursor')
+    time = Number(match[1]); id = match[2].toLowerCase()
+  }
+  const rows = (await db.prepare(`${libraryRead}
+    WHERE (? IS NULL OR library.created_at<? OR (library.created_at=? AND library.id<?))
+    ORDER BY library.created_at DESC,library.id DESC LIMIT 26`).bind(userId,time,time,time,id).all<LibraryRow>()).results
+  const items = rows.slice(0,25).map(libraryItemInfo), last = items.at(-1)
+  return { items, next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
 }
 
 export async function cacheItems(db: D1Database, cacheId: string, userId: string) {
@@ -299,7 +329,10 @@ export async function readItem(db: D1Database, itemId: string, userId: string, c
 }
 
 export async function itemDetail(db: D1Database, itemId: string, userId: string, cacheId: string | null = null) {
-  return itemInfo(await readItem(db, itemId, userId, cacheId), cacheId)
+  if (cacheId !== null) return itemInfo(await readItem(db, itemId, userId, cacheId), cacheId)
+  const row = await db.prepare(`${libraryRead} WHERE library.id=?`).bind(userId,itemId).first<LibraryRow>()
+  if (!row) throw new HttpError(404, 'not_found')
+  return libraryItemInfo(row)
 }
 
 export async function createItem(db: D1Database, userId: string, changes: ItemChanges, cacheId: string | null = null) {

@@ -1,6 +1,6 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryItems, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto } from './photos'
@@ -162,7 +162,7 @@ async function dispatch(request: Request, env: Env) {
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
     if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
-    if (!itemId && method === 'GET') return json(cacheId ? await cacheItems(env.DB, cacheId, profile.id) : await libraryItems(env.DB, profile.id))
+    if (!itemId && method === 'GET') return json(cacheId ? await cacheItems(env.DB, cacheId, profile.id) : await libraryPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
     if (method === 'POST') return json(await createItem(env.DB, profile.id, itemChanges(await readBody(request), true), cacheId), 201)
     if (method === 'PATCH') return json(await updateItem(env.DB, itemId!, profile.id, itemChanges(await readBody(request), false), cacheId))
     return json(await itemDetail(env.DB, itemId!, profile.id, cacheId))

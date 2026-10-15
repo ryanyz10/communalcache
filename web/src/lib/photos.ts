@@ -25,8 +25,8 @@ export async function resizePhoto(file: File): Promise<Blob> {
   } catch { throw new Error(PHOTO_READ_ERROR) }
 }
 
-export async function uploadPhoto(cacheId: string, itemId: string, photo: Blob): Promise<Item> {
-  const response = await fetch(`/api/caches/${cacheId}/items/${itemId}/photo`, {
+export async function uploadPhoto(cacheId: string | null, itemId: string, photo: Blob): Promise<Item> {
+  const response = await fetch(`${cacheId ? `/api/caches/${cacheId}/items` : '/api/me/items'}/${itemId}/photo`, {
     method: 'POST', credentials: 'same-origin',
     headers: { Accept: 'application/json', 'Content-Type': photo.type }, body: photo,
   })
