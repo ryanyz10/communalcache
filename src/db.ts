@@ -39,6 +39,8 @@ export async function applyCacheIntent(db: D1Database, kind: string, payload: st
       .bind(data.cache_id, data.name, data.created_at).run()
   } else if (kind === 'discovery_upsert') {
     result = await db.prepare('INSERT OR IGNORE INTO my_caches(user_id, cache_id) VALUES (?, ?)').bind(data.user_id, data.cache_id).run()
+  } else if (kind === 'discovery_delete') {
+    result = await db.prepare('DELETE FROM my_caches WHERE user_id=? AND cache_id=?').bind(data.user_id, data.cache_id).run()
   } else if (kind === 'notification') {
     if (!intentId || createdAt === undefined) throw new Error('Missing notification intent identity')
     // Replay must not reset attempts, claims or terminal state.

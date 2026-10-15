@@ -9,7 +9,7 @@ import { HomePage } from '../pages/HomePage'
 import { apiFetch, ApiError, errorMessage } from './api'
 
 const id='11111111-1111-4111-8111-111111111111'
-const cache={id,name:'Tools',owner_id:'owner',requires_approval:false,invite_token:id+'.'+'a'.repeat(43),members:[{user_id:'owner',display_name:'Neighbor'}]}
+const cache={id,name:'Tools',owner_id:'owner',requires_approval:false,invite_token:id+'.'+'a'.repeat(43),members:[{user_id:'owner',display_name:'Neighbor'},{user_id:'member',display_name:'Member neighbor'}]}
 
 function renderPage(owner:boolean, home=false) {
   vi.stubGlobal('location',{origin:'http://127.0.0.1:8788'})
@@ -32,7 +32,11 @@ it('shows owner settings and confirmation controls only to the owner',()=>{
   expect(owner).toContain('Owner settings')
   expect(owner).toContain('Rotate invite')
   expect(owner).toContain('Confirm rotation')
-  expect(owner).toContain('Members (1)')
+  expect(owner).toContain('Members (2)')
+  expect(owner).toContain('Remove Member neighbor')
+  expect(owner).toContain('Confirm removal')
+  expect(owner).toContain('cannot rejoin with an invite')
+  expect(owner).not.toContain('Remove Neighbor')
   expect(owner).toContain('Join requests')
   expect(owner).toContain('New neighbor')
   expect(owner).toContain('Approve New neighbor')
@@ -41,6 +45,7 @@ it('shows owner settings and confirmation controls only to the owner',()=>{
   expect(member).not.toContain('Owner settings')
   expect(member).not.toContain('Join requests')
   expect(member).not.toContain('>Rotate invite<')
+  expect(member).not.toContain('Remove Member neighbor')
   expect(member).toContain('Copy invite')
   expect(member).toContain(`/join/${cache.invite_token}`)
 })
@@ -73,6 +78,13 @@ it('sends owner decisions to the selected cache and applicant routes',async()=>{
     `/api/caches/${id}/join-requests/applicant/reject`,
   ])
   expect(fetchMock.mock.calls.slice(1).every(call=>call[1]?.method==='POST')).toBe(true)
+})
+
+it('sends owner member removal to the nested cache route without a body',async()=>{
+  const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(null,{status:204}))
+  await apiFetch(`/api/caches/${id}/members/member`,{method:'DELETE'})
+  expect(fetchMock).toHaveBeenCalledWith(`/api/caches/${id}/members/member`,expect.objectContaining({method:'DELETE',credentials:'same-origin',body:undefined}))
+  expect(errorMessage(new ApiError(409,'owner_cannot_be_removed'))).toContain('cannot be removed')
 })
 
 it('distinguishes invalid names and unavailable cache data in the UI',()=>{

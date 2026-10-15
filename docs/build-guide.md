@@ -71,7 +71,7 @@ Update a feature's row in its own PR. Implementation and review status are separ
 | 5 | Requests | Implemented; in review (transactional reservations/decisions, bounded discovery; no deployment) | — |
 | 6 | Notifications + email | Implemented; in review (guarded Queue/email delivery + recovery; remote setup pending) | — |
 | 7 | Web push + PWA | Implemented; in review (local crypto/storage/PWA proof; live push/iOS UNVERIFIED) | — |
-| 8 | Member removal and item deletion | Not started | — |
+| 8 | Member removal and item deletion | Implemented; in review (atomic cascades, durable D1/R2/outbox cleanup; no deployment) | — |
 | 9 | Polish | Not started | — |
 
 ---
@@ -535,6 +535,20 @@ recipients/R2 cleanup, failed mutation leaves neither partial state nor intents.
 Create vs deletion/owner-removal yields 404, or success included in durable removal
 notifications; never success silently erased without an intent. Stale D1 indexes
 and photo links fail the next DO membership check.
+
+The port has no self-leave endpoint; only the active cache owner may remove an
+active non-owner member. Removal marks the member removed, deletes their items,
+rejects their pending requests on surviving items, records `member_removed` and
+`item_deleted` recipient snapshots plus `discovery_delete`, all in one local transaction.
+Item deletion is item-owner-only and records pending-requester snapshots before cascade.
+
+Photo cleanup records the current exact key and an `r2_delete_prefix` intent for
+`cacheId/itemId/` (trailing slash), only for items deleted in that transaction. The
+ordered drain lists one 100-key page, deletes it, and keeps the intent until a list is
+empty, so replay is idempotent and non-current versions are swept. A late upload
+to a deleted item is rejected and records exact-key cleanup. `ponytail:` a Worker
+crash after R2 put but before DO finalization can still leave an unreferenced object
+(storage leak, never access); the upgrade path is an orphan sweep or lifecycle rule.
 
 ---
 
