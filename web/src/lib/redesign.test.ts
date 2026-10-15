@@ -9,7 +9,7 @@ import { HomePage } from '../pages/HomePage'
 import { AccountPage } from '../pages/AccountPage'
 import { CachePage } from '../pages/CachePage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
-import { pendingIncomingCount, requestPreview, type ItemRequest, type RequestsPageData } from './requests'
+import { pendingIncomingCount, type ItemRequest, type RequestsPageData } from './requests'
 import { shareInvite } from './invites'
 import { apiFetch } from './api'
 
@@ -34,40 +34,39 @@ function render(element: ReactElement, options: { caller?: string; path?: string
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('counts only pending incoming requests and previews pending incoming before outgoing with a three-row cap', () => {
+it('counts only pending incoming requests for the profile badge', () => {
   const outgoing = { ...row, id: 'outgoing', requester_id: 'owner', owner_id: 'member', status: 'approved' as const, decided_at: 2 }
   const decidedIncoming = { ...row, id: 'decided', status: 'rejected' as const, decided_at: 3 }
   const second = { ...row, id: 'second' }, third = { ...outgoing, id: 'third', status: 'rejected' as const }
   const rows = [outgoing, decidedIncoming, row, third, second]
   expect(pendingIncomingCount(rows, 'owner')).toBe(2)
-  expect(requestPreview(rows, 'owner').map(row => row.id)).toEqual(['incoming', 'second', 'outgoing'])
-  expect(requestPreview(rows, 'outsider')).toEqual([])
+  expect(pendingIncomingCount(rows, 'outsider')).toBe(0)
 })
 
 it('renders accessible header destinations, avatar and a first-page-only badge, hidden at zero', () => {
   const pages: RequestsPageData[] = [{ requests: [row], unavailable_cache_ids: [], next_cursor: 'next' }, { requests: [{ ...row, id: 'later' }], unavailable_cache_ids: [], next_cursor: null }]
   const markup = render(createElement(AppHeader), { pages })
-  expect(markup).toContain('aria-label="Requests"')
+  expect(markup).toContain('aria-label="Home"')
   expect(markup).toContain('href="/account"')
-  expect(markup).toContain('aria-label="Account"')
-  expect(markup).toContain('1 pending incoming requests in the first page')
+  expect(markup).toContain('aria-label="Account menu, 1 request needs your answer"')
+  expect(markup).toContain('Requests, 1 pending incoming on the first page')
   expect(markup).not.toContain('2 pending incoming')
   expect(markup).not.toContain('private@example.test')
   const empty = render(createElement(AppHeader), { pages: [{ requests: [], unavailable_cache_ids: [], next_cursor: null }] })
-  expect(empty).not.toContain('pending incoming requests in the first page')
+  expect(empty).not.toContain('pending incoming on the first page')
   expect(render(createElement(AppHeader), { route: '/login', path: '/login' })).toBe('')
 })
 
-it('renders truthful home discovery and relevant request rows without account controls or invented counts', () => {
+it('renders caches only on home without a request preview, account controls or invented counts', () => {
   const outgoing = { ...row, id: 'outgoing', item_title: 'Ladder', requester_id: 'owner', owner_id: 'member', owner_name: 'Sam', status: 'approved' as const, decided_at: 2 }
   const markup = render(createElement(HomePage), { pages: [{ requests: [outgoing, row], unavailable_cache_ids: ['unavailable'], next_cursor: 'next' }] })
   expect(markup).toContain('Your caches')
   expect(markup).toContain('Maple Street')
-  expect(markup).toContain('See all')
-  expect(markup.indexOf('Priya wants 1 Starter')).toBeLessThan(markup.indexOf('You asked Sam for Ladder'))
-  expect(markup).toContain('Pending')
-  expect(markup).toContain('Approved')
-  expect(markup).toContain('preview may be incomplete')
+  expect(markup).not.toContain('See all')
+  expect(markup).not.toContain('Priya wants 1 Starter')
+  expect(markup).not.toContain('You asked Sam for Ladder')
+  expect(markup).not.toContain('preview-heading')
+  expect(markup).not.toContain('minmax(0,1fr)_340px')
   for (const absent of ['Your items', 'Sign out', 'Push notifications', 'members ·', 'want to join', 'Refresh']) expect(markup).not.toContain(absent)
   expect(markup).toContain('aria-labelledby="new-cache-heading"')
   expect(markup).toContain('for="cache-name"')
