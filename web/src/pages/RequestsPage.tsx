@@ -79,7 +79,7 @@ export function RequestsPage({ itemsMoving = false }: { itemsMoving?: boolean })
   const query = useRequests(!!me?.display_name && !itemsMoving)
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  if (itemsMoving) return <main className="cc-page"><h1 className="text-2xl font-semibold">Requests</h1><p role="status" className="mt-6">Items are being moved, back soon</p></main>
+  if (itemsMoving) return <main className="cc-page"><h1 className="text-2xl font-semibold">Requests</h1><p role="status" className="mt-6">Requests are being moved, back soon</p></main>
   const requests = query.data?.pages.flatMap(page => page.requests) ?? []
   const unavailable = query.data?.pages.flatMap(page => page.unavailable_cache_ids) ?? []
   return <main className="cc-page lg:max-w-[1120px] lg:p-8">

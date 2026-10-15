@@ -144,12 +144,12 @@ it('rolls back thrown item mutations without new cross-store work, and item entr
   }
 })
 
-it('gates legacy Worker item routes while retaining cookie, Origin and profile protection', async () => {
+it('retains cookie, Origin/profile protection and non-member 404 on reopened Worker item routes', async () => {
   const caller = await login(), path = `/api/caches/${crypto.randomUUID()}/items`
   expect((await worker.fetch(appRequest(path, { method: 'POST', body: {} }), env)).status).toBe(401)
   expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(409)
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
   for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, origin, body: {} }), env)).status).toBe(403)
-  expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(503)
-  expect((await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)).status).toBe(503)
+  expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: { title: 'Mixer', is_consumable: false } }), env)).status).toBe(404)
+  expect((await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)).status).toBe(404)
 })

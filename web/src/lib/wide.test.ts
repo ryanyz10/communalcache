@@ -80,6 +80,20 @@ it('uses wide-only breadcrumbs, Settings label and photo cards without duplicati
   expect(detail.match(/>Starter<\/h1>/g)).toHaveLength(1)
 })
 
+it('reopens item/photo screens while hiding request and deletion controls until their protocols ship', () => {
+  const detail = render(createElement(ItemPage, { requestsDisabled: true, deletionDisabled: true }), { route: '/caches/:cacheId/items/:itemId', path: `/caches/${id}/items/${itemId}` })
+  expect(detail).toContain('>Starter</h1>')
+  expect(detail).toContain('Edit item')
+  expect(detail).toContain('Upload photo')
+  expect(detail).toContain('Requests are being moved, back soon')
+  expect(detail).not.toContain('Delete item')
+  expect(detail).not.toContain('Ask to use')
+  expect(detail).not.toContain('Approve request')
+  const cache = render(createElement(CachePage), { route: '/caches/:cacheId', path: `/caches/${id}` })
+  expect(cache).toContain('+ Add item')
+  expect(cache).not.toContain('Items are being moved')
+})
+
 it('adds a hidden sticky settings menu with only authorized sections and matching anchor ids', () => {
   const options = { route: '/caches/:cacheId/settings', path: `/caches/${id}/settings` }
   const owner = render(createElement(CacheSettingsPage), options)

@@ -90,7 +90,7 @@ it('preserves partial-unavailable warnings and continuation instead of pretendin
 
 it('shows only the transition message instead of cached legacy requests when gated', () => {
   const markup = render('all', { moving: true })
-  expect(markup).toContain('Items are being moved, back soon')
+  expect(markup).toContain('Requests are being moved, back soon')
   expect(markup).not.toContain('Needs your answer')
   expect(markup).not.toContain('Approve request')
   expect(markup).not.toContain('Sugar')
