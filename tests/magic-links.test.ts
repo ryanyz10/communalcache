@@ -172,6 +172,36 @@ it('rejects foreign/protocol-relative/credential callbacks before send or consum
   expect((await verify(url)).status).toBe(200)
 })
 
+it.each([false,true])('carries a valid invite across independent-browser verification and keeps the explicit %s approval join step', async requiresApproval => {
+  const mails = mailMock(), owner=crypto.randomUUID(), now=new Date().toISOString()
+  await env.DB.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt,display_name) VALUES (?,?,?,1,?,?,?)').bind(owner,'Owner',`${owner}@example.test`,now,now,'Owner').run()
+  const cache=await createCache(env.DB,owner,'Maple St',requiresApproval), destination=`/join/${cache.invite_token}`
+  expect((await sendLink('new-browser@example.test',{callbackURL:destination})).status).toBe(200)
+  const url=link(mails[0]), fragment=new URLSearchParams(url.hash.slice(1))
+  expect(url.pathname).toBe('/auth/link');expect(url.search).toBe('')
+  for(const field of ['callbackURL','newUserCallbackURL','errorCallbackURL']) expect(fragment.get(field)).toBe(destination)
+  const response=await verify(url), cookie=response.headers.get('Set-Cookie')!.split(';')[0]
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({success:true,callback_url:base+destination})
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM memberships').first('n')).toBe(1)
+  await worker.fetch(appRequest('/api/me',{method:'PATCH',cookie,body:{display_name:'Neighbor'}}),env)
+  const joined=await worker.fetch(appRequest(`/api/caches/${cache.id}/join`,{method:'POST',cookie,body:{secret:cache.invite_token.split('.')[1]}}),env)
+  expect(await joined.json()).toMatchObject({cache_id:cache.id,name:'Maple St',status:requiresApproval?'pending':'active'})
+})
+
+it('rejects malformed or non-relative invite callbacks before send or consume while retaining ordinary same-origin callbacks', async ()=>{
+  const mails=mailMock(), invite=`11111111-1111-4111-8111-111111111111.${'A'.repeat(43)}`
+  await sendLink()
+  const url=link(mails[0])
+  for(const field of ['callbackURL','newUserCallbackURL','errorCallbackURL']) for(const value of [base+`/join/${invite}`,`https://foreign.test/join/${invite}`,`join/${invite}`,base+`/JOIN/${invite}`,`/j%6fin/${invite}`,'/join/bad',`/join/${invite}/`,`/join/${invite}?next=evil`,`/join/${invite}#x`]) {
+    const send=await sendLink('neighbor@example.test',{[field]:value}), consume=await verify(url,{[field]:value})
+    expect(send.status).toBe(400);expect(consume.status).toBe(400)
+    expect(await send.json()).toEqual({error:'invalid_callback'})
+  }
+  expect(mails).toHaveLength(1)
+  expect((await verify(url)).status).toBe(200)
+})
+
 it('normalizes relative/exact-origin callbacks and selects the plugin new-user versus existing-user destination', async () => {
   const mails = mailMock()
   await sendLink('neighbor@example.test', { callbackURL: '/requests', newUserCallbackURL: base + '/welcome', errorCallbackURL: '/login' })

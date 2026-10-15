@@ -105,6 +105,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
 | Readiness 9 | Supporter tips link | not started — needs owner setup; hosted link only, hidden until configured, no webhooks/app storage/unlocks |
 | Readiness | Signed-out landing page | Implemented; in review: public `/` uses the cozy landing mock and shared pixel art, centralized copy/metadata and sign-in CTAs. Session resolution gates rendering; signed-in Home and invite/magic-link paths are unchanged. No new dependencies or public cache data. |
+| Fix | Invite sign-in continuity / paste-to-join | Implemented; in review: strict invite callback survives magic-link tab changes, one-hour session/local intent fallback, clear-on-join/sign-out/expiry, and Home paste sheet. Explicit Continue + Join and gated pending flow remain; general same-origin callback contract is preserved. |
 | Gate 10 | Full user-flow parity and cleanup refactor | not started — final release scope, regression-backed cleanup and phone/wide/theme/accessibility/error checklist |
 | Gate 11 | Independent security review | not started — independent reviewer, exact revision/scope, findings fixed or explicitly accepted; not a CI-only signoff |
 | Gate 12 | Explicit release approval | not started — owner-approved revision/environment/features after parity and security; external setup, destructive retirement/reset and legacy cutover approvals remain separate |
@@ -611,6 +612,24 @@ use the real route table and cover pending/error, signed-out/in, onboarding,
 invite and explicit magic-link Continue states. Fixture screenshots cover phone
 and wide layouts in both palettes; they remain mock-API presentation proof.
 
+### Invite continuity and paste-to-join fix
+
+The old session-only intent was lost when an email app opened the magic link in a
+new tab. Sends now pass a strict relative `/join/<valid-token>` callback through
+Better Auth; the email keeps it in the fragment-only Continue link. Shared token
+validation rejects malformed/non-relative invite callbacks before send/consume,
+without narrowing the existing non-invite same-origin callback contract.
+
+One-hour session/localStorage records provide current-tab/shared-tab fallback;
+explicit callbacks take priority, and join/cancel/sign-out/expiry clears intent.
+Storage remains only an intent hint, never cached membership. Home has a native
+paste sheet near New cache and in its empty state; HTTP(S) URL origins are
+ignored, and only a validated local join path is navigated. One explicit Join tap
+remains (no new non-member cache-name lookup); approval-required joins stay pending.
+`pendingJoin.test.ts` and real Worker magic-link tests cover parsing, handoff,
+expiry, clearing, callback safety and active/pending outcomes. Live email-app
+handoff is still separate from the local fixture/real-D1 proof.
+
 ### Gate 10 — Full user-flow parity checklist and cleanup refactor
 
 Freeze the intended release scope and inventory every flow: magic link/scanner/
@@ -672,8 +691,8 @@ that approval. If a deferred owner-setup feature later ships, rerun gates 10–1
 - Magic link: link-only mail, explicit code fallback; hashed 300s first-use tokens,
   fragment landing/no-referrer/no-store, scanner GET consumes nothing; Continue
   POST adapts internal GET handler preserving D1 5/60s limits. No auth.api bypass;
-  exact-origin callbacks, independent resends, invite tab persistence/fresh-browser
-  semantics. Live mobile/mail remains UNVERIFIED until approved smoke.
+  exact-origin callbacks, independent resends, strict invite callback plus expiring
+  cross-tab intent and paste-to-join semantics. Live mobile/mail remains UNVERIFIED until approved smoke.
 - Push: @block65/webcrypto-web-push@2.0.0 local RFC 8291/VAPID proof retained;
   strict endpoint allowlist/manual redirect/deadlines; account reassign/logout and
   stale 410 cleanup; no subscriptions/all expired → same-pass email, transient

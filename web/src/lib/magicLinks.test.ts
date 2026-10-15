@@ -7,8 +7,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { LoginPage } from '../pages/LoginPage'
 import { MagicLinkPage } from '../pages/MagicLinkPage'
-import { readMagicLink, sendSignInEmail, verifyMagicLink } from './magicLinks'
-import { destinationAfterLogin, peekJoinToken } from './pendingJoin'
+import { magicLinkDestination, readMagicLink, sendSignInEmail, verifyMagicLink } from './magicLinks'
+import { destinationAfterLogin, peekJoinToken, stashJoinToken } from './pendingJoin'
 import { ApiError, errorMessage } from './api'
 
 const token = 'A'.repeat(32)
@@ -77,17 +77,28 @@ it('reads a fragment locally and only an explicit verification call POSTs its to
   expect(readMagicLink(`#token=${token}&padding=${'A'.repeat(24_576)}`)).toBeNull()
 })
 
-it('preserves pending invites across link send, Continue and code fallback without copying secrets into auth data', async () => {
+it('carries a strict invite callback through the sign-in link while keeping OTP requests free of invite data', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ success: true, callback_url: 'https://communalcache.com/' }))
   await sendSignInEmail(' own@example.test ', 'link', invite)
-  expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/sign-in/magic-link', expect.objectContaining({ body: JSON.stringify({ email: 'own@example.test' }) }))
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/sign-in/magic-link', expect.objectContaining({ body: JSON.stringify({ email: 'own@example.test', callbackURL: `/join/${invite}` }) }))
   expect(peekJoinToken()).toBe(invite)
   await verifyMagicLink(readMagicLink(`#token=${token}`)!)
   expect(destinationAfterLogin()).toBe(`/join/${invite}`)
   await sendSignInEmail('own@example.test', 'code', invite)
   expect(fetchMock).toHaveBeenLastCalledWith('/api/auth/email-otp/send-verification-otp', expect.objectContaining({ body: JSON.stringify({ email: 'own@example.test', type: 'sign-in' }) }))
-  expect(JSON.stringify(fetchMock.mock.calls)).not.toContain(invite)
-  expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('callbackURL":"/join/')
+  expect(JSON.stringify(fetchMock.mock.calls.at(-1))).not.toContain(invite)
+  expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string).callbackURL).toBe(`/join/${invite}`)
+})
+
+it('keeps valid invite callbacks ahead of storage while preserving existing general same-origin callbacks', ()=>{
+  const origin='https://communalcache.com'
+  expect(magicLinkDestination('/requests',origin)).toBe('/requests')
+  expect(magicLinkDestination(origin+'/welcome',origin)).toBe('/welcome')
+  for(const callback of ['https://foreign.test/requests','javascript:alert(1)',origin+'/join/bad',origin+`/join/${invite}?x=1`,origin+`/JOIN/${invite}`,origin+`/j%6fin/${invite}`]) expect(magicLinkDestination(callback,origin)).toBe('/')
+  const other=`22222222-2222-4222-8222-222222222222.${'B'.repeat(43)}`
+  stashJoinToken(other)
+  expect(magicLinkDestination(origin+`/join/${invite}`,origin)).toBe(`/join/${invite}`)
+  expect(magicLinkDestination('/',origin)).toBe(`/join/${other}`)
 })
 
 it('offers resend/code recovery after verification or delivery errors without dropping a saved invite', async () => {

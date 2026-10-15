@@ -51,15 +51,15 @@ it('uses a shared profile menu on phone and desktop rather than tabs or a Reques
   expect(markup).not.toContain('private@example.test')
 })
 
-it('keeps full-width cache cards at lg with one native create dialog and no request sidebar', () => {
+it('keeps full-width cache cards at lg with create/invite sheets and no request sidebar', () => {
   const markup = render(createElement(HomePage))
   expect(markup).not.toContain('lg:grid-cols-[minmax(0,1fr)_340px]')
   expect(markup).toContain('lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]')
   expect(markup).toContain('hidden lg:flex lg:size-10')
   expect(markup).toContain('cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6')
   expect(markup).toContain('flex gap-3 lg:flex-row-reverse')
-  expect(markup.match(/<dialog\b/g)).toHaveLength(1)
-  expect(markup.match(/<form\b/g)).toHaveLength(1)
+  expect(markup.match(/<dialog\b/g)).toHaveLength(2)
+  expect(markup.match(/<form\b/g)).toHaveLength(2)
   expect(markup).toContain('Your items')
   expect(markup).toContain('href="/items"')
   expect(markup).toContain('See all')

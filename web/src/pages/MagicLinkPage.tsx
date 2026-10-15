@@ -4,8 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { errorMessage, type Me } from '../lib/api'
 import { subscriptionForAccount } from '../lib/push'
-import { readMagicLink, verifyMagicLink } from '../lib/magicLinks'
-import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
+import { magicLinkDestination, readMagicLink, verifyMagicLink } from '../lib/magicLinks'
 import { AuthScreen, BrandMark } from '../components/AuthScreen'
 
 export function MagicLinkPage() {
@@ -33,9 +32,7 @@ export function MagicLinkPage() {
         const registration = await navigator.serviceWorker.getRegistration('/')
         if (registration) await subscriptionForAccount(registration, signedIn.id)
       }
-      const callback = new URL(result.callback_url, location.origin)
-      const destination = peekJoinToken() ? destinationAfterLogin() : callback.origin === location.origin ? callback.pathname + callback.search + callback.hash : '/'
-      navigate(destination, { replace: true })
+      navigate(magicLinkDestination(result.callback_url,location.origin), { replace: true })
     } catch (error) { setError(errorMessage(error)) }
     finally { setPending(false) }
   }
@@ -51,6 +48,6 @@ export function MagicLinkPage() {
     <p className="mt-4 text-center text-[13px] leading-[18px] text-slate-600">Opening this page does not use your link. Links work once and expire after 5 minutes.</p>
     <div className="min-h-8 flex-1 lg:flex-none" />
     <Link to="/login" className="cc-auth-text">Link not working? Get a new one</Link>
-    <p className="mt-2 text-center text-[13px] leading-[18px] text-slate-600">You can also request an email code. A saved invite stays in its original tab; reopen it here if you use another browser.</p>
+    <p className="mt-2 text-center text-[13px] leading-[18px] text-slate-600">You can also request an email code. Invites follow your sign-in link and are saved on this browser for up to an hour. In another browser, reopen or paste the invite.</p>
   </AuthScreen>
 }

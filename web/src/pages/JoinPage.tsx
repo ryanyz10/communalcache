@@ -37,6 +37,6 @@ export function JoinPage() {
     <p className="mt-2 text-slate-600">Hi, {me.display_name}. If this cache requires approval, its owner will review your request.</p>
     {join.isError && <p role="alert" className="mt-4 text-red-700">{errorMessage(join.error)}</p>}
     <button type="button" disabled={join.isPending} onClick={() => join.mutate()} className="cc-pill mt-6">{join.isPending ? 'Joining…' : 'Join cache'}</button>
-    <Link to="/" onClick={clearJoinToken} className="mt-6 ml-4 inline-block underline">Cancel invite and go home</Link>
+    <Link to="/" onClick={()=>clearJoinToken(token)} className="mt-6 ml-4 inline-block underline">Cancel invite and go home</Link>
   </main>
 }

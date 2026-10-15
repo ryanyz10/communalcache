@@ -9,12 +9,13 @@ import { OnboardingPage } from './OnboardingPage'
 import { LibrarySection } from './LibraryPage'
 import { CacheBox, PixelHorizon } from '../components/PixelArt'
 import { LandingPage } from './LandingPage'
+import { JoinInviteSheet } from './JoinInviteSheet'
 
 export function HomePage() {
   const { me } = useAuth()
   const navigate = useNavigate()
   const client = useQueryClient()
-  const dialog = useRef<HTMLDialogElement>(null)
+  const dialog = useRef<HTMLDialogElement>(null), joinDialog = useRef<HTMLDialogElement>(null)
   const [name, setName] = useState('')
   const [requiresApproval, setRequiresApproval] = useState(false)
   const caches = useQuery({ queryKey: ['caches'], queryFn: () => apiFetch<CacheSummary[]>('/api/caches'), enabled: !!me?.display_name })
@@ -35,7 +36,7 @@ export function HomePage() {
     <section aria-labelledby="caches-heading">
       <div className="cc-hero"><div className="flex items-center justify-between gap-3">
         <h1 id="caches-heading" className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Your caches</h1>
-        <button type="button" className="cc-pill" onClick={openCreate}>+ New cache</button>
+        <div className="flex shrink-0 flex-col items-end gap-2 lg:flex-row"><button type="button" className="cc-pill min-h-11" onClick={openCreate}>+ New cache</button><button type="button" className="cc-outline min-h-11" aria-haspopup="dialog" onClick={()=>joinDialog.current?.showModal()}>Join with an invite</button></div>
       </div>
       <PixelHorizon kind="boxes" entries={(caches.data ?? []).map(cache=>({...cache,to:`/caches/${cache.id}`}))} /></div>
       {caches.isPending && <p role="status" className="mt-3">Loading caches…</p>}
@@ -44,9 +45,10 @@ export function HomePage() {
         <span aria-hidden="true" className="hidden lg:flex lg:size-10 lg:items-center lg:justify-center lg:rounded-[10px] lg:bg-indigo-100 lg:font-bold lg:text-indigo-800"><CacheBox name={cache.name} /></span>
         <span className="min-w-0 flex-1 break-words font-semibold lg:col-span-2 lg:row-start-2">{cache.name}</span><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:col-start-2 lg:row-start-1">›</span>
       </Link></li>)}</ul>}
-      {caches.isSuccess && !caches.data.length && <div className="mt-3 rounded-[10px] border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">No caches yet. Create one to start sharing.</p><button type="button" className="cc-outline mt-3" onClick={openCreate}>New cache</button></div>}
+      {caches.isSuccess && !caches.data.length && <div className="mt-3 rounded-[10px] border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">No caches yet. Create one to start sharing.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" className="cc-outline min-h-11" onClick={openCreate}>New cache</button><button type="button" className="cc-outline min-h-11" aria-haspopup="dialog" onClick={()=>joinDialog.current?.showModal()}>Join with an invite</button></div></div>}
     </section>
     <LibrarySection preview />
+    <JoinInviteSheet dialog={joinDialog} />
     <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="new-cache-heading" onCancel={event => { if (create.isPending) event.preventDefault() }}>
       <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 lg:hidden" />
       <h2 id="new-cache-heading" className="text-xl font-semibold">New cache</h2>
