@@ -128,14 +128,19 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     rotate on resend; persistent database rate-limit storage, never per-isolate
     memory. Auth email awaits Resend from the request, not notification Queue.
     Magic-link landing pages never auto-verify; explicit Continue triggers the POST.
-15. **Approved plan/quotas target: one limits source, same-write enforcement.**
-    Future user/cache plan columns default `free`; one `plan_limits` table keyed
-    by `free` and internal `higher` controls limits inside the same guarded write
-    or fresh-token batch. No client/per-isolate/hard-coded route quota or previous
-    entitlement read across an await. Free caps apply to every account: 3 owned
-    caches, 2 new/day, 20 cache memberships, 30 members/cache (higher: 100), 100 owned
-    items, 20 pending outgoing requests, 1 current item photo at the current cap
-    and 1 profile photo. Unspecified higher values need approval before building.
+15. **Plans/quotas: one limits source, same-write enforcement.** User/cache plan
+    columns default `free`; one `plan_limits` table keyed by `free` / `plus`
+    controls limits inside the same guarded write or fresh-token batch. No client/
+    per-isolate/hard-coded route quota or previous entitlement read across an
+    await. Free caps apply to every account: 1 owned cache, 2 new in rolling 24h,
+    20 active cache memberships, 30 active members/cache, 100 owned items,
+    20 pending outgoing requests and 1 current item photo at the current cap.
+    Plus keeps owned_caches at 3 and cache_members at 100; other seeds equal free
+    until the owner decides otherwise. Profile_photos=1 is seeded only; its
+    endpoint/guard belongs to the profile-photo PR. Pending joins reserve no seat; approval/left rejoin
+    rechecks caps, while rejection and existing join replays stay possible at cap.
+    Count owners; never exempt by role. Missing policy fails closed. Return 409
+    limit_reached plus stable limit name; preserve photo replacement and cleanup.
     No plan UI, upgrades or billing; before admin exists, assignments are exact
     owner-approved manual D1 commands only, never automatic. No silent data loss
     on downgrade; quota errors must clearly say limit reached.

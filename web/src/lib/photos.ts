@@ -31,8 +31,8 @@ export async function uploadPhoto(cacheId: string | null, itemId: string, photo:
     headers: { Accept: 'application/json', 'Content-Type': photo.type }, body: photo,
   })
   if (!response.ok) {
-    const data = await response.json().catch(() => ({})) as { error?: string }
-    throw new ApiError(response.status, data.error ?? 'request_failed')
+    const data = await response.json().catch(() => ({})) as { error?: string; limit?: string }
+    throw new ApiError(response.status,data.error ?? 'request_failed',undefined,typeof data.limit === 'string' ? data.limit : undefined)
   }
   return response.json() as Promise<Item>
 }

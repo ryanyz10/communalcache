@@ -13,6 +13,7 @@ async function user(name = 'Neighbor') {
 }
 async function fixture() {
   const admin = await user('Cache admin'), owner = await user('Item owner'), member = await user(), outsider = await user()
+  await env.DB.prepare("UPDATE user SET plan='plus' WHERE id=?").bind(admin).run()
   const first = await createCache(env.DB, admin, 'Tools', false), second = await createCache(env.DB, admin, 'Pantry', false)
   for (const cache of [first, second]) await joinCache(env.DB, cache.id, owner, cache.invite_token.split('.')[1])
   await joinCache(env.DB, first.id, member, first.invite_token.split('.')[1])
@@ -80,7 +81,7 @@ it('checks caller and item-owner active membership plus attachment for every cac
 it('guards attachment ownership/current membership in the INSERT, including idempotent retries after removal', async () => {
   const f = await fixture()
   for (const caller of [f.admin, f.member, f.outsider]) await expect(attachItem(env.DB, f.item.id, f.second.id, caller)).rejects.toMatchObject({ status: 404 })
-  const third = await createCache(env.DB, f.admin, 'Other cache', false)
+  const third = await createCache(env.DB, await user('Other admin'), 'Other cache', false)
   await expect(attachItem(env.DB, f.item.id, third.id, f.owner)).rejects.toMatchObject({ status: 404 })
   await attachItem(env.DB, f.item.id, f.second.id, f.owner)
   await env.DB.prepare("UPDATE memberships SET status='removed' WHERE cache_id=? AND user_id=?").bind(f.second.id,f.owner).run()
@@ -156,7 +157,8 @@ it('reopens current cache item screens and private library/attach APIs with cook
     const payload = JSON.stringify(await response.json())
     for (const privateField of ['photo_path','operation_token','example.test']) expect(payload).not.toContain(privateField)
   }
-  const other = await createCache(env.DB,owner.id,'Pantry',false)
+  const other = await createCache(env.DB,stranger,'Pantry',false)
+  await joinCache(env.DB,other.id,owner.id,other.invite_token.split('.')[1])
   const attach = `/api/me/items/${item.id}/attachments/${other.id}`
   expect((await worker.fetch(appRequest(attach,{method:'PUT',cookie:owner.cookie,body:{}}),poisoned)).status).toBe(204)
   expect((await worker.fetch(appRequest(`/api/me/items/${item.id}`,{method:'PATCH',cookie:owner.cookie,body:{quantity:2}}),poisoned)).status).toBe(200)

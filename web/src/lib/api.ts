@@ -2,11 +2,13 @@ export class ApiError extends Error {
   status: number
   code: string
   retryAfter?: number
-  constructor(status: number, code: string, retryAfter?: number) {
+  limit?: string
+  constructor(status: number, code: string, retryAfter?: number, limit?: string) {
     super(code)
     this.status = status
     this.code = code
     this.retryAfter = retryAfter
+    this.limit = limit
   }
 }
 
@@ -22,9 +24,9 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })
   if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as { error?: string; code?: string }
+    const data = await res.json().catch(() => ({})) as { error?: string; code?: string; limit?: string }
     const retryAfter = Number(res.headers.get('Retry-After'))
-    throw new ApiError(res.status, data.error ?? data.code ?? 'request_failed', Number.isInteger(retryAfter) && retryAfter > 0 && retryAfter <= 60 ? retryAfter : undefined)
+    throw new ApiError(res.status,data.error ?? data.code ?? 'request_failed',Number.isInteger(retryAfter) && retryAfter > 0 && retryAfter <= 60 ? retryAfter : undefined,typeof data.limit === 'string' ? data.limit : undefined)
   }
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
@@ -32,6 +34,20 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
 
 export function errorMessage(error: unknown) {
   if (!(error instanceof ApiError)) return 'Could not connect. Please try again.'
+  if (error.code === 'limit_reached') {
+    const messages: Record<string,string> = {
+      owned_caches: 'Limit reached: you already own the maximum number of caches.',
+      new_caches_per_day: 'Limit reached: you have created the maximum number of caches in the last 24 hours. Try again later.',
+      member_caches: 'Limit reached: you are already in the maximum number of caches.',
+      cache_members: 'Limit reached: this cache has the maximum number of active members.',
+      owned_items: 'Limit reached: your item library is full.',
+      open_requests: 'Limit reached: you have the maximum number of pending asks. Wait for one to be answered.',
+      photos_per_item: 'Limit reached: the photo allowance for this item is unavailable.',
+      profile_photos: 'Limit reached: the profile photo allowance is unavailable.',
+    }
+    return error.limit && Object.hasOwn(messages,error.limit) ? messages[error.limit] : 'Limit reached: this action exceeds the current allowance.'
+  }
+  if (error.code === 'limits_unavailable') return 'Could not check the limits. Please try again later.'
   if (error.status === 429) return error.retryAfter ? `Too many tries. Please wait ${error.retryAfter} seconds and try again.` : 'Too many tries. Please wait a minute and try again.'
   if (error.code === 'email_unavailable') return 'Could not send the sign-in email. Your invite is saved; please try again.'
   if (error.code === 'invalid_magic_link') return 'That sign-in link is invalid, expired or already used. Request a new link or use an email code.'

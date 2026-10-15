@@ -119,15 +119,53 @@ const cacheRead = `SELECT c.id,c.name,c.join_secret,c.requires_approval,owner.us
   JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
   WHERE c.id=? AND c.join_secret IS NOT NULL`
 
+const ownedCacheCount = `(SELECT COUNT(*) FROM memberships m JOIN caches owned ON owned.id=m.cache_id
+  WHERE m.user_id=u.id AND m.role='owner' AND m.status='active' AND owned.join_secret IS NOT NULL)`
+const memberCacheCount = `(SELECT COUNT(*) FROM memberships m JOIN caches joined ON joined.id=m.cache_id
+  WHERE m.user_id=u.id AND m.status='active' AND joined.join_secret IS NOT NULL)`
+const cacheMemberCount = `(SELECT COUNT(*) FROM memberships WHERE cache_id=c.id AND status='active')`
+const ownedItemCount = `(SELECT COUNT(*) FROM items WHERE owner_id=u.id)`
+const openRequestCount = `(SELECT COUNT(*) FROM requests WHERE requester_id=u.id AND status='pending')`
+const membershipQuotaRead = `${memberCacheCount} AS member_used,ul.member_caches AS member_limit,
+  ${cacheMemberCount} AS cache_used,cl.cache_members AS cache_limit`
+type MembershipQuota = { member_used: number; member_limit: number | null; cache_used: number; cache_limit: number | null }
+
+function checkQuota(limit: string, used: number, maximum: number | null) {
+  if (maximum === null) throw new HttpError(503,'limits_unavailable')
+  if (used >= maximum) throw new HttpError(409,'limit_reached',undefined,limit)
+}
+function checkMembershipQuota(row: MembershipQuota) {
+  checkQuota('member_caches',row.member_used,row.member_limit)
+  checkQuota('cache_members',row.cache_used,row.cache_limit)
+}
+
 export async function createCache(db: D1Database, ownerId: string, name: string, requiresApproval: boolean) {
   const id = crypto.randomUUID(), token = crypto.randomUUID(), secret = newJoinSecret(), now = Date.now()
-  const results = await db.batch([
-    db.prepare('INSERT INTO caches(id,name,created_at,join_secret,requires_approval,operation_token) VALUES (?,?,?,?,?,?)')
-      .bind(id, name, now, secret, requiresApproval ? 1 : 0, token),
+  const recentCount = `(SELECT COUNT(*) FROM caches recent JOIN memberships owner ON owner.cache_id=recent.id
+    AND owner.user_id=u.id AND owner.role='owner' AND owner.status='active' WHERE recent.created_at>? AND recent.join_secret IS NOT NULL)`
+  const [created,_owner,quota] = await db.batch([
+    db.prepare(`INSERT INTO caches(id,name,created_at,join_secret,requires_approval,operation_token)
+      SELECT ?,?,?,?,?,? FROM user u JOIN plan_limits ul ON ul.plan=u.plan JOIN plan_limits cl ON cl.plan='free'
+      WHERE u.id=? AND ${ownedCacheCount}<ul.owned_caches AND ${recentCount}<ul.new_caches_per_day
+      AND ${memberCacheCount}<ul.member_caches AND cl.cache_members>0`)
+      .bind(id,name,now,secret,requiresApproval ? 1 : 0,token,ownerId,now-86_400_000),
     db.prepare(`INSERT INTO memberships(cache_id,user_id,role,status,created_at)
-      SELECT id,?,'owner','active',? FROM caches WHERE id=? AND operation_token=?`).bind(ownerId, now, id, token),
+      SELECT id,?,'owner','active',? FROM caches WHERE id=? AND operation_token=?`).bind(ownerId,now,id,token),
+    // Diagnostics share the failed write's snapshot, never authorize a later retry.
+    db.prepare(`SELECT ${ownedCacheCount} AS owned_used,ul.owned_caches AS owned_limit,
+      ${recentCount} AS recent_used,ul.new_caches_per_day AS recent_limit,
+      ${memberCacheCount} AS member_used,ul.member_caches AS member_limit,0 AS cache_used,cl.cache_members AS cache_limit
+      FROM user u LEFT JOIN plan_limits ul ON ul.plan=u.plan LEFT JOIN plan_limits cl ON cl.plan='free' WHERE u.id=?`)
+      .bind(now-86_400_000,ownerId),
   ])
-  if (results[0].meta.changes !== 1) throw new Error('Cache creation failed')
+  if (created.meta.changes === 0) {
+    const row = quota.results[0] as (MembershipQuota & {owned_used:number;owned_limit:number|null;recent_used:number;recent_limit:number|null}) | undefined
+    if (!row) throw new HttpError(404,'not_found')
+    checkQuota('owned_caches',row.owned_used,row.owned_limit)
+    checkQuota('new_caches_per_day',row.recent_used,row.recent_limit)
+    checkMembershipQuota(row)
+    throw new Error('Cache quota guard failed')
+  }
   return cacheInfo({ id, name, owner_id: ownerId, join_secret: secret, requires_approval: requiresApproval ? 1 : 0 })
 }
 
@@ -176,47 +214,65 @@ export async function joinCache(db: D1Database, cacheId: string, userId: string,
   const [inserted, outbox, membership] = await db.batch([
     db.prepare(`INSERT INTO memberships(cache_id,user_id,role,status,created_at,operation_token)
       SELECT c.id,?,'member',CASE WHEN c.requires_approval=1 THEN 'pending' ELSE 'active' END,?,? FROM caches c
+      JOIN user u ON u.id=? JOIN plan_limits ul ON ul.plan=u.plan JOIN plan_limits cl ON cl.plan=c.plan
       WHERE c.id=? AND c.join_secret=?
       AND EXISTS(SELECT 1 FROM memberships WHERE cache_id=c.id AND role='owner' AND status='active')
+      AND (c.requires_approval=1 OR (${memberCacheCount}<ul.member_caches AND ${cacheMemberCount}<cl.cache_members))
       AND NOT EXISTS(SELECT 1 FROM memberships WHERE cache_id=c.id AND user_id=? AND status<>'left')
       ON CONFLICT(cache_id,user_id) DO UPDATE SET status=excluded.status,created_at=excluded.created_at,operation_token=excluded.operation_token
       WHERE memberships.status='left'`)
-      .bind(userId, now, token, cacheId, stored, userId),
+      .bind(userId, now, token, userId, cacheId, stored, userId),
     db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
       SELECT ?,'join_requested',?,json_object('event','join_requested','cache_id',c.id,'cache_name',c.name,'recipient_id',owner.user_id,'user_id',m.user_id),?
       FROM memberships m JOIN caches c ON c.id=m.cache_id
       JOIN memberships owner ON owner.cache_id=c.id AND owner.role='owner' AND owner.status='active'
       WHERE m.cache_id=? AND m.user_id=? AND m.operation_token=? AND m.status='pending'`)
       .bind(token, token, now, cacheId, userId, token),
-    db.prepare(`SELECT c.id AS cache_id,c.name,m.status FROM caches c JOIN memberships m ON m.cache_id=c.id AND m.user_id=?
-      WHERE c.id=? AND c.join_secret=?`).bind(userId, cacheId, stored),
+    db.prepare(`SELECT c.id AS cache_id,c.name,m.status,${membershipQuotaRead} FROM caches c
+      JOIN user u ON u.id=? LEFT JOIN memberships m ON m.cache_id=c.id AND m.user_id=u.id
+      LEFT JOIN plan_limits ul ON ul.plan=u.plan LEFT JOIN plan_limits cl ON cl.plan=c.plan
+      WHERE c.id=? AND c.join_secret=?
+      AND EXISTS(SELECT 1 FROM memberships WHERE cache_id=c.id AND role='owner' AND status='active')`).bind(userId,cacheId,stored),
   ])
-  const result = membership.results[0] as { cache_id: string; name: string; status: 'active' | 'pending' | 'removed' | 'left' } | undefined
-  if (!result || result.status === 'left') throw new HttpError(404, 'not_found')
-  if (result.status === 'removed') throw new HttpError(403, 'member_removed')
-  // Existing active/pending joins do not emit another notification.
-  return { membership: result, notificationId: inserted.meta.changes > 0 && outbox.meta.changes > 0 ? token : null }
+  const result = membership.results[0] as (MembershipQuota & {cache_id:string;name:string;status:'active'|'pending'|'removed'|'left'|null}) | undefined
+  if (!result) throw new HttpError(404,'not_found')
+  if (result.status === 'removed') throw new HttpError(403,'member_removed')
+  if (result.status !== 'active' && result.status !== 'pending') {
+    checkMembershipQuota(result)
+    throw new HttpError(404,'not_found')
+  }
+  // Existing active/pending joins remain idempotent even after a downgrade.
+  return { membership: {cache_id:result.cache_id,name:result.name,status:result.status}, notificationId: inserted.meta.changes > 0 && outbox.meta.changes > 0 ? token : null }
 }
 
 export async function decideCacheJoin(db: D1Database, cacheId: string, userId: string, applicantId: string, decision: 'approve' | 'reject') {
   const token = crypto.randomUUID(), now = Date.now(), event = decision === 'approve' ? 'join_approved' : 'join_rejected'
-  const results = await db.batch([
+  const [updated,_outbox,_membership,quota] = await db.batch([
     db.prepare(`UPDATE memberships SET operation_token=? WHERE cache_id=? AND user_id=? AND status='pending'
       AND EXISTS(SELECT 1 FROM memberships caller JOIN caches c ON c.id=caller.cache_id
-        WHERE caller.cache_id=? AND caller.user_id=? AND caller.role='owner' AND caller.status='active' AND c.join_secret IS NOT NULL)`)
-      .bind(token, cacheId, applicantId, cacheId, userId),
+        WHERE caller.cache_id=? AND caller.user_id=? AND caller.role='owner' AND caller.status='active' AND c.join_secret IS NOT NULL)
+      AND (?=0 OR EXISTS(SELECT 1 FROM caches c JOIN user u ON u.id=memberships.user_id
+        JOIN plan_limits ul ON ul.plan=u.plan JOIN plan_limits cl ON cl.plan=c.plan
+        WHERE c.id=memberships.cache_id AND ${memberCacheCount}<ul.member_caches AND ${cacheMemberCount}<cl.cache_members))`)
+      .bind(token,cacheId,applicantId,cacheId,userId,decision === 'approve' ? 1 : 0),
     db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
       SELECT ?,?,?,json_object('event',?,'cache_id',c.id,'cache_name',c.name,'recipient_id',m.user_id,'user_id',m.user_id),?
       FROM memberships m JOIN caches c ON c.id=m.cache_id WHERE m.cache_id=? AND m.user_id=? AND m.operation_token=? AND m.status='pending'`)
       .bind(token, event, token, event, now, cacheId, applicantId, token),
     decision === 'approve'
       ? db.prepare("UPDATE memberships SET status='active' WHERE cache_id=? AND user_id=? AND operation_token=? AND status='pending'").bind(cacheId, applicantId, token)
-      : db.prepare("DELETE FROM memberships WHERE cache_id=? AND user_id=? AND operation_token=? AND status='pending'").bind(cacheId, applicantId, token),
+      : db.prepare("DELETE FROM memberships WHERE cache_id=? AND user_id=? AND operation_token=? AND status='pending'").bind(cacheId,applicantId,token),
+    db.prepare(`SELECT m.status,${membershipQuotaRead} FROM caches c
+      JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.role='owner' AND caller.status='active'
+      LEFT JOIN user u ON u.id=? LEFT JOIN memberships m ON m.cache_id=c.id AND m.user_id=u.id
+      LEFT JOIN plan_limits ul ON ul.plan=u.plan LEFT JOIN plan_limits cl ON cl.plan=c.plan
+      WHERE c.id=? AND c.join_secret IS NOT NULL`).bind(userId,applicantId,cacheId),
   ])
-  if (results[0].meta.changes === 0) {
-    const authorized = await db.prepare(`${cacheRead} AND caller.role='owner'`).bind(userId, cacheId).first()
-    if (!authorized) throw new HttpError(404, 'not_found')
-    throw new HttpError(409, 'join_not_pending')
+  if (updated.meta.changes === 0) {
+    const row = quota.results[0] as (MembershipQuota & {status:string|null}) | undefined
+    if (!row) throw new HttpError(404,'not_found')
+    if (decision === 'approve' && row.status === 'pending') checkMembershipQuota(row)
+    throw new HttpError(409,'join_not_pending')
   }
   return { status: decision === 'approve' ? 'active' : 'rejected', notificationId: token }
 }
@@ -302,17 +358,25 @@ export async function itemDetail(db: D1Database, itemId: string, userId: string,
 
 export async function createItem(db: D1Database, userId: string, changes: ItemChanges, cacheId: string | null = null) {
   const id = crypto.randomUUID(), token = crypto.randomUUID(), now = Date.now()
-  const [created] = await db.batch([
+  const access = `(? IS NULL OR EXISTS(SELECT 1 FROM memberships m JOIN caches c ON c.id=m.cache_id
+    AND c.join_secret IS NOT NULL WHERE m.cache_id=? AND m.user_id=u.id AND m.status='active'))`
+  const [created,_attachment,quota] = await db.batch([
     db.prepare(`INSERT INTO items(id,owner_id,title,description,is_consumable,quantity,available,unavailable_note,created_at,operation_token)
-      SELECT ?,?,?,?,?,?,?,?,?,? WHERE ? IS NULL OR EXISTS(
-        SELECT 1 FROM memberships m JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
-        WHERE m.cache_id=? AND m.user_id=? AND m.status='active')`)
-      .bind(id, userId, changes.title!, changes.description ?? null, changes.is_consumable ? 1 : 0, changes.quantity ?? null, changes.available === false ? 0 : 1, changes.unavailable_note ?? null, now, token, cacheId, cacheId, userId),
+      SELECT ?,?,?,?,?,?,?,?,?,? FROM user u JOIN plan_limits l ON l.plan=u.plan
+      WHERE u.id=? AND ${ownedItemCount}<l.owned_items AND ${access}`)
+      .bind(id,userId,changes.title!,changes.description ?? null,changes.is_consumable ? 1 : 0,changes.quantity ?? null,changes.available === false ? 0 : 1,changes.unavailable_note ?? null,now,token,userId,cacheId,cacheId),
     db.prepare(`INSERT INTO item_caches(item_id,cache_id,attached_at)
       SELECT id,?,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND ? IS NOT NULL`)
-      .bind(cacheId, now, id, userId, token, cacheId),
+      .bind(cacheId,now,id,userId,token,cacheId),
+    db.prepare(`SELECT ${ownedItemCount} AS used,l.owned_items AS maximum FROM user u
+      LEFT JOIN plan_limits l ON l.plan=u.plan WHERE u.id=? AND ${access}`).bind(userId,cacheId,cacheId),
   ])
-  if (created.meta.changes === 0) throw new HttpError(404, 'not_found')
+  if (created.meta.changes === 0) {
+    const row = quota.results[0] as {used:number;maximum:number|null} | undefined
+    if (!row) throw new HttpError(404,'not_found')
+    checkQuota('owned_items',row.used,row.maximum)
+    throw new Error('Item quota guard failed')
+  }
   return itemDetail(db, id, userId, cacheId)
 }
 
@@ -366,13 +430,15 @@ const requestContext = `EXISTS(SELECT 1 FROM item_caches a JOIN caches config ON
 export async function createRequest(db: D1Database, itemId: string, cacheId: string, userId: string, quantity: number | null) {
   // Bound JS integers can be REAL in SQLite; integer equality avoids relying on parameter typeof().
   const id = crypto.randomUUID(), token = crypto.randomUUID(), now = Date.now()
-  const [created, _outbox, result] = await db.batch([
+  const [created,_outbox,result,quota] = await db.batch([
     db.prepare(`INSERT INTO requests(id,item_id,cache_id,requester_id,quantity,status,created_at,creation_token)
       SELECT ?,i.id,?,?,?,'pending',?,? FROM items i JOIN item_caches a ON a.item_id=i.id AND a.cache_id=?
       JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
       JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
       JOIN memberships owner ON owner.cache_id=c.id AND owner.user_id=i.owner_id AND owner.status='active'
-      WHERE i.id=? AND i.owner_id<>? AND i.available=1 AND ((i.is_consumable=0 AND ? IS NULL)
+      JOIN user u ON u.id=caller.user_id JOIN plan_limits l ON l.plan=u.plan
+      WHERE i.id=? AND i.owner_id<>? AND i.available=1 AND ${openRequestCount}<l.open_requests
+      AND ((i.is_consumable=0 AND ? IS NULL)
         OR (i.is_consumable=1 AND ? BETWEEN 1 AND 9999 AND ?=CAST(? AS INTEGER)
           AND i.quantity-(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending')>=?))`)
       .bind(id,cacheId,userId,quantity,now,token,cacheId,userId,itemId,userId,quantity,quantity,quantity,quantity,quantity),
@@ -382,12 +448,17 @@ export async function createRequest(db: D1Database, itemId: string, cacheId: str
       FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id WHERE r.id=? AND r.creation_token=?`)
       .bind(token,token,now,id,token),
     db.prepare(`${requestRead} WHERE r.id=? AND r.creation_token=?`).bind(id,token),
+    db.prepare(`SELECT ${openRequestCount} AS used,l.open_requests AS maximum FROM user u
+      LEFT JOIN plan_limits l ON l.plan=u.plan WHERE u.id=?`).bind(userId),
   ])
   if (created.meta.changes === 0) {
     const item = await readItem(db,itemId,userId,cacheId)
     if (item.owner_id === userId) throw new HttpError(404,'not_found')
     if ((item.is_consumable === 1) !== (quantity !== null) || (quantity !== null && (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999))) throw new HttpError(400,'invalid_request_quantity')
-    throw new HttpError(409,item.available ? 'insufficient_stock' : 'item_unavailable')
+    if (!item.available || (item.is_consumable === 1 && quantity!>item.available_quantity!)) throw new HttpError(409,item.available ? 'insufficient_stock' : 'item_unavailable')
+    const row = quota.results[0] as {used:number;maximum:number|null}
+    checkQuota('open_requests',row.used,row.maximum)
+    throw new HttpError(409,'insufficient_stock')
   }
   return { request: result.results[0] as D1Request, notificationId: token }
 }
@@ -541,20 +612,26 @@ export async function finishItemPhoto(db: D1Database, itemId: string, userId: st
   const prefix = `${userId}/${itemId}/`
   if (!key.startsWith(prefix) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key.slice(prefix.length))) throw new HttpError(404, 'not_found')
   const token = crypto.randomUUID(), now = Date.now()
-  const [marked] = await db.batch([
+  const [marked,_cleanup,_photo,quota] = await db.batch([
     db.prepare(`UPDATE items AS i SET operation_token=? WHERE i.id=? AND i.owner_id=? AND ?=1 AND (${itemAccess})
+      AND EXISTS(SELECT 1 FROM user u JOIN plan_limits l ON l.plan=u.plan WHERE u.id=i.owner_id AND l.photos_per_item>0)
       AND NOT EXISTS(SELECT 1 FROM r2_cleanup WHERE (kind='exact' AND target=?) OR (kind='prefix' AND substr(?,1,length(target))=target))`)
       .bind(token, itemId, userId, uploaded ? 1 : 0, cacheId, userId, userId, cacheId, key, key),
     db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at)
       SELECT ?,owner_id,id,'exact',photo_path,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND photo_path IS NOT NULL AND photo_path<>?
       ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(), now, itemId, userId, token, key),
-    db.prepare('UPDATE items SET photo_path=? WHERE id=? AND owner_id=? AND operation_token=?').bind(key, itemId, userId, token),
+    db.prepare('UPDATE items SET photo_path=? WHERE id=? AND owner_id=? AND operation_token=?').bind(key,itemId,userId,token),
+    db.prepare(`SELECT l.photos_per_item AS maximum FROM items i JOIN user u ON u.id=i.owner_id
+      LEFT JOIN plan_limits l ON l.plan=u.plan WHERE i.id=? AND i.owner_id=? AND ?=1 AND (${itemAccess})`)
+      .bind(itemId,userId,uploaded ? 1 : 0,cacheId,userId,userId,cacheId),
   ])
   if (marked.meta.changes === 0) {
     // Independent guarded repair for bytes already written, not a grant from the failed mutation.
     await db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at)
       SELECT ?,?,?,'exact',?,? WHERE NOT EXISTS(SELECT 1 FROM items WHERE photo_path=?)
-      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(), userId, itemId, key, now, key).run()
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),userId,itemId,key,now,key).run()
+    const row = quota.results[0] as {maximum:number|null} | undefined
+    if (row) checkQuota('photos_per_item',0,row.maximum)
   }
   return marked.meta.changes > 0
 }
