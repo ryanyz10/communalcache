@@ -21,13 +21,6 @@ export function pendingIncomingCount(rows: ItemRequest[], userId: string) {
   return rows.filter(row => row.owner_id === userId && row.status === 'pending').length
 }
 
-export function requestPreview(rows: ItemRequest[], userId: string) {
-  return [
-    ...rows.filter(row => row.owner_id === userId && row.status === 'pending'),
-    ...rows.filter(row => row.requester_id === userId),
-  ].slice(0, 3)
-}
-
 export function invalidateRequestViews(client: QueryClient, cacheId: string, itemId: string) {
   return Promise.all([
     client.invalidateQueries({ queryKey: ['item-requests', cacheId, itemId] }),

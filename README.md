@@ -84,7 +84,7 @@ Open `http://127.0.0.1:4173/join/11111111-1111-4111-8111-111111111111.aaaaaaaaaa
 Enter a test email and choose **Email me a sign-in link**. Open
 `http://127.0.0.1:4173/__fixture/magic-link` to read the mock email, follow its link
 and press **Continue**. Just opening the landing page must not sign in. Alternatively,
-choose **Email me a code instead**, enter the public fixture code `123456` and
+choose **Use a 6-digit code instead**, enter the public fixture code `123456` and
 choose a name. The invite stays in this tab's sessionStorage; reload it or open
 `/login` to see navigation resume it. Use `failure@example.test` to see a delivery error
 without losing the invite. Cancel clears the pending invite. The fixture does not grant real membership; actual body-only join/approval is proved
@@ -95,11 +95,13 @@ For the Caches UI walkthrough, cancel the saved invite to reach **Your caches**.
 create and immediately open the cache. **Invite** uses the native share sheet when
 available, otherwise copies the link. The gear opens `/caches/:id/settings` for
 members/invites and owner join decisions, reset-link confirmation and cache settings.
-The pinned header links to `/requests` and `/account`; Account holds your own name/
-email, notification toggle and sign out. Home previews up to three first-page
-requests (pending incoming first), and its header badge is first-page pending
-incoming only. Discovery currently supplies names, not item/member counts; no
-invented counts or Your items section are displayed. The fixture API is mocked;
+The house icon in the pinned header goes Home. The profile menu opens **Requests**
+(`/requests`), **Account settings** (`/account`) and **Sign out**; Account retains
+its sign-out button along with your own name/email and notification toggle. Escape,
+outside pointer clicks and navigation close the menu; keyboard arrows/Home/End move
+between its items. The profile/menu badge counts only first-page pending incoming
+requests. Home shows caches only, with no requests preview/sidebar or Your items
+placeholder. Discovery supplies names, not item/member counts; no counts are invented. The fixture API is mocked;
 the runtime suite separately proves real D1/DO authority.
 For Items, use **Add item** from a cache: create a reusable item without stock or
 check Consumable and set stock (including zero). Open the item, edit its title,
@@ -112,8 +114,9 @@ pending-reservation floors are runtime tests.
 
 For Requests, sign in as an owner test email and create a consumable item. Sign
 out, sign in with a second test email (same public fixture code `123456`), open the
-shared cache/item and **Ask to use** a positive quantity. **Your requests** shows
-incoming/outgoing lists. Sign back in as the owner to approve, or reject with a
+shared cache/item and **Ask to use** a positive quantity. Open **Requests** from
+the profile menu: **Needs your answer** contains pending incoming decisions;
+**Your requests** contains your outgoing requests with their status. Sign back in as the owner to approve, or reject with a
 reason; approve deducts stock and reject frees reservations. Fixture identities
 persist in memory by email, and its caches are shared for this walkthrough only;
 real join/membership permissions are proved by DO tests, not this mock API.
@@ -149,13 +152,15 @@ to generic JSON `502 email_unavailable`; a rate-limited request remains 429.
 ### Email links and code fallback
 
 The default sign-in email contains **only a magic link**, expiring after five
-minutes. Its `/auth/link#token=...` landing page does not verify on load, preview or
+minutes. Formatted mail has a centered, inline-styled card and table-based **Sign in**
+button, with the same link retained in the plain-text fallback. No images or remote
+assets are loaded by the email. Its `/auth/link#token=...` landing page does not verify on load, preview or
 GET; only **Continue** makes an Origin-protected verification POST. The app removes
 the fragment from browser history and never includes its token in incoming server
 URLs. Reloading that page after removal requires a new link. Invalid/expired/used
 links show an error and offer a new link or an email code.
 
-**Email me a code instead** sends the existing six-digit code email and opens code
+**Use a 6-digit code instead** sends the existing six-digit code email and opens code
 entry. The two email types are separate; codes and links are independent
 challenges, not a combined email or cross-invalidated pair. Codes still rotate on
 resend; additional links do not revoke outstanding unexpired links. Use the newest
