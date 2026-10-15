@@ -5,6 +5,16 @@
   outline-offset: 3px;
 }
 
+dialog {
+  margin: auto;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+}
+
 dialog::backdrop {
   background: rgb(15 23 42 / 50%);
 }

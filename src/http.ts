@@ -1,5 +1,5 @@
 export class HttpError extends Error {
-  constructor(public status: number, public code: string) { super(code) }
+  constructor(public status: number, public code: string, public retryAfter?: number) { super(code) }
 }
 
 export function json(value: unknown, status = 200) {

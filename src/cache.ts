@@ -505,7 +505,10 @@ export class Cache extends DurableObject<Env> {
     }, async error => {
       const previous = await this.ctx.storage.get<{ failures: number }>('sync_retry')
       const failures = Math.min((previous?.failures ?? 0) + 1, 11)
-      await this.ctx.storage.put('sync_retry', { failures, retryAt: Date.now() + Math.min(5_000 * 2 ** (failures - 1), 3_600_000) })
+      const retryAt = Date.now() + Math.min(5_000 * 2 ** (failures - 1), 3_600_000)
+      await this.ctx.storage.put('sync_retry', { failures, retryAt })
+      const oldest = this.ctx.storage.sql.exec<{ created_at: number }>('SELECT created_at FROM pending_sync ORDER BY sequence LIMIT 1').toArray()[0]
+      console.error(JSON.stringify({ event: 'cache_sync_failed', failures, retry_at: retryAt, oldest_pending_age_ms: oldest ? Math.max(0, Date.now() - oldest.created_at) : 0 }))
       throw error
     }).finally(async () => {
       await this.rearm()

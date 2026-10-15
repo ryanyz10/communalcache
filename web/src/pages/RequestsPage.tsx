@@ -51,7 +51,7 @@ export function ItemRequests({ item }: { item: Item }) {
   const pending = query.data?.filter(row => row.status === 'pending') ?? []
   const available = item.quantity === null ? null : item.quantity - pending.reduce((sum, row) => sum + (row.quantity ?? 0), 0)
   return <section className="mt-8" aria-labelledby="requests-heading">
-    <div className="flex items-center justify-between gap-3"><h2 id="requests-heading" className="text-xl font-semibold">Requests</h2><button className="underline" onClick={() => void query.refetch()}>Refresh requests</button></div>
+    <div className="flex items-center justify-between gap-3"><h2 id="requests-heading" className="text-xl font-semibold">Requests</h2><button className="underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Refresh requests</button></div>
     <p className="mt-2 text-sm text-slate-600">Pending requests are visible to cache members. Decisions are visible only to the requester and item owner.</p>
     {query.isPending && <p role="status" className="mt-3">Loading requests…</p>}
     {query.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(query.error)}</p>}
@@ -97,7 +97,7 @@ export function RequestsPage() {
         return <section key={direction} className="mt-8" aria-label={direction}>
           <h2 className="text-xl font-semibold">{direction}</h2>
           <ul className="mt-4 space-y-3">{rows.map(request => <RequestCard key={request.id} request={request} callerId={me.id} />)}</ul>
-          {!rows.length && <p className="mt-3 text-slate-600">No {direction.toLowerCase()} requests in the loaded caches.</p>}
+          {!rows.length && <p className="mt-3 text-slate-600">{unavailable.length || query.isError || query.hasNextPage ? `No ${direction.toLowerCase()} requests visible in the loaded caches yet. This list may be incomplete.` : `No ${direction.toLowerCase()} requests in the loaded caches.`}</p>}
         </section>
       })}
       {query.hasNextPage && <button className="mt-6 rounded-md border border-slate-300 px-4 py-2 disabled:opacity-60" disabled={query.isFetching} onClick={() => void query.fetchNextPage()}>{query.isFetchingNextPage ? 'Loading more…' : 'Load more caches'}</button>}
