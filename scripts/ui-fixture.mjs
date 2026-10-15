@@ -10,6 +10,7 @@ const dist = fileURLToPath(new URL('../web/dist/', import.meta.url))
 let me = null
 const caches = new Map()
 const items = new Map()
+const photos = new Map()
 let vite
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname
@@ -21,8 +22,9 @@ const server = createServer(async (request, response) => {
   if (path.startsWith('/api/')) {
     const chunks = []
     for await (const chunk of request) chunks.push(chunk)
+    const raw = Buffer.concat(chunks)
     let body = {}
-    try { body = JSON.parse(Buffer.concat(chunks).toString() || '{}') }
+    try { if (request.headers['content-type']?.startsWith('application/json')) body = JSON.parse(raw.toString() || '{}') }
     catch { json({error: 'invalid_json'}, 400); return }
     const authenticated = request.headers.cookie?.includes('ui_fixture=active')
     if (path === '/api/auth/email-otp/send-verification-otp') {
@@ -61,6 +63,22 @@ const server = createServer(async (request, response) => {
         json(cache,201)
         return
       }
+      const photoRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/photo$/)
+      if (photoRoute) {
+        const item=items.get(photoRoute[2])
+        if (!item || item.cache_id!==photoRoute[1]) { json({error:'not_found'},404); return }
+        if (request.method==='POST') {
+          photos.set(item.id,{bytes:raw,type:request.headers['content-type']})
+          item.photo_version=randomUUID()
+          json(item)
+          return
+        }
+        const photo=photos.get(item.id)
+        if (!photo) { json({error:'not_found'},404); return }
+        response.writeHead(200,{'Content-Type':photo.type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
+        response.end(photo.bytes)
+        return
+      }
       const itemRoute=path.match(/^\/api\/caches\/([^/]+)\/items(?:\/([^/]+))?$/)
       if (itemRoute) {
         const cacheId=itemRoute[1], itemId=itemRoute[2]
@@ -69,7 +87,7 @@ const server = createServer(async (request, response) => {
         if (!itemId && request.method === 'POST') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
-          const item={id:randomUUID(),cache_id:cacheId,owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,created_at:Date.now()}
+          const item={id:randomUUID(),cache_id:cacheId,owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,created_at:Date.now(),photo_version:null}
           items.set(item.id,item)
           json(item,201)
           return

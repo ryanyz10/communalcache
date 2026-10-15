@@ -9,7 +9,7 @@ import { apiFetch, ApiError, errorMessage } from './api'
 import type { Item } from './items'
 
 const cacheId = '11111111-1111-4111-8111-111111111111'
-const item: Item = { id: '22222222-2222-4222-8222-222222222222', cache_id: cacheId, owner_id: 'owner', owner_name: 'Neighbor', title: 'Sugar', description: 'For baking', is_consumable: true, quantity: 0, created_at: 1 }
+const item: Item = { id: '22222222-2222-4222-8222-222222222222', cache_id: cacheId, owner_id: 'owner', owner_name: 'Neighbor', title: 'Sugar', description: 'For baking', is_consumable: true, quantity: 0, created_at: 1, photo_version: null }
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
@@ -51,16 +51,19 @@ it('distinguishes empty, unavailable and loading item lists', () => {
   expect(render('list', { list: 'loading' })).toContain('Loading items')
 })
 
-it('shows item details to members but edit controls only to the item owner, with no deletion or upload', () => {
+it('shows item details to members but edit and upload controls only to the item owner, with no deletion', () => {
   const owner = render('detail')
   expect(owner).toContain('Sugar')
   expect(owner).toContain('For baking')
   expect(owner).toContain('Shared by Neighbor')
   expect(owner).toContain('0 in stock')
   expect(owner).toContain(`/caches/${cacheId}/items/${item.id}/edit`)
-  expect(render('detail', { owner: false })).not.toContain('Edit item')
+  const member = render('detail', { owner: false })
+  expect(member).not.toContain('Edit item')
+  expect(member).not.toContain('Upload photo')
   expect(owner).not.toContain('Delete')
-  expect(owner).not.toContain('Upload')
+  expect(owner).toContain('Upload photo')
+  expect(owner).toContain('accept="image/jpeg,image/png,image/webp"')
 })
 
 it('renders labeled create/edit forms with immutable type and nullable reusable stock', () => {
@@ -91,6 +94,20 @@ it('escapes user content and explains field errors and reservation conflicts', (
   expect(errorMessage(new ApiError(400, 'invalid_quantity'))).toContain('0 to 9999')
   expect(errorMessage(new ApiError(400, 'immutable_is_consumable'))).toContain('cannot be changed')
   expect(errorMessage(new ApiError(409, 'quantity_reserved'))).toContain('pending requests')
+})
+
+it('renders photos through same-origin authorized routes in lists and details, with owner replacement controls', () => {
+  const photographed = { ...item, photo_version: 'photo-version' }
+  for (const page of ['list', 'detail'] as const) {
+    const markup = render(page, { item: photographed })
+    expect(markup).toContain(`/api/caches/${cacheId}/items/${item.id}/photo?v=photo-version`)
+    expect(markup).toContain('alt="Photo of Sugar"')
+    expect(markup).not.toContain('blob:')
+    expect(markup).not.toContain('r2.dev')
+    expect(markup).not.toContain('Authorization')
+  }
+  expect(render('detail', { item: photographed })).toContain('Replace photo')
+  expect(render('detail', { item: photographed, owner: false })).not.toContain('Upload photo')
 })
 
 it('sends cookie-auth item CRUD to nested routes, without owner assignment or editable type', async () => {

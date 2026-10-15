@@ -41,6 +41,8 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_quantity') return 'Use a whole stock quantity from 0 to 9999 for consumables; reusable items have no quantity.'
   if (error.code === 'invalid_is_consumable' || error.code === 'immutable_is_consumable') return 'Choose an item type when adding it. The type cannot be changed later.'
   if (error.code === 'quantity_reserved') return 'Stock cannot be lower than the quantity reserved by pending requests. Refresh the item and try again.'
+  if (error.code === 'invalid_photo_type' || error.code === 'invalid_photo') return "Couldn't read that image, try another JPEG, PNG or WebP."
+  if (error.code === 'photo_too_large') return 'That photo is too large. Try a smaller image (maximum 5 MB after resizing).'
   if (error.status === 404) return 'This cache, item or invite is not available, or you are no longer a member.'
   if (error.status === 401) return 'Your session has expired. Sign in again.'
   return 'Could not complete that request. Please try again.'

@@ -6,6 +6,7 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheDetail } from '../lib/caches'
 import type { Item } from '../lib/items'
 import { OnboardingPage } from './OnboardingPage'
+import { ItemPhoto, PhotoUpload } from './ItemPhoto'
 
 export function ItemList({ cacheId }: { cacheId: string }) {
   const query = useQuery({ queryKey: ['items', cacheId], queryFn: () => apiFetch<Item[]>(`/api/caches/${cacheId}/items`) })
@@ -18,6 +19,7 @@ export function ItemList({ cacheId }: { cacheId: string }) {
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try items again</button></div>}
     {query.isSuccess && (query.data.length ? <ul className="mt-4 space-y-3">{query.data.map(item => <li key={item.id}>
       <Link to={`/caches/${cacheId}/items/${item.id}`} className="block rounded-lg border border-slate-200 bg-white p-4">
+        <ItemPhoto key={item.photo_version} item={item} thumbnail />
         <h3 className="break-words font-semibold">{item.title}</h3>
         <p className="mt-1 text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p>
       </Link>
@@ -38,9 +40,13 @@ export function ItemPage() {
     {query.isSuccess && <>
       <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight">{query.data.title}</h1>
       <p className="mt-2 text-slate-600">Shared by {query.data.owner_name ?? 'Member'}</p>
+      <ItemPhoto key={query.data.photo_version} item={query.data} />
       <p className="mt-4">{query.data.is_consumable ? `${query.data.quantity} in stock` : 'Reusable · no stock quantity'}</p>
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
-      {me.id === query.data.owner_id && <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="mt-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-white">Edit item</Link>}
+      {me.id === query.data.owner_id && <>
+        <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="mt-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-white">Edit item</Link>
+        <PhotoUpload item={query.data} />
+      </>}
     </>}
   </main>
 }
