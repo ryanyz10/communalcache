@@ -6,7 +6,7 @@
   --cc-hill: #93c96f; --cc-hill2: #79b65c; --cc-grass: #7cc35e; --cc-grass-dark: #5ea548;
   --cc-bg: #f8f0e3; --cc-card: #fffaf2; --cc-fg: #2a1b22; --cc-sub: #6b5446; --cc-line: #ead8bd;
   --cc-box: #d99a5b; --cc-box-dark: #b5733c; --cc-box-line: #6b4426; --cc-label: #fbf3e6; --cc-glass: #d6f1f8;
-  --cc-sun: #ffe08a; --cc-cloud: #fff; --cc-on-sky: #1f2a3a;
+  --cc-sun: #ffe08a; --cc-cloud: #fff; --cc-on-sky: #1f2a3a; --cc-on-sky-sub: #3f5466;
   --cc-ok: #2f6a2b; --cc-ok-bg: #e3f1d9; --cc-warn: #9a5b12; --cc-warn-bg: #fbe9c8; --cc-bad: #a33a2a; --cc-bad-bg: #f7dcd5;
   --cc-focus: #3f5f94;
 }
@@ -17,7 +17,7 @@
     --cc-hill: #2f5a45; --cc-hill2: #264a39; --cc-grass: #3c6b4c; --cc-grass-dark: #2f573d;
     --cc-bg: #20223b; --cc-card: #2b2d4f; --cc-fg: #f4ead6; --cc-sub: #c4bddc; --cc-line: #3b3e66;
     --cc-box: #c58955; --cc-box-dark: #94603a; --cc-box-line: #2a1a20; --cc-label: #f3e6cf; --cc-glass: #ffd27a;
-    --cc-sun: #f8e8a8; --cc-cloud: #4a5090; --cc-on-sky: #f4ead6;
+    --cc-sun: #f8e8a8; --cc-cloud: #4a5090; --cc-on-sky: #f4ead6; --cc-on-sky-sub: #c4bddc;
     --cc-ok: #a8dc95; --cc-ok-bg: #2f4a3c; --cc-warn: #ffd27a; --cc-warn-bg: #4a3f2c; --cc-bad: #f4a99a; --cc-bad-bg: #4a2c33;
     --cc-focus: #ffd27a;
   }
@@ -89,4 +89,40 @@ dialog::backdrop { background: rgb(0 0 0 / 45%); }
   :focus-visible { outline-color: Highlight; }
   [data-code-box][data-active="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
 }
+.cc-landing { min-height: 100dvh; }
+.cc-landing-sky { position: relative; background: linear-gradient(var(--cc-sky),var(--cc-sky2) 420px); color: var(--cc-on-sky); }
+.cc-landing-header, .cc-landing-hero, .cc-landing-how, .cc-landing-community, .cc-landing-footer { max-width: 1120px; margin: 0 auto; }
+.cc-landing-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; }
+.cc-landing-hero { padding: 18px 20px; }
+.cc-landing-hero h1 { max-width: 620px; font-size: 31px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; }
+.cc-landing-hero p { max-width: 580px; margin: 14px 0 20px; color: var(--cc-on-sky-sub); font-size: 15.5px; line-height: 1.45; }
+.cc-landing-primary, .cc-landing-secondary { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border-radius: 999px; padding: 11px 18px; font-size: 14px; font-weight: 600; text-align: center; }
+.cc-landing-primary { background: var(--cc-fg); color: var(--cc-card); }
+.cc-landing-secondary { border: 1.5px solid color-mix(in srgb,var(--cc-on-sky) 40%,transparent); color: var(--cc-on-sky); }
+.cc-landing-signin { padding: 8px 14px; font-size: 13px; }
+.cc-landing-content { background: var(--cc-bg); color: var(--cc-fg); }
+.cc-landing h2 { font-size: 20px; font-weight: 700; margin-bottom: 14px; }
+.cc-landing-how { padding: 24px 20px 8px; }
+.cc-landing-step { border: 1px solid var(--cc-line); border-radius: 16px; background: var(--cc-card); padding: 16px; }
+.cc-landing-number { display: grid; width: 28px; height: 28px; place-items: center; margin-bottom: 10px; border-radius: 9px; background: var(--cc-box); color: #2a1b22; font-weight: 800; }
+.cc-landing-step h3 { margin-bottom: 6px; font-size: 16px; font-weight: 700; }
+.cc-landing-step p { color: var(--cc-sub); font-size: 14px; line-height: 1.45; }
+.cc-landing-community { padding: 20px; font-size: 15px; }
+.cc-landing-check { display: grid; width: 22px; height: 22px; flex: none; place-items: center; border-radius: 999px; background: var(--cc-ok-bg); color: var(--cc-ok); font-size: 13px; font-weight: 800; }
+.cc-landing-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 20px 28px; }
+.cc-landing-footer p { color: var(--cc-sub); font-size: 13px; }
+@media (min-width: 1024px) {
+  .cc-landing-sky::before { content: ''; position: absolute; top: 90px; right: max(58px,calc((100% - 1120px)/2 + 58px)); width: 26px; height: 26px; background: var(--cc-sun); pointer-events: none; }
+  .cc-landing-header { padding: 14px 48px; }
+  .cc-landing-hero { padding: 40px 48px 28px; }
+  .cc-landing-hero h1 { font-size: 46px; }
+  .cc-landing-hero p { font-size: 18px; }
+  .cc-landing-primary, .cc-landing-secondary { padding: 12px 22px; font-size: 15px; }
+  .cc-landing-signin { padding: 8px 14px; font-size: 13px; }
+  .cc-landing h2 { font-size: 24px; }
+  .cc-landing-how { padding: 36px 48px 8px; }
+  .cc-landing-community { padding: 28px 48px; }
+  .cc-landing-footer { padding: 8px 48px 40px; }
+}
+
 body { margin: 0; min-height: 100vh; font-family: system-ui, -apple-system, sans-serif; background: var(--cc-bg); color: var(--cc-fg); }

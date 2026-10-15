@@ -8,6 +8,7 @@ import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
 import { OnboardingPage } from './OnboardingPage'
 import { LibrarySection } from './LibraryPage'
 import { CacheBox, PixelHorizon } from '../components/PixelArt'
+import { LandingPage } from './LandingPage'
 
 export function HomePage() {
   const { me } = useAuth()
@@ -25,7 +26,7 @@ export function HomePage() {
       navigate(`/caches/${cache.id}`)
     },
   })
-  if (!me) return <Navigate to="/login" replace />
+  if (!me) return <LandingPage />
   if (peekJoinToken()) return <Navigate to={destinationAfterLogin()} replace />
   if (!me.display_name) return <OnboardingPage />
   function openCreate() { create.reset(); dialog.current?.showModal() }
