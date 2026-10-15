@@ -11,18 +11,18 @@ import { ItemRequests } from './RequestsPage'
 
 export function ItemList({ cacheId }: { cacheId: string }) {
   const query = useQuery({ queryKey: ['items', cacheId], queryFn: () => apiFetch<Item[]>(`/api/caches/${cacheId}/items`) })
-  return <section className="mt-8" aria-labelledby="items-heading">
+  return <section className="mt-6" aria-labelledby="items-heading">
     <div className="flex items-center justify-between gap-3">
       <h2 id="items-heading" className="text-xl font-semibold">Shared things</h2>
-      <Link to={`/caches/${cacheId}/items/new`} className="rounded-md bg-slate-900 px-4 py-2 text-white">Add item</Link>
+      <Link to={`/caches/${cacheId}/items/new`} className="cc-pill">+ Add item</Link>
     </div>
     {query.isPending && <p role="status" className="mt-4">Loading items…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try items again</button></div>}
-    {query.isSuccess && (query.data.length ? <ul className="mt-4 space-y-3">{query.data.map(item => <li key={item.id}>
-      <Link to={`/caches/${cacheId}/items/${item.id}`} className="block rounded-lg border border-slate-200 bg-white p-4">
+    {query.isSuccess && (query.data.length ? <ul className="cc-list mt-3">{query.data.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0">
+      <Link to={`/caches/${cacheId}/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5">
         <ItemPhoto key={item.photo_version} item={item} thumbnail />
-        <h3 className="break-words font-semibold">{item.title}</h3>
-        <p className="mt-1 text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p>
+        <div className="min-w-0 flex-1"><h3 className="break-words font-semibold">{item.title}</h3>
+        <p className="text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p></div><span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span>
       </Link>
     </li>)}</ul> : <p className="mt-4 text-slate-600">Nothing shared yet. Add the first item for your neighbors.</p>)}
   </section>
@@ -43,7 +43,7 @@ function DeleteItem({ item }: { item: Item }) {
     },
   })
   return <>
-    <button type="button" className="ml-3 mt-6 rounded-md border border-red-300 px-4 py-2 text-red-800" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Delete item</button>
+    <button type="button" className="ml-3 mt-6 rounded-full border border-red-300 px-3.5 py-1.5 text-sm font-medium text-red-800" onClick={() => { remove.reset(); dialog.current?.showModal() }}>Delete item</button>
     <dialog ref={dialog} onCancel={event => { if (remove.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="delete-item-heading">
       <h2 id="delete-item-heading" className="text-xl font-semibold">Delete {item.title}?</h2>
       <p className="mt-3">This permanently removes the item, its photos and request history. Neighbors with pending requests will be notified.</p>
@@ -62,8 +62,8 @@ export function ItemPage() {
   const query = useQuery({ queryKey: ['item', cacheId, itemId], queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`), enabled: !!me?.display_name })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  return <main className="mx-auto max-w-md px-4 py-8">
-    <Link to={`/caches/${cacheId}`} className="underline">Back to cache</Link>
+  return <main className="cc-page">
+    <Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link>
     {query.isPending && <p role="status" className="mt-4">Loading item…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try again</button></div>}
     {query.isSuccess && <>
@@ -73,7 +73,7 @@ export function ItemPage() {
       <p className="mt-4">{query.data.is_consumable ? `${query.data.quantity} in stock` : 'Reusable · no stock quantity'}</p>
       {query.data.description && <p className="mt-4 whitespace-pre-wrap break-words">{query.data.description}</p>}
       {me.id === query.data.owner_id && <>
-        <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="mt-6 inline-block rounded-md bg-slate-900 px-4 py-2 text-white">Edit item</Link>
+        <Link to={`/caches/${cacheId}/items/${itemId}/edit`} className="cc-pill mt-6">Edit item</Link>
         <DeleteItem item={query.data} />
         <PhotoUpload item={query.data} />
       </>}
@@ -118,7 +118,7 @@ function ItemForm({ cacheId, item }: { cacheId: string; item?: Item }) {
     </div>}
     {save.isError && <p role="alert" className="text-red-700">{errorMessage(save.error)}</p>}
     <div className="flex items-center gap-4">
-      <button type="submit" disabled={save.isPending || !title.trim()} className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60">{save.isPending ? 'Saving…' : item ? 'Save item' : 'Add item'}</button>
+      <button type="submit" disabled={save.isPending || !title.trim()} className="cc-pill">{save.isPending ? 'Saving…' : item ? 'Save item' : 'Add item'}</button>
       <Link to={item ? `/caches/${cacheId}/items/${item.id}` : `/caches/${cacheId}`} className="underline">Cancel</Link>
     </div>
   </form>
@@ -134,8 +134,8 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   if (editing && item.isSuccess && item.data.owner_id !== me.id) return <Navigate to={`/caches/${cacheId}/items/${itemId}`} replace />
   const error = cache.error ?? (editing ? item.error : null)
   const pending = cache.isPending || (editing && item.isPending)
-  return <main className="mx-auto max-w-md px-4 py-8">
-    <Link to={`/caches/${cacheId}`} className="underline">Back to cache</Link>
+  return <main className="cc-page">
+    <Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link>
     <h1 className="mt-4 text-2xl font-semibold tracking-tight">{editing ? 'Edit item' : 'Add an item'}</h1>
     {pending && <p role="status" className="mt-4">Loading…</p>}
     {error && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(error)}</p><button className="mt-2 underline" onClick={() => { void cache.refetch(); if (editing) void item.refetch() }}>Try again</button></div>}
