@@ -60,7 +60,9 @@ it('keeps full-width cache cards at lg with one native create dialog and no requ
   expect(markup).toContain('flex gap-3 lg:flex-row-reverse')
   expect(markup.match(/<dialog\b/g)).toHaveLength(1)
   expect(markup.match(/<form\b/g)).toHaveLength(1)
-  expect(markup).not.toContain('Your items')
+  expect(markup).toContain('Your items')
+  expect(markup).toContain('href="/items"')
+  expect(markup).toContain('See all')
 })
 
 it('uses wide-only breadcrumbs, Settings label and photo cards without duplicating item details or inventing pending chips', () => {
@@ -90,7 +92,7 @@ it('opens destructive controls with distinct global-delete and detach consequenc
   expect(detail).toContain('not existing pending requests')
   expect(detail).toContain('Delete item')
   expect(detail).toContain('your library and every cache')
-  expect(detail).toContain('Stop sharing in this cache')
+  expect(detail).toContain('Shown in')
   expect(detail).toContain('The item is removed from this cache only')
   expect(detail).toContain('Your library item, photos, stock and other caches are kept')
   expect(detail).not.toContain('Requests are being moved')
