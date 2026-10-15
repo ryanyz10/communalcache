@@ -8,7 +8,7 @@ import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 
 export function LibraryCards({ items, preview = false }: { items: LibraryItem[]; preview?: boolean }) {
   const Heading = preview ? 'h3' : 'h2'
-  return <ul className="cc-list mt-3 lg:grid lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{items.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0 lg:border-0">
+  return <ul className="cc-list cc-card-grid mt-3 lg:grid lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent">{items.map(item => <li key={item.id} className="border-t border-slate-100 first:border-t-0 lg:border-0">
     <Link to={`/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:block lg:h-full lg:overflow-hidden lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-0">
       <ItemPhoto key={item.photo_version} item={item} thumbnail />
       <div className="min-w-0 flex-1 lg:px-3.5 lg:py-3"><Heading className="break-words font-semibold">{item.title}</Heading>
@@ -45,7 +45,7 @@ export function LibraryPage() {
   const { me } = useAuth()
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
+  return <main className="cc-page">
     <WideBreadcrumbs><Link to="/">Home</Link><span aria-hidden="true">›</span><span>Your items</span></WideBreadcrumbs>
     <Link to="/" className="text-sm underline lg:hidden">‹ Home</Link>
     <LibrarySection />

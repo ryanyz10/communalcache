@@ -102,6 +102,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 5 | Cozy theme and app identity | Implemented; in review: round-6 sunny/evening CSS tokens via prefers-color-scheme, 2px Home boxes/cache-member houses, decorative reduced-motion cat, open-box/cat Home mark and reproducible SVG/32/180/192/512 icon set. Phone/wide fixture comparisons cover key screens in both palettes; native installed-PWA/device proof remains separate. No API, plan UI or dependency changes. |
 | Readiness 5a | Desktop cozy pass | Implemented; in review: 1200px desktop content, width-scaled pixel scenes/taller sign-in illustration, cache members sidebar, outgoing request column and two-column Account. Original phone geometry/classes retained below 1024px; native-viewport screenshot receipts in the PR body. No API/dependency changes. |
 | Readiness 5b | Cozy motion | Implemented; in review: shared 400ms stepped cache opening for horizon/cards and Enter, one two-frame integer-pixel walker with edge pauses/turns, idle blink/ear/sky motion, small card lift, 140ms route opacity fade and sheet entrance. Reduced motion skips all animation/navigation delay; hidden tabs suspend motion. No API/dependency changes; recordings stay in the PR body. |
+| Readiness 5c | Fluid responsive layout | Implemented; in review: full-bleed Home/cache sky and repeated terrain, shared clamp gutters/1920px content cap, intrinsic card grids, readable 72ch prose/forms, room-aware cache sidebar and integer 3–7px artwork above 640px. 390px phone visuals are unchanged; 449–639px keeps phone content geometry while extending only decorative background bands. Native viewport receipts stay in the PR body. No API/dependency changes. |
 | Readiness 6 | Turnstile and bot setup | Implemented; in review: one strict Worker siteverify guard for magic-link/OTP sends and cache creation, explicit action/theme widgets, one-use token reset and fail-closed errors. Owner-approved shared public sitekey with separate staging/production hostname lists; secrets remain owner-managed. Real-token staging validation pending after deploy; Bot Fight Mode remains separate. |
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
@@ -509,14 +510,18 @@ Implementation: `web/src/index.css` defines both palettes and maps the existing
 Tailwind utility names to shared tokens so sheets/error/status/wide layouts inherit
 the same theme. `PixelArt.tsx` keeps the horizon aria-hidden; Home box shortcuts are
 pointer-only (tabIndex=-1), while the existing labeled cache list remains the
-keyboard/screen-reader path. Phone SVGs use fixed 2px sprite cells and horizontal
-overflow when many decorations cannot fit. From 1024px, the same art uses a
-width-scaled viewBox (roughly 4–5.5px cells for app heroes), with a taller sky,
-sun/clouds and larger headline on the sign-in brand panel. Existing wide layouts
-are extended, not replaced: content/header align at 1200px, cache cards remain a
-3–4-column grid, cache items sit beside a members panel, Item retains photo/details
-columns, outgoing Requests occupy the right column and Account uses two columns.
-Native-viewport screenshot receipts and proof limits are recorded in the PR body. The walking cat stops under
+keyboard/screen-reader path. Below 640px, the original 96px phone scene keeps 2px
+sprite cells and horizontal overflow when decorations cannot fit. At 449–639px,
+only the decorative bands extend to the viewport; content and foreground sprites
+keep their old phone measures. Larger scenes
+repeat native-size SVG terrain patterns across their available width; container
+queries step sprite cells from 3px to 7px rather than stretching one small viewBox.
+Home/cache header, sky and horizon backgrounds are full-bleed. Content uses a
+shared clamp(16px,4vw,96px) gutter and 1920px cap, with intrinsic auto-fill card
+grids; prose/forms stay within 72ch. Cache members stack until the content
+container has 68rem for a sidebar. Item/Requests/Account retain their wide columns,
+and sign-in keeps a bounded form beside a fluid art panel. Screenshot receipts
+and proof limits are recorded in the feature PR body. The walking cat stops under
 prefers-reduced-motion; information and controls never depend on it.
 
 Cozy motion shares one `CacheLink` path for cards and horizon shortcuts: a 400ms

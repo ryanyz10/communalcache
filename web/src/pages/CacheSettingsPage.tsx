@@ -99,15 +99,15 @@ export function CacheSettingsPage() {
   })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  if (query.isPending) return <main className="cc-page lg:max-w-[1120px] lg:p-8"><p role="status">Loading cache settings…</p></main>
-  if (query.isError) return <main className="cc-page lg:max-w-[1120px] lg:p-8"><Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={() => void query.refetch()}>Try again</button></main>
+  if (query.isPending) return <main className="cc-page"><p role="status">Loading cache settings…</p></main>
+  if (query.isError) return <main className="cc-page"><Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={() => void query.refetch()}>Try again</button></main>
   const cache = query.data, owner = cache.owner_id === me.id
   const invite = new URL(`/join/${cache.invite_token}`, location.origin).href
   async function copy() {
     try { await navigator.clipboard.writeText(invite); setCopyStatus('Invite copied.') }
     catch { setCopyStatus('Could not copy automatically. Select the invite link and copy it.') }
   }
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page">
     <WideBreadcrumbs><Link to="/">Caches</Link><span aria-hidden="true">›</span><Link to={`/caches/${cache.id}`}>{cache.name}</Link><span aria-hidden="true">›</span><span>Settings</span></WideBreadcrumbs>
     <Link to={`/caches/${cache.id}`} className="text-sm underline lg:hidden">‹ {cache.name}</Link>
     <h1 className="mt-3 text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Cache settings</h1>
