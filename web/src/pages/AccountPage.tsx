@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { OnboardingPage } from './OnboardingPage'
 import { PushControls } from './PushControls'
+import { ProfilePhotoControls } from './ProfilePhotoControls'
 
 export function AccountPage() {
   const { me, refresh, signOut } = useAuth()
@@ -31,6 +32,7 @@ export function AccountPage() {
       <p className="hidden lg:col-start-1 lg:row-start-2 lg:block lg:text-sm lg:text-slate-600">What neighbors see.</p>
       <div className="contents lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block">
       <div className="cc-list">
+        <ProfilePhotoControls key={me.id} />
         <div className="cc-row">
           <div className="min-w-0 flex-1"><p className="font-semibold">Display name</p><p className="break-words text-sm text-slate-600">{me.display_name} · what neighbors see</p></div>
           <button ref={edit} type="button" className="text-sm underline" onClick={() => { setName(me.display_name!); save.reset(); setEditing(true) }} aria-expanded={editing}>Edit<span className="sr-only"> display name</span></button>

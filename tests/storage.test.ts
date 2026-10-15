@@ -4,7 +4,7 @@ import { applyD1Migrations, type D1Migration } from 'cloudflare:test'
 
 it('creates empty D1 auth/application schemas and records Wrangler migrations idempotently', async () => {
   const tables = (await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all<{name:string}>()).results.map(row => row.name)
-  for (const table of ['user','session','account','verification','rateLimit','caches','memberships','items','item_caches','requests','r2_cleanup','r2_cleanup_cursor','notification_sync_cursor','push_subscriptions','outbox','write_limits','d1_migrations']) expect(tables).toContain(table)
+  for (const table of ['user','session','account','verification','rateLimit','user_photos','plan_limits','caches','memberships','items','item_caches','requests','r2_cleanup','r2_cleanup_cursor','notification_sync_cursor','push_subscriptions','outbox','write_limits','d1_migrations']) expect(tables).toContain(table)
   for (const table of ['my_caches','cache_sync_cursor']) expect(tables).not.toContain(table)
   const columns = (await env.DB.prepare('PRAGMA table_info(user)').all<{name:string;notnull:number}>()).results
   expect(columns.find(column => column.name === 'display_name')?.notnull).toBe(0)

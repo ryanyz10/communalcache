@@ -14,7 +14,7 @@ See [plan.md](plan.md) and [D1 PRs 2–7](build-guide.md#d1-implementation-plan)
 | Store | Owns | Never used for |
 | --- | --- | --- |
 | ONE D1 database | Auth/profiles/limits, caches/config/secrets, memberships, canonical items, item_caches, ONE stock ledger, requests, outbox/push, R2 cleanup intents | Public browser database credentials |
-| Private R2 | Immutable ownerId/itemId/uploadUUID bytes | Permission or relational state |
+| Private R2 | Immutable ownerId/itemId/uploadUUID item bytes and users/userId/uploadUUID profile bytes | Permission or relational state |
 | Queue | Outbox ID delivery hints/retries | Sole durable event storage |
 
 Every cache-data query/write joins or EXISTS-checks active membership **in that
@@ -124,10 +124,15 @@ approval does not clear it. No current-holder/return table or new request status
   owned_caches at 3 and cache_members at 100. Other seeds equal free.
   A missing policy row fails closed, not unlimited.
   Counts come directly from canonical rows; pending joins reserve no active seat.
-  Rolling cache quota uses created_at > now-24h. Profile_photos=1 is seeded only
-  until the profile-photo endpoint/guard lands. See the approved
+  Rolling cache quota uses created_at > now-24h. Profile_photos=1 now guards the
+  profile-photo finalization in the same post-R2 D1 batch. See the approved
   [quota policy](plan.md#plans-foundation-and-launch-limits) and
   [owner-only assignment runbook](deploy.md#manual-plan-assignment-owner-run).
+- `user_photos`: one current immutable path and fresh operation token per user,
+  FK to app user; no photo path is added to Better Auth's user output. Profile
+  reads and nullable avatar-version enrichment require self or a currently shared
+  active cache in the same SQL statement. The photo route rechecks independently
+  before R2 streaming; request history/metadata is not a cached grant.
 - `outbox`: current id, kind, dedupe_key, payload JSON text, attempts >= 0,
   claim_until/token, sent_at, failed_at, created_at; UNIQUE(kind,dedupe_key),
   CHECK(sent_at IS NULL OR failed_at IS NULL), partial unsent index. IDs now come
@@ -151,10 +156,12 @@ item deletion; intents survive deletion and do not FK to source items.
 ```sql
 CREATE TABLE r2_cleanup (
   id TEXT PRIMARY KEY NOT NULL,
-  owner_id TEXT NOT NULL, item_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL, item_id TEXT,
   kind TEXT NOT NULL CHECK(kind IN ('exact','prefix')),
   target TEXT NOT NULL, created_at INTEGER NOT NULL,
   claim_token TEXT, claim_until INTEGER,
+  scope TEXT NOT NULL DEFAULT 'item' CHECK(scope IN ('item','profile')),
+  CHECK((scope='item' AND item_id IS NOT NULL) OR (scope='profile' AND item_id IS NULL AND kind='exact')),
   UNIQUE(kind,target)
 );
 ```
@@ -170,6 +177,13 @@ photo. No finite retry budget silently abandons cleanup. The current sweep uses
 90-second leases, two cursor-paged intents/tick and one 100-key prefix page per
 intent. Local tests prove retry/claim/cursor behavior; production throughput and
 combined resource fit remain unverified.
+
+Profile cleanup uses exact `users/{owner_id}/{uploadUUID}` keys, item_id=NULL
+and scope=profile. Replacement/removal snapshots old keys in the same token batch
+as the current pointer change. Claims protect both item and profile pointers;
+validators never pass user keys through item-prefix deletion. Known rejected
+uploads retain exact cleanup, including an uncertain R2 response. Profile remove
+remains allowed at quota zero. Account deletion is not added by this feature.
 
 Owner upload checks item ownership before R2 I/O and uses a guarded finalization
 batch afterward: update photo_path only if caller still owns the item, record
@@ -356,6 +370,13 @@ block growth rather than deleting data. Public app/auth inputs do not set plans.
 Guard-failure diagnostics share the atomic batch snapshot and return 409
 limit_reached plus a stable limit name; 503 limits_unavailable denotes missing
 policy. No JavaScript pre-read authorizes a later quota write.
+
+Migration **0013_profile_photos** adds app-owned user_photos and rebuilds cleanup
+with explicit item/profile scope, preserving existing IDs, targets, timestamps,
+claims and the separate cursor. Old item writers keep the default item scope.
+Profile finalization checks user + current plan allowance and a fresh token;
+removal snapshots cleanup before deleting the pointer. No auth-core schema,
+binding, dependency, public bucket or signed URL changes.
 
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Do not point it at legacy `internal/db/migrations/`.

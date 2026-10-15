@@ -115,11 +115,13 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     with a guarded item/ownership re-check after R2 I/O; immutable keys are
     ownerId/itemId/uploadUUID. Detach/removal alone never deletes a shared photo.
     Same-origin cookies suffice; no public bucket, signed URL or bearer/blob route.
-    The approved future profile photo uses `users/{userId}/{uploadUUID}`: owner-only
-    mutation; reads require self or a cache where caller and photo owner are both
-    active, checked in one D1 statement before private/no-store R2 streaming.
-    Pointer changes and explicit user-photo cleanup intents commit together; use
-    initials fallback and never pass user keys through item-prefix cleanup.
+    Profile photos use `users/{userId}/{uploadUUID}` and app-owned user_photos:
+    self-only mutation; reads and avatar metadata require self or a cache where
+    caller and photo owner are both active, checked in one D1 statement before
+    private/no-store streaming. History/metadata never grants photo permission.
+    Pointer/token changes and cleanup commit together; profile cleanup has
+    scope=profile, item_id=NULL and exact keys only, never a fake item ID. Claims
+    protect current item/profile pointers. Use initials on absent/failed images.
 13. **Cookie auth requires app CSRF protection.** HttpOnly/Secure/SameSite=Lax
     production cookies, exact Better Auth trustedOrigins and Origin checks on app
     mutations; reject missing/null/foreign origins. Auth guards do not cover unrelated
@@ -136,8 +138,8 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     20 active cache memberships, 30 active members/cache, 100 owned items,
     20 pending outgoing requests and 1 current item photo at the current cap.
     Plus keeps owned_caches at 3 and cache_members at 100; other seeds equal free
-    until the owner decides otherwise. Profile_photos=1 is seeded only; its
-    endpoint/guard belongs to the profile-photo PR. Pending joins reserve no seat; approval/left rejoin
+    until the owner decides otherwise. Profile_photos=1 now guards profile finalization after R2
+    I/O; replacement keeps one current pointer, removal remains allowed at zero. Pending joins reserve no seat; approval/left rejoin
     rechecks caps, while rejection and existing join replays stay possible at cap.
     Count owners; never exempt by role. Missing policy fails closed. Return 409
     limit_reached plus stable limit name; preserve photo replacement and cleanup.
