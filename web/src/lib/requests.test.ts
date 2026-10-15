@@ -13,7 +13,7 @@ const item: Item = { id: 'item', cache_id: 'cache', title: 'Sugar', description:
 const request: ItemRequest = { id: 'request', cache_id: 'cache', cache_name: 'Pantry', item_id: 'item', item_title: 'Sugar', owner_id: 'owner', owner_name: 'Owner', requester_id: 'member', requester_name: 'Neighbor', quantity: 2, status: 'pending', decision_reason: null, decided_at: null, created_at: 1 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-function render(page: 'item' | 'all', options: { caller?: string; item?: Item; requests?: ItemRequest[]; unavailable?: string[]; next?: string | null; error?: boolean } = {}) {
+function render(page: 'item' | 'all', options: { caller?: string; item?: Item; requests?: ItemRequest[]; unavailable?: string[]; next?: string | null; error?: boolean; moving?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } })
   client.setQueryData(['me'], { id: options.caller ?? 'member', display_name: 'Neighbor', email: 'private@example.test' })
   const rows = options.requests ?? [request]
@@ -22,7 +22,7 @@ function render(page: 'item' | 'all', options: { caller?: string; item?: Item; r
   else client.setQueryData(key, rows)
   const data: RequestsPageData = { requests: rows, unavailable_cache_ids: options.unavailable ?? [], next_cursor: options.next ?? null }
   client.setQueryData(['requests'], { pages: [data], pageParams: [null] })
-  const element = page === 'item' ? createElement(ItemRequests, { item: options.item ?? item }) : createElement(RequestsPage)
+  const element = page === 'item' ? createElement(ItemRequests, { item: options.item ?? item }) : createElement(RequestsPage, { itemsMoving: options.moving })
   const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, null, element) })))
   client.clear()
   return markup
@@ -86,6 +86,14 @@ it('preserves partial-unavailable warnings and continuation instead of pretendin
   expect(partial).toContain('in the loaded caches')
   expect(partial).toContain('Try unavailable caches again')
   expect(render('all', { requests: [] })).not.toContain('Load more caches')
+})
+
+it('shows only the transition message instead of cached legacy requests when gated', () => {
+  const markup = render('all', { moving: true })
+  expect(markup).toContain('Items are being moved, back soon')
+  expect(markup).not.toContain('Needs your answer')
+  expect(markup).not.toContain('Approve request')
+  expect(markup).not.toContain('Sugar')
 })
 
 it('uses nested cookie-auth mutations without forged party IDs and invalidates every affected view', async () => {

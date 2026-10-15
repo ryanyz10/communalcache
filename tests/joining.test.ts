@@ -195,7 +195,7 @@ it('notification D1 failure retains and re-arms work until an alarm successfully
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM outbox').first('n')).toBe(1)
 })
 
-it('Worker resumes a body-only invite after code/name onboarding and protects queue/decisions with CSRF and live DO authority', async () => {
+it('Worker resumes a body-only invite after code/name onboarding and protects queue/decisions with CSRF and live D1 authority', async () => {
   const owner = await login('owner@example.test')
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: owner.cookie, body: { display_name: 'Owner' } }), env)
   const response = await worker.fetch(appRequest('/api/caches', { method: 'POST', cookie: owner.cookie, body: { name: 'Tools', requires_approval: true } }), env)
@@ -228,8 +228,7 @@ it('Worker resumes a body-only invite after code/name onboarding and protects qu
   const detail = await worker.fetch(appRequest(path, { cookie: applicant.cookie }), env)
   expect(detail.status).toBe(200)
   expect(JSON.stringify(await detail.json())).not.toContain('example.test')
-  const stub = cache(info.id).stub
-  await runInDurableObject(stub, (_instance, state) => { state.storage.sql.exec("UPDATE members SET status = 'removed' WHERE user_id = ?", applicant.id) })
+  await env.DB.prepare("UPDATE memberships SET status='removed' WHERE cache_id=? AND user_id=?").bind(info.id,applicant.id).run()
   expect((await post(path + '/join', undefined, { secret })).status).toBe(403)
   expect((await worker.fetch(appRequest(path, { cookie: applicant.cookie }), env)).status).toBe(404)
   expect((await post(path + '/join/' + secret)).status).toBe(404)

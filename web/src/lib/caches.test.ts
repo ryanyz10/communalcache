@@ -12,7 +12,7 @@ import { apiFetch, ApiError, errorMessage } from './api'
 const id='11111111-1111-4111-8111-111111111111'
 const cache={id,name:'Tools',owner_id:'owner',requires_approval:false,invite_token:id+'.'+'a'.repeat(43),members:[{user_id:'owner',display_name:'Neighbor'},{user_id:'member',display_name:'Member neighbor'}]}
 
-function renderPage(owner:boolean, home=false, settings=false) {
+function renderPage(owner:boolean, home=false, settings=false, moving=false) {
   vi.stubGlobal('location',{origin:'http://127.0.0.1:8788'})
   vi.stubGlobal('sessionStorage',{getItem:()=>null})
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
@@ -22,7 +22,8 @@ function renderPage(owner:boolean, home=false, settings=false) {
   client.setQueryData(['join-requests',id],[{user_id:'applicant',display_name:'New neighbor',created_at:1}])
   client.setQueryData(['requests'],{pages:[{requests:[],unavailable_cache_ids:[],next_cursor:null}],pageParams:[null]})
   const path=home?'/':settings?'/caches/:cacheId/settings':'/caches/:cacheId'
-  const page=createElement(Routes,null,createElement(Route,{path,element:createElement(home?HomePage:settings?CacheSettingsPage:CachePage)}))
+  const element=home?createElement(HomePage):settings?createElement(CacheSettingsPage,{removalDisabled:moving}):createElement(CachePage,{itemsMoving:moving})
+  const page=createElement(Routes,null,createElement(Route,{path,element}))
   const tree=createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,{initialEntries:[home?'/':`/caches/${id}${settings?'/settings':''}`]},page)}))
   const markup=renderToStaticMarkup(tree)
   client.clear()
@@ -65,6 +66,18 @@ it('renders discovery entries and a named create sheet instead of inline setting
   expect(detail).toContain('aria-label="Cache settings"')
   expect(detail).not.toContain('Reset link')
   expect(detail).not.toContain('Confirm removal')
+})
+
+it('shows the minimal transition message without legacy item or member-removal controls',()=>{
+  const cache=renderPage(true,false,false,true)
+  expect(cache).toContain('Items are being moved, back soon')
+  expect(cache).not.toContain('+ Add item')
+  expect(cache).not.toContain('Loading items')
+  const settings=renderPage(true,false,true,true)
+  expect(settings).not.toContain('Remove Member neighbor')
+  expect(settings).not.toContain('Confirm removal')
+  expect(settings).toContain('Approve New neighbor')
+  expect(settings).toContain('Reset link')
 })
 
 it('sends create/settings/rotate bodies without a forged owner or path secret',async()=>{

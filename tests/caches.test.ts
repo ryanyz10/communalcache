@@ -215,7 +215,7 @@ it('D1 effects are idempotent and do not create a reverse index ahead of registr
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM my_caches').first('n')).toBe(1)
 })
 
-it('Worker routes use live DO authority and enrich only public names', async () => {
+it('Worker routes use canonical D1 authority and enrich only public names', async () => {
   const caller=await login()
   const profile = appRequest('/api/me',{method:'PATCH',cookie:caller.cookie,body:{display_name:'Owner'}})
   expect((await worker.fetch(profile,env)).status).toBe(200)
@@ -223,7 +223,7 @@ it('Worker routes use live DO authority and enrich only public names', async () 
   expect(response.status).toBe(201)
   const info=await response.json() as {id:string;owner_id:string;invite_token:string}
   expect(info.owner_id).toBe(caller.id)
-  expect(await (await worker.fetch(appRequest('/api/caches',{cookie:caller.cookie}),env)).json()).toEqual([])
+  expect(await (await worker.fetch(appRequest('/api/caches',{cookie:caller.cookie}),env)).json()).toEqual([{id:info.id,name:'Tools'}])
   const stub=cache(info.id).stub
   const detail=await worker.fetch(appRequest(`/api/caches/${info.id}`,{cookie:caller.cookie}),env)
   expect(await detail.json()).toMatchObject({id:info.id,members:[{user_id:caller.id,display_name:'Owner'}]})
@@ -231,11 +231,8 @@ it('Worker routes use live DO authority and enrich only public names', async () 
   const home=await (await worker.fetch(appRequest('/api/caches',{cookie:caller.cookie}),env)).json()
   expect(home).toEqual([{id:info.id,name:'Tools'}])
   expect(JSON.stringify(home)).not.toContain('example.test')
-  // Deliberately drift the reverse index by making the formerly active owner a removed member.
-  await runInDurableObject(stub,(_instance,state)=>{
-    state.storage.sql.exec("UPDATE members SET role = 'member', status = 'removed' WHERE user_id = ?",caller.id)
-    state.storage.sql.exec("INSERT INTO members VALUES ('replacement','owner','active',1)")
-  })
+  // Canonical membership loss, not a DO or stale discovery copy, blocks the next query.
+  await env.DB.prepare("UPDATE memberships SET role='member',status='removed' WHERE cache_id=? AND user_id=?").bind(info.id,caller.id).run()
   expect((await worker.fetch(appRequest(`/api/caches/${info.id}`,{cookie:caller.cookie}),env)).status).toBe(404)
   expect((await worker.fetch(appRequest(`/api/caches/${info.id}`,{method:'PATCH',cookie:caller.cookie,body:{name:'Forbidden'}}),env)).status).toBe(404)
 })
