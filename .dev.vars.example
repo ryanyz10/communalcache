@@ -4,5 +4,9 @@ BETTER_AUTH_URL=http://127.0.0.1:8787
 BETTER_AUTH_SECRET=
 RESEND_API_KEY=
 EMAIL_FROM=Communal Cache <signin@send.communalcache.com>
+# Optional local-only VAPID P-256 pair, never production keys. Leave blank to disable push UI.
+# Public key: base64url uncompressed 65-byte point. Private key: base64url JWK d scalar.
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
 # For Vite development, change BOTH URLs above to http://localhost:5173.
 # Tests/UI fixture mock email; real Resend/domain setup needs approval.

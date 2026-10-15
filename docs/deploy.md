@@ -110,8 +110,10 @@ These are operator setup instructions, **not commands executed by this PR**.
    ```
 
    Resend's sender/domain must be approved and verified for actual sign-in mail;
-   `EMAIL_FROM` is unchanged in both environments. `VAPID_PRIVATE_KEY` is a later
-   push-feature secret, not needed by this pipeline's current application slice.
+   `EMAIL_FROM` is unchanged in both environments. Push now also needs each
+   environment's own `VAPID_PRIVATE_KEY`, stored through the approved interactive
+   Worker-secret flow, and its matching `VAPID_PUBLIC_KEY` public runtime variable.
+   No VAPID pair was generated/provisioned by this feature.
 4. Protect `master` with the CI `checks` job after it appears on the first PR;
    review workflow edits as privileged release code. Protect `production` against
    force pushes/deletion and restrict who may promote. Do not require a new PR
@@ -192,7 +194,7 @@ locally validated version (no repo engine/version file is currently present).
    with private cache headers; no public bucket, signed URL or service-role key.
 5. After approval, create `communalcache-notifications-staging` for staging and
    `communalcache-notifications` for default/production, bound as `NOTIFICATIONS`.
-   Both producer and consumer configs are declared: batch size five, six retries,
+   Both producer and consumer configs are declared: batch size three, six retries,
    60-second retry delay and consumer concurrency two. The five-minute Cron handles
    registry sync and cursor-paged outbox rescue; Queue retry exhaustion/retention
    is not the recovery policy. DO failures persist exponential backoff (five
@@ -243,6 +245,25 @@ use the provider's required DNS verification records and wait for verification.
 so the sender is `signin@send.communalcache.com`. Both auth codes and notification
 emails use Resend HTTP, but one failing path need not imply the other is broken.
 Domain ownership alone is not sending-domain verification.
+
+### Web push
+
+The sender pins `@block65/webcrypto-web-push@2.0.0` (published 2026-09-03), after
+local workerd RFC 8291 decryption/VAPID signature proof. Generate a separate P-256
+VAPID pair for staging and production through a trusted offline process. Store
+`VAPID_PRIVATE_KEY` (base64url JWK `d`) as a Worker secret and configure matching
+`VAPID_PUBLIC_KEY` (base64url 65-byte uncompressed point) as public runtime config.
+The app origin is the VAPID subject/contact URI. No secret value belongs in argv,
+git, provider mocks, screenshots or logs. Key rotation requires browsers to disable
+and re-enable notifications with the matching new public key.
+
+Allowed push services are exact `fcm.googleapis.com`,
+`updates.push.services.mozilla.com`, `web.push.apple.com`, and hostname-boundary
+subdomains of `.notify.windows.com`, always HTTPS/default port, no userinfo and
+manual redirects. Re-check policy at send, not only subscription time. Native
+private-IP/DNS-rebinding blocking is **UNVERIFIED**. After separate approval, prove
+actual provider delivery, gesture permission, installed iOS delivery/icon rendering
+and production CPU/resource budgets; local tests do not establish these facts.
 
 ## Public config vs secrets
 

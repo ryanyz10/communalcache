@@ -29,7 +29,7 @@
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["Cache"]}],
   "queues": {
     "producers": [{"binding": "NOTIFICATIONS", "queue": "communalcache-notifications"}],
-    "consumers": [{"queue": "communalcache-notifications", "max_batch_size": 5, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
+    "consumers": [{"queue": "communalcache-notifications", "max_batch_size": 3, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
   },
   "triggers": { "crons": ["*/5 * * * *"] },
   "env": {
@@ -54,7 +54,7 @@
       },
       "queues": {
         "producers": [{"binding": "NOTIFICATIONS", "queue": "communalcache-notifications-staging"}],
-        "consumers": [{"queue": "communalcache-notifications-staging", "max_batch_size": 5, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
+        "consumers": [{"queue": "communalcache-notifications-staging", "max_batch_size": 3, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
       },
       "triggers": { "crons": ["*/5 * * * *"] }
     },
@@ -81,7 +81,7 @@
       },
       "queues": {
         "producers": [{"binding": "NOTIFICATIONS", "queue": "communalcache-notifications"}],
-        "consumers": [{"queue": "communalcache-notifications", "max_batch_size": 5, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
+        "consumers": [{"queue": "communalcache-notifications", "max_batch_size": 3, "max_batch_timeout": 5, "max_retries": 6, "retry_delay": 60, "max_concurrency": 2}]
       },
       "triggers": { "crons": ["*/5 * * * *"] }
     }

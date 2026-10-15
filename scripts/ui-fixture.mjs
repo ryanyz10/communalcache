@@ -27,6 +27,11 @@ const server = createServer(async (request, response) => {
     let body = {}
     try { if (request.headers['content-type']?.startsWith('application/json')) body = JSON.parse(raw.toString() || '{}') }
     catch { json({error: 'invalid_json'}, 400); return }
+    if (path === '/api/config') {
+      const origin=`http://${request.headers.host}`
+      json({app_base_url:origin,better_auth_url:origin,vapid_public_key:''})
+      return
+    }
     const sessionId = request.headers.cookie?.match(/(?:^|;\s*)ui_fixture=([^;]+)/)?.[1]
     let me = [...users.values()].find(user=>user.id===sessionId) ?? null
     const authenticated = !!me
@@ -162,9 +167,9 @@ const server = createServer(async (request, response) => {
   try {
     const file = resolve(dist, '.' + path)
     if (file !== resolve(dist) && !file.startsWith(dist)) { response.writeHead(404); response.end(); return }
-    const isAsset = path.startsWith('/assets/') || path === '/favicon.svg'
+    const isAsset = path.startsWith('/assets/') || ['/favicon.svg','/sw.js','/manifest.webmanifest'].includes(path)
     const data = await readFile(isAsset ? file : resolve(dist, 'index.html'))
-    const types = {'.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.html':'text/html'}
+    const types = {'.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.html':'text/html','.webmanifest':'application/manifest+json'}
     response.writeHead(200, { 'Content-Type': types[extname(isAsset ? file : 'index.html')] ?? 'application/octet-stream' })
     response.end(data)
   } catch { response.writeHead(404); response.end() }

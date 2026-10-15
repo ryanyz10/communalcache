@@ -6,6 +6,7 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheInfo, CacheSummary } from '../lib/caches'
 import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
 import { OnboardingPage } from './OnboardingPage'
+import { PushControls } from './PushControls'
 
 export function HomePage() {
   const { me, signOut } = useAuth()
@@ -63,6 +64,7 @@ export function HomePage() {
         <button type="submit" disabled={create.isPending || !name.trim()} className="rounded-md bg-slate-900 px-4 py-2 text-white disabled:opacity-60">{create.isPending?'Creating…':'Create cache'}</button>
       </form>
     </section>
+    <PushControls userId={me.id} />
     {error && <p role="alert" className="mt-4 text-red-700">{error}</p>}
     <button type="button" disabled={pending} className="mt-8 rounded-md border border-slate-300 px-4 py-2" onClick={()=>void logout()}>{pending?'Signing out…':'Sign out'}</button>
   </main>
