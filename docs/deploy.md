@@ -1,34 +1,42 @@
 # Deploying the Cloudflare stack
 
-Target release runbook; Foundation supplies tooling/bindings and commits the real
-ID of the approved `communalcache` D1 database. Remote migrations and deployment
-have not been authorized by that resource creation. **Get explicit approval before
-further account operations, provider changes, a real deploy, data migration or
-decommissioning.** Existing production remains live until an approved cutover.
+Target runbook for **one Worker/SPA + ONE D1 database + private R2 + notification
+Queue/Cron**, with Cron also draining durable R2 cleanup intents. No Cache/Owner
+Durable Objects or discovery/projection sync in the target. PR #29's Owner model
+is superseded; its shared-item/Lent out/private-photo product decisions remain.
 
-## What is deployed
+**This docs-only PR changes no code, bindings, config, packages or migrations and
+runs no Cloudflare commands.** Current Cache DO deployment configuration remains
+until D1 PR 7. Deleting the class and resetting staging each require explicit
+approval; neither is implied by the architecture decision. Legacy Fly/Supabase
+stays live until separately approved cutover/decommissioning.
 
-One TypeScript module Worker, its React static assets, and an exported SQLite cache
-DO class. Bindings connect global D1, cache DO namespace, private R2 and Queue
-producer/consumer; a scheduled handler runs registry-sync and outbox sweeps.
-Better Auth runs inside the Worker with D1 users/sessions and magic links plus
-explicit email-OTP fallback. Resend fetch serves auth mail awaited by its request
-(link-only by default, code-only on request), independently of Queue notification
-email. No target Supabase service or SMTP setup.
+## Target versus current deployment
 
-Foundation supplies `wrangler.jsonc`, D1 binding `DB` (database `communalcache`),
-SQLite DO binding `CACHES` (class `Cache`) and `ASSETS` (`web/dist`). The approved
-D1 ID `b4257b89-22d6-40f1-b250-ccd1985bf1d1` is committed in `wrangler.jsonc`;
-remote migrations and deployment still need separate approval. Compatibility date
-`2026-09-30` supports RPC/default error serialization; `nodejs_compat` is set.
-Caches declares an intended five-minute registry Cron and its scheduled handler;
-no production trigger has been installed. Photos/Notifications now declare R2/Queue
-bindings, but the remote buckets/queues have not been provisioned by these features.
+| Target | Current configuration / transition |
+| --- | --- |
+| DB: canonical caches, memberships, items, attachments, stock, requests, auth, outbox/push | Current DB holds auth/discovery/outbox; Cache DOs still hold cache-local app rows. Port by D1 PRs 2–6, not dual-writing stock. |
+| Private BUCKET: ownerId/itemId/uploadUUID photos | Current cache-key photos need approved mapping/reset; never become public. |
+| NOTIFICATIONS Queue and bounded outbox Cron | Keep claims/retry/terminal policy; producers insert outbox atomically with state, not DO pending_sync. |
+| Durable r2_cleanup + bounded Cron | Replace DO R2 intents; external R2 is not in the D1 transaction. |
+| No Cache/Owner classes, alarms or registry sweeps | Retire Cache in PR 7 via approved deleted_classes migration; never add the superseded Owner namespace. |
+
+Current wrangler.jsonc commits the approved production D1 communalcache ID
+b4257b89-22d6-40f1-b250-ccd1985bf1d1, CACHES/Cache SQLite binding and ASSETS web/dist.
+Compatibility date 2026-09-30 and nodejs_compat are unchanged by this spec. Current
+five-minute Cron still runs registry/outbox work; target removes registry work and
+adds bounded cleanup. No trigger/resource success is inferred from a config entry.
+
+Better Auth runs in the Worker with D1 sessions and link-only primary mail plus
+explicit code-only fallback; auth awaits Resend independently of Queue-delivered
+notifications. No target Supabase, SMTP, DATABASE_URL or browser storage credential.
+Remote migrations/deploy/provider/resource/secret operations require approval.
 
 ## Local checks first
 
-No Cloudflare account is needed for local binding tests. Use gitignored `.dev.vars`
-for local values, never production bindings or `wrangler dev --remote` for tests.
+No account is needed for local invariant tests. Gitignored .dev.vars, local test
+bindings and disabled legacy .env fallback; never wrangler dev --remote for tests.
+Example implementation gates (**not Cloudflare commands run by this docs PR**):
 
 ```bash
 npx --no-install tsc --noEmit
@@ -36,119 +44,87 @@ npx --no-install vitest run
 (cd web && npx --no-install tsc --noEmit && npm run build)
 CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local
 CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run -e staging
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run -e production
 npm run dev
 ```
 
-Copy `.dev.vars.example` to gitignored `.dev.vars`; use a fresh local-only auth
-secret and identical local APP_BASE_URL/BETTER_AUTH_URL (see README). Disable
-Wrangler dotenv fallback so legacy `.env` cannot supply Go/Supabase values.
-The dry run validates a bundle, not a live deployment. Smoke local health/config,
-SPA invite deep links and JSON API errors. Test migrations on empty D1 and older
-DO versions; no Go/Docker/Postgres gate proves these Worker paths.
+Empty/upgrade D1 migrations, real concurrent SQL races and injected batch rollback
+are feature gates. Target harness uses @cloudflare/vitest-plugin,
+readD1Migrations/applyD1Migrations; no target DO helpers. Existing DO suite proves
+current code only until ported. Smoke health/config, SPA deep links and JSON API
+errors. A dry-run validates bundle/bindings, not live deploy/data/provider success.
 
 ## Pipeline
 
-The standalone GitHub Actions pipeline targets this personal Cloudflare account
-`be6051e1d082f9e206faca4c784d43e5`. It uses public SHA-pinned actions, the committed
-npm lockfiles and their Wrangler binary; no organization workflows, package
-registry, organization secrets or notification infrastructure is involved. Adding
-these definitions does not execute a release. Finish the setup below before the
-first merge enables automatic staging deployment.
+Existing pipeline configuration is unchanged by this spec. Personal Cloudflare
+account be6051e1d082f9e206faca4c784d43e5, public SHA-pinned actions, committed npm
+lockfiles/Wrangler; no organization workflows/registry/secrets. Review privileged
+workflow edits separately. Finish approved setup before enabling releases.
 
 | Workflow | Trigger and gate | Target |
 | --- | --- | --- |
-| `ci.yml` / CI | Every pull request, regardless of base; push to `master`/`production`; reusable `workflow_call` | Local tests, build and default/staging/production dry-runs only; no provider secrets |
-| `main.yml` / Staging | Successful CI completion for a **push** to this repository's `master`, never a PR CI run | Resolve current master; deploy the triggering SHA if current, otherwise the current tip only after its latest push CI passed; check out that resolved SHA, build, migrate staging D1, deploy staging |
-| `production.yml` / Production | Push to `production`; deployment needs its own reusable CI job to pass | Check out the promoted SHA, build, migrate production D1, deploy production |
+| ci.yml / CI | Every PR regardless of base; master/production push; reusable workflow_call | Local tests/build and default/staging/production dry-runs; no provider secrets |
+| main.yml / Staging | Successful CI for a repository master push, never PR CI | Resolve eligible current master SHA, checkout/build, migrate staging D1, deploy staging |
+| production.yml / Production | production push with its reusable CI job passed | Checkout promoted SHA, build, migrate production D1, deploy production |
 
-Staging is `https://communalcache-staging.ryanyz10-be6.workers.dev`, using D1
-`communalcache-staging` (`480fe3bd-a463-456d-8dfb-bc80235a5486`). Production is
-`https://communalcache.com`, using D1 `communalcache`
-(`b4257b89-22d6-40f1-b250-ccd1985bf1d1`); production workers.dev and version preview
-URLs are disabled. Each environment has its own Worker and self-bound `Cache` DO
-namespace, plus an explicit five-minute registry/outbox Cron. The pipeline feature
-itself added no Queue/R2; the later Photos/Notifications features declare those
-bindings, whose remote resources still require approval before release.
+Staging: https://communalcache-staging.ryanyz10-be6.workers.dev, D1
+communalcache-staging (480fe3bd-a463-456d-8dfb-bc80235a5486).
+Production: https://communalcache.com, D1
+communalcache (b4257b89-22d6-40f1-b250-ccd1985bf1d1); production workers.dev/version
+preview URLs disabled. Each environment has distinct Worker/bindings/secrets.
+Current self-bound Cache namespaces remain until approved retirement; target needs
+only D1/R2/Queue/assets and Cron. R2/Queue config is not proof of provisioning.
 
-Both deploy jobs serialize per environment with `cancel-in-progress: false`; a
-running migration/deploy is not interrupted by a newer push. GitHub keeps only one
-pending run per concurrency group: an older commit's later-finishing CI can replace
-the newest commit's pending Staging run. Staging therefore resolves current master
-**when its job starts**, before checkout/install/build:
+Deploy jobs serialize per environment, cancel-in-progress false; a running
+migration/deploy is not interrupted by a newer push. GitHub keeps only one pending
+run per concurrency group, so late older CI can replace a newer pending staging
+run. Staging resolves current master **when its job starts**, before build:
 
-- If the current tip is the triggering SHA, that successful push CI is its gate.
-- Otherwise, query the latest `CI` run for the current SHA, repository, `master`
-  branch and `push` event. Deploy that current tip only when its CI is completed
-  with `success`, even if an older commit's CI triggered this Staging run.
-- If CI is queued/running/waiting, skip; its eventual successful completion triggers
-  another Staging run. If it failed/cancelled or no matching CI exists, skip with
-  that state in the log. GitHub API errors fail the resolver rather than deploying.
+- Current tip equals triggering SHA: that successful push CI is its gate.
+- Otherwise query latest CI for the current SHA/repository/master/push event;
+  deploy current tip only after completed success. Queued/running/waiting or
+  failed/cancelled/missing CI skips; eventual successful push CI retriggers staging.
+  API failures fail resolution rather than guessing eligibility.
+- Only eligible resolved SHA is checked out/built/migrated/deployed. Skips do none
+  of those. Read-only contents/actions permissions, no persisted checkout token.
+  Master may advance mid-build; later jobs converge on latest CI-passed tip,
+  not necessarily every intermediate commit. Production retains stale-head check.
 
-Only an eligible resolved SHA is checked out and built; skipped runs do not install,
-build, migrate or deploy. Staging uses the automatic token's `contents: read` and
-`actions: read` permissions for these read-only checks, with no credentials persisted
-in checkout. Master can advance while a job builds; later eligible jobs resolve the
-new tip again. This converges on the latest CI-passed tip, not every intermediate
-commit. Production retains its immediate pre-deploy superseded-promotion check.
-A failed migration prevents deployment. If deploy fails after migrations succeed,
-the schema remains migrated: changes must stay backward compatible. No artifact
-from an untrusted PR run is consumed.
+Migration failure prevents deploy; deploy failure does not undo applied migrations.
+Keep additive/backward-compatible schemas while old Workers may run. No artifact
+from untrusted PR CI is deployed. A docs merge still uses the existing approved
+pipeline policy; opening the PR performs no release.
 
-### One-time setup before the first merge
+### One-time setup and approval boundaries
 
-These are operator setup instructions, **not commands executed by this PR**.
-
-1. Enable GitHub Actions for the repository with `master` as its default branch.
-   In Settings → Environments, create exactly `staging` and `production`. Limit
-   their deployment branches to `master` and `production`, respectively. Optional
-   required reviewers on the production Environment add a second approval gate
-   when supported by the repository's GitHub plan.
-2. In **each Environment**, add secret `CLOUDFLARE_API_TOKEN`. Use a token scoped
-   to the personal account and the required Worker/DO/Cron deployment and D1
-   migration capabilities; production also needs authorization for the
-   `communalcache.com` custom domain/zone. Do not use an organization token or a
-   Global API Key. The account ID is plain workflow configuration, not a secret.
-   `GH_TOKEN` is automatically the job's read-only GitHub token for branch/CI target
-   resolution (Staging) or the stale-head check (Production); do not provision
-   another GitHub secret or grant write permissions.
-3. Bootstrap the two named Workers' required runtime secrets after approval.
-   Staging needs its **own independently generated** `BETTER_AUTH_SECRET`; never
-   reuse production's. Store values interactively, not on argv, in git or in CI
-   logs. These operations may create/bootstrap a Worker if it does not yet exist,
-   so complete the approved bootstrap before enabling the first deployment:
-
-   ```bash
-   # OPERATOR ONLY, after approval; each command prompts for the secret value.
-   export CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false
-   npx --no-install wrangler secret put BETTER_AUTH_SECRET -e staging
-   npx --no-install wrangler secret put RESEND_API_KEY -e staging
-   npx --no-install wrangler secret put BETTER_AUTH_SECRET -e production
-   npx --no-install wrangler secret put RESEND_API_KEY -e production
-   ```
-
-   Resend's sender/domain must be approved and verified for actual sign-in mail;
-   `EMAIL_FROM` is unchanged in both environments. Push now also needs each
-   environment's own `VAPID_PRIVATE_KEY`, stored through the approved interactive
-   Worker-secret flow, and its matching `VAPID_PUBLIC_KEY` public runtime variable.
-   No VAPID pair was generated/provisioned by this feature.
-4. Protect `master` with the CI `checks` job after it appears on the first PR;
-   review workflow edits as privileged release code. Protect `production` against
-   force pushes/deletion and restrict who may promote. Do not require a new PR
-   onto `production` if using the selected fast-forward promotion command below.
-5. Confirm the two existing D1 IDs, Worker identities and staging subdomain. Before
-   the **first production promotion**, separately confirm the approved
-   `communalcache.com` cutover: deploying its custom-domain route can replace
-   legacy routing. Do not decommission Fly/Supabase as part of enabling Actions.
-6. Merge only after setup and CI are green. Verify the first post-merge master CI
-   run triggers Staging, review migration/deployment logs and smoke staging before
-   promoting. The workflow_run definition must be present on the default branch.
-   Remote migration/deployment and live-provider success are not proved by local
-   dry-runs; no such operations were run while authoring this pipeline.
+1. GitHub Actions/default master; staging and production Environments limited to
+   master and production branches. Optional production required reviewers depend
+   on repository plan. Protect master CI checks, production against force/deletion,
+   and promotion permissions. Do not require a second PR onto production for the
+   selected fast-forward flow.
+2. Each Environment has a personal-account-scoped CLOUDFLARE_API_TOKEN for needed
+   Worker/Cron/D1 and current DO deployment capabilities; production custom-domain
+   route needs approved domain/zone permission. No organization token/Global API
+   Key. GH_TOKEN is automatic read-only Actions token for resolution/head checks,
+   not another provisioned secret. Retire unnecessary DO capabilities after PR 7.
+3. Runtime secrets separately approved per Worker/environment: BETTER_AUTH_SECRET,
+   RESEND_API_KEY, VAPID_PRIVATE_KEY. Staging auth/VAPID secrets are independent,
+   never production copies. Interactive prompts only, no values on argv/in git/logs.
+   Bootstrap can create a Worker, so approval/setup precedes first deploy.
+4. Verify exact Worker/D1 identities and URLs, private R2/Queue configuration,
+   sender-domain verification and public variables. Production communalcache.com
+   routing may replace legacy routing and needs explicit cutover approval. Do not
+   decommission Fly/Supabase while enabling Actions.
+5. Merge only after setup/CI approval; verify post-merge staging logs and smoke
+   before promotion. workflow_run must exist on default branch. Local dry-runs are
+   not remote migration/provider proof. DO deletion/staging reset is a separate,
+   explicitly destructive approval, not normal setup.
 
 ### Promote and roll back
 
-After reviewing a successful staging deployment, update local master and promote
-without force; the user-selected command is:
+After reviewing successful staging and receiving release approval, fast-forward
+promotion is the existing user-selected flow:
 
 ```bash
 git fetch origin
@@ -157,298 +133,224 @@ git pull --ff-only origin master
 git push origin master:production
 ```
 
-A divergent production branch is an error to investigate, not permission to force
-push. Production CI runs again through the reusable workflow before migration and
-deploy. The standalone push CI also runs on `production`; duplication is
-intentional in this shape, and staging ignores those production CI events.
+Divergence is an error to investigate, not permission for force push. Production's
+reusable CI gates its migration/deploy; standalone push CI duplication is
+intentional, and staging ignores production CI events.
 
-For rollback, prefer a compatible fix-forward or a revert **as a new master
-commit**, let staging CI/deploy complete, then promote that new commit with the
-same fast-forward command. Do not reset/force-push `production`. Worker rollback
-does not undo D1 migrations or DO schema upgrades; restoring data or incompatible
-code requires a separate approved recovery plan.
+Prefer compatible fix-forward or revert **as a new master commit**, staging
+CI/deploy/smoke then the same promotion. No reset/force production. Worker rollback
+does not undo D1 migrations or restore deleted DO data. Incompatible recovery or
+export/restore requires separate approval and known outbox/cleanup replay effects.
 
-### Wrangler environment inheritance
+### Environment inheritance and DO retirement
 
-Top-level local configuration is unchanged; tests still explicitly use
-`remoteBindings: false` and local D1/SQLite DOs. Always use the named environment
-for a real pipeline deployment; a bare top-level deploy is not the release path.
-`vars`, `d1_databases` and `durable_objects.bindings` are not inherited and are
-repeated for both environments. The two auth URLs must match each other and the
-exact environment origin. Staging and production secrets are separate too.
+Current config facts with pinned Wrangler 4.145.0: vars, d1_databases and
+current durable_objects.bindings are not inherited and are repeated per named
+environment. assets and DO migrations **are inherited**; append shared migration
+history rather than duplicating/replacing v1. Self-bindings without script_name
+attach to each distinct Worker. Cron triggers inherit in this version but are
+explicit per environment. CI checks default/staging/production independently.
+Auth URLs must equal each environment's exact origin; secrets stay independent.
 
-With pinned Wrangler 4.145.0, `assets` and DO `migrations` **are inherited**. Keep the
-single top-level `v1` SQLite class migration rather than duplicating histories;
-self-bindings without `script_name` attach to each distinct Worker, not to the
-other environment's namespace. Cron `triggers` are also inherited in this version,
-but are repeated explicitly here so each release's schedule is visible. New
-migrations must append to the shared class history. All three configs receive
-independent dry-run checks in CI.
+Target PR 7 removes active DO bindings/class usage and appends **deleted_classes**
+for Cache in that class history. **This destroys Durable Object data. Get explicit
+human approval for each intended environment before applying/deploying it.** See
+[Cloudflare class migration reference](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/index.md).
+Do not rewrite applied history, rename into a new empty namespace or assume code
+rollback restores DOs. Never add Owner DOs from the superseded spec.
 
-Action pins were resolved from release tags on 2026-10-14: checkout v7.0.1
-`3d3c42e5aac5ba805825da76410c181273ba90b1` (published 2026-07-20), setup-node v7.0.0
-`820762786026740c76f36085b0efc47a31fe5020` (published 2026-07-14). Newer setup-node
-v7.1.0 was under seven days old and was deliberately excluded. The actions run on
-GitHub's Node 24-capable hosted runner; app/tooling steps use Node 22.23.1, the
-locally validated version (no repo engine/version file is currently present).
+Staging test-data reset needs its own explicit approval: inventory target D1/DO/
+R2/outbox/push state, record backup/recovery procedure and exact scope, reconcile or
+reset approved test data and prove the direct-D1 app afterward. No new-stack
+production data exists yet; reset is not authority to touch legacy production.
+No such command/config/migration/data operation runs in this docs PR.
 
-## Approval-gated provider setup
+Existing action pins (resolved 2026-10-14) remain: checkout v7.0.1
+3d3c42e5aac5ba805825da76410c181273ba90b1 (2026-07-20), setup-node v7.0.0
+820762786026740c76f36085b0efc47a31fe5020 (2026-07-14); newer v7.1.0 was <7 days old.
+Actions Node 24-capable hosted runner; app/tooling Node 22.23.1 locally validated.
+No version/tooling/config change in this spec.
 
-### Cloudflare
+## Provider and secret setup (approval required)
 
-1. Confirm account/environment and intended URL `https://communalcache.com` (the
-   user owns this domain on Cloudflare). Custom-domain routing and resource
-   provisioning still need approval. D1 `communalcache` was created with approval;
-   provision its remaining settings, the SQLite-backed cache DO namespace/class,
-   private R2 and notification Queue only after approval.
-2. Bind them to the Worker. The DO can access that Worker's env bindings; those
-   capabilities never appear in browser config. Use a compatibility date supporting
-   RPC (`2024-04-03` or later); choose/test error serialization explicitly. Add
-   nodejs_compat for Better Auth's AsyncLocalStorage; this does not add Hono.
-3. Serve `web/dist` as static assets with SPA fallback, but ensure `/api/*` executes
-   Worker logic first. An API 404/auth error must not turn into HTML 200.
-4. Keep R2 public domain and `r2.dev` access off. Worker streams authorized photos
-   with private cache headers; no public bucket, signed URL or service-role key.
-5. After approval, create `communalcache-notifications-staging` for staging and
-   `communalcache-notifications` for default/production, bound as `NOTIFICATIONS`.
-   Both producer and consumer configs are declared: batch size three, six retries,
-   60-second retry delay and consumer concurrency two. The five-minute Cron handles
-   registry sync and cursor-paged outbox rescue; Queue retry exhaustion/retention
-   is not the recovery policy. DO failures persist exponential backoff (five
-   seconds to one hour); Cron respects it and expired outbox claims stay eligible
-   regardless of attempts until a sent/failed terminal state is recorded.
-6. Check Free-plan budgets before choosing a plan. HTTP CPU, DO duration/storage,
-   D1 rows, Queue operations/24h retention and R2 operations are separate quotas.
-   R2 free allowances are not a hard zero-billing cap. Any paid upgrade needs approval.
+### Cloudflare / private photos / Queue
 
-No management API credential is required just to sweep DOs: walk the D1 cache
-registry. The binding has no list method; privileged REST object listing is not
-part of this application. Discovery projections never authorize access.
+- Confirm personal account/environment and approved intended URL. One canonical
+  D1 database **per environment**, not one shared between staging/production.
+  Configure private R2 and notification Queue only after explicit approval.
+- Serve web/dist as assets; /api/* executes Worker before SPA fallback, API errors
+  remain JSON. nodejs_compat serves Better Auth AsyncLocalStorage, not a router.
+- R2 public domain/r2.dev off; authorized D1 membership/attachment/owner checks then
+  private/no-store stream. Immutable ownerId/itemId/uploadUUID; no signed URL or
+  browser storage key. Detach/removal never deletes shared photo. Owner finalization
+  rechecks state after R2 I/O; record replaced/rejected/exact/prefix cleanup in D1.
+- Queue NOTIFICATIONS uses communalcache-notifications-staging and
+  communalcache-notifications for production/default. Current initial consumer
+  settings: three sequential rows/batch, six retries, 60s retry delay, concurrency
+  two. Confirm approved resources/settings before live proof.
+- Target five-minute Cron runs outbox rescue and R2 cleanup, **not** registry/DO
+  flush. Outbox initial rescue 25 rows older than three minutes, cursor-paged;
+  claims absent/expired, unsent/unfailed, regardless of attempts. Cleanup also uses
+  guarded expiring claims/bounded pages, preserving work until external success.
+  Verify combined budgets, fair progress and injected failure recovery in PR 3–5.
+- Free quotas are independent ceilings, not guaranteed fit: D1 rows/storage/query
+  limits, Worker CPU, Queue operations/retention and R2 operations. Paid upgrade,
+  resource/plan changes and remote diagnostics need approval.
 
-### Better Auth
+### Better Auth / Resend
 
-- Pin better-auth 1.7.7 exactly (published 2026-09-30, over seven days old when
-  checked 2026-10-08). Native D1 `database: env.DB`, no kysely-d1, auth under
-  `/api/auth/*`; reviewed Wrangler SQL for user/session/account/verification/
-  rateLimit tables and nullable app display_name, derived from pinned generator.
-- Set BETTER_AUTH_URL = APP_BASE_URL = `https://communalcache.com` and provide
-  BETTER_AUTH_SECRET explicitly from Worker bindings. Exact production
-  trustedOrigins, host-only HttpOnly/Secure/SameSite=Lax cookies; no session cookie
-  cache/secondary storage. Keep library CSRF checks; app mutations also enforce
-  an exact Origin check (missing/null/foreign rejected).
-- Enable magic-link sign-in/signup (hashed 300s tokens, single use) and explicit
-  email-otp fallback (six digits/300s/three attempts, hashed storage/rotation).
-  Disable password/unused auth routes and plugins;
-  never expose admin/list-users, raw tokens or a public migration endpoint.
-- Database rate-limit storage, not memory; trusted Cloudflare IP header and tested
-  send/resend/verify limits. App profile gate exempts auth, PATCH /api/me and push.
-- Auth link/code delivery awaits bounded Resend fetch, independent of notification
-  Queue. Better Auth 1.7.7 catches callback errors; a per-request closure result maps
-  failed sends/timeouts to generic JSON 502. No callback redirect for code login:
-  pending join stays in sessionStorage and returns to the same page. Foundation
-  proves preservation; Feature 2 adds the actual join POST.
-- Primary sign-in mail contains only the magic link; the secondary code action
-  sends a separate OTP email. `/auth/link#token=...` captures/removes the fragment
-  and verifies only after Continue. Set no-referrer/no-store on that landing route;
-  never log fragments, auth bodies or mail. Public verify GET is 405; the
-  Origin-protected POST uses an internal plugin HTTP-handler GET adapter, keeping
-  D1-backed 5/60s send/verify limits. All callbacks resolve against fixed
-  APP_BASE_URL and must have its exact origin, without protocol-relative URLs or
-  userinfo. No new secret/config/migration is needed; plugin identifiers use a
-  disjoint namespace and OTP migration 0003 stays. Fresh-browser links work, but
-  tab-local pending invites do not transfer; use code fallback or reopen the
-  invite there. Outstanding links remain valid until consumed/expired; resends
-  do not promise latest-link-only rotation. SMS is deferred.
+Pin better-auth@1.7.7 native database: env.DB, no kysely-d1. Retain reviewed auth
+schema/0003 OTP workaround and nullable app display_name. Production
+BETTER_AUTH_URL=APP_BASE_URL=https://communalcache.com; explicit BETTER_AUTH_SECRET,
+exact trustedOrigins, host-only HttpOnly/Secure/SameSite=Lax cookies, no cookie
+cache/secondary storage. App mutations independently reject missing/null/foreign
+Origin. Profile gate exempts auth, PATCH /api/me and push. No other-user email,
+password/admin/raw OTP/public migration endpoints.
 
-Legacy Fly/Supabase Auth/SMTP/Postgres settings matter only to the old live app.
-Leave them intact until a separately approved migration/cutover; no target Supabase
-setup or auth redirect configuration is required.
+Magic links: hashed 300s atomic first use; link-only primary email, explicit
+separate OTP fallback (six digits/300s/three attempts/hashed/rotate). Fragment
+/auth/link#token=... landing captures/removes fragment with no-referrer/no-store;
+scanner GET consumes nothing, Continue POST verifies. Public verify GET denied;
+internal plugin HTTP-handler GET adaptation preserves D1 5/60s limits, no auth.api
+bypass. Exact-origin normalized callbacks reject protocol-relative/userinfo/foreign
+URLs. Resending creates independent outstanding links, not latest-link-only rotation.
+Invites stay in tab sessionStorage; new browser verifies without that state and
+must reopen invite. SMS deferred. Preserve concurrent challenge/rate-limit tests.
 
-### Resend
-
-Approve and verify `communalcache.com` or its chosen sending subdomain in Resend;
-use the provider's required DNS verification records and wait for verification.
-`EMAIL_FROM` must use that verified domain; Resend verifies `send.communalcache.com`,
-so the sender is `signin@send.communalcache.com`. Both auth codes and notification
-emails use Resend HTTP, but one failing path need not imply the other is broken.
-Domain ownership alone is not sending-domain verification.
+Auth sends await bounded Resend fetch, independent of notification Queue; callback
+failure maps per-request generic JSON 502 without hiding rate-limit responses.
+Approve sender/domain DNS verification and EMAIL_FROM. Current sender is
+signin@send.communalcache.com on verified send.communalcache.com; domain ownership
+alone is not verification. Auth success does not prove notification delivery.
+No legacy Supabase Auth/SMTP/provider settings change with this target.
 
 ### Web push
 
-The sender pins `@block65/webcrypto-web-push@2.0.0` (published 2026-09-03), after
-local workerd RFC 8291 decryption/VAPID signature proof. Use a separate P-256 VAPID
-pair for each environment; production generation still requires separate approval. Store
-`VAPID_PRIVATE_KEY` (base64url JWK `d`) as a Worker secret and configure matching
-`VAPID_PUBLIC_KEY` (base64url 65-byte uncompressed point) as public runtime config.
-The app origin is the VAPID subject/contact URI. No secret value belongs in argv,
-git, provider mocks, screenshots or logs. Key rotation requires browsers to disable
-and re-enable notifications with the matching new public key.
+@block65/webcrypto-web-push@2.0.0 retained after local RFC 8291/VAPID proof. Separate
+per-environment P-256 key pair; private JWK d in VAPID_PRIVATE_KEY Worker secret,
+matching 65-byte uncompressed public point as VAPID_PUBLIC_KEY runtime config.
+App origin is VAPID subject/contact. Rotation requires browser disable/re-enable.
+Existing approved staging private-key provisioning and public config do not prove
+provider/browser delivery; default/production key provisioning requires approval.
+Never expose/log/generate secret values as part of a docs change.
 
-**Staging key provisioned:** under explicit user approval, the matching private key
-was uploaded separately to Worker `communalcache-staging`. This config-only change
-sets only `env.staging.vars.VAPID_PUBLIC_KEY`; it neither reads nor contains the
-private key and performs no deployment. Default and production public keys remain
-blank. Production key setup and actual push-provider/browser delivery, including
-installed iOS, remain **UNVERIFIED**. A staging dry-run validates the binding/bundle,
-not notification permission or delivery; live proof follows an approved release.
+Strict service origins (fcm.googleapis.com, updates.push.services.mozilla.com,
+web.push.apple.com, boundary-checked .notify.windows.com subdomains), HTTPS/default
+443/no userinfo/manual redirects, policy checked at subscribe/send. Complete
+private-IP/DNS-rebinding blocking is UNVERIFIED. Structural push→email choice,
+endpoint account reassignment, caller-scoped logout, rotating registration ID and
+stale 410 cleanup remain. Gesture permission and installed iOS behavior/icon/live
+push/production CPU require separately approved proof.
 
-Allowed push services are exact `fcm.googleapis.com`,
-`updates.push.services.mozilla.com`, `web.push.apple.com`, and hostname-boundary
-subdomains of `.notify.windows.com`, always HTTPS/default port, no userinfo and
-manual redirects. Re-check policy at send, not only subscription time. Native
-private-IP/DNS-rebinding blocking is **UNVERIFIED**. After separate approval, prove
-actual provider delivery, gesture permission, installed iOS delivery/icon rendering
-and production CPU/resource budgets; local tests do not establish these facts.
+### Public values and secret handling
 
-## Public config vs secrets
-
-Public runtime values: `APP_BASE_URL`, `BETTER_AUTH_URL` (equal to APP_BASE_URL),
-`VAPID_PUBLIC_KEY`, `EMAIL_FROM`. `/api/config` exposes only intended public values.
-No provider anon key or external Auth URL is needed.
-
-Secrets: `BETTER_AUTH_SECRET`, `RESEND_API_KEY`, `VAPID_PRIVATE_KEY`. No target
-DATABASE_URL or Supabase credentials. Bind secret/base URL explicitly into Better
-Auth; do not assume process.env reads Worker bindings. Never commit `.env`/
-`.dev.vars`, print values or place them on argv/history. Use Wrangler's interactive
-secret prompt after approval, for example:
-
-```bash
-# OPERATOR ONLY, after explicit approval; prompts for the value.
-npx --no-install wrangler secret put BETTER_AUTH_SECRET
-npx --no-install wrangler secret put RESEND_API_KEY
-npx --no-install wrangler secret put VAPID_PRIVATE_KEY
-```
-
-The actual approved environment must be selected explicitly in production tooling;
-never guess the account from whatever login happens to be active locally.
+Public: APP_BASE_URL, BETTER_AUTH_URL, VAPID_PUBLIC_KEY, EMAIL_FROM; /api/config
+exposes only intended public fields. Secrets: BETTER_AUTH_SECRET, RESEND_API_KEY,
+VAPID_PRIVATE_KEY, explicitly passed as Worker bindings. No target DATABASE_URL,
+Supabase credential, browser R2 credential or provider anon key. Never put secret
+values on argv, in git, screenshots or logs. Approved operator secret updates use
+interactive Wrangler prompts and explicit named environment, not guessed login.
 
 ## Approved release sequence
 
-1. Confirm environment/domain, stable auth secret, reviewed auth schema, OTP/
-   session/CSRF/rate-limit tests, local gates, quotas and recovery tests.
-2. Build the SPA and Worker; inspect the dry-run output and bindings. Make schema
-   changes additive/backward-compatible while old versions can still run.
-3. Apply **approved** D1 remote migrations explicitly to the intended database.
-   DO SQL versions migrate lazily on construction under `blockConcurrencyWhile`.
-4. Deploy the **approved** Worker/asset bundle; do not create new empty DO names or
-   rename a namespace to paper over a migration failure.
-5. Run the manual smoke checklist and inspect sync/outbox age/consumer failures.
-   A healthy `/api/healthz` alone says nothing about pending work delivery.
-
-The port must document its final environment-specific commands before a real
-release. No remote command in this runbook is executed by Foundation or Caches.
+1. Record environment/revision/approval scope; confirm schema/backward compatibility,
+   auth/CSRF/OTP/link/rate-limit proof, real D1 authorization/stock/destructive race
+   tests, quotas and durable outbox/cleanup recovery. Keep unsafe old routes gated.
+2. Build assets/Worker and inspect all dry-run configs; no remote effect yet.
+3. Apply **approved** D1 migrations to explicit intended database; never infer
+   production permission from local success. No lazy DO constructor migration in
+   target. During transition do not discard old DO data without PR 7 approval.
+4. Deploy approved Worker/assets. Class deletion is separately approved destructive
+   work; inventory/reset receipts are prerequisites, not an incidental deploy flag.
+5. Smoke below and inspect oldest outbox/cleanup work, claims/terminal failures,
+   query latency/rows/CPU. Healthz alone is not evidence delivery is functioning.
 
 ## Manual smoke and observability
 
-After approval, separately check:
+After explicit approval, record revision/environment/browser/provider receipts:
 
-- Runtime config has only public values and API failures remain JSON.
-- Sign-in code arrives synchronously via Resend, verifies, creates a cookie
-  session, sets a name and resumes the stashed invite POST body. Resend errors
-  surface; expired/old/resend codes and revoked sessions fail.
-- Auth cookie flags, exact origin/CSRF checks, caller-only auth user/session data,
-  disabled password/admin routes and D1-backed multi-instance rate limits work.
-- Magic-link mail contains only the fragment landing link, with five-minute
-  expiry. Scanner/preview GET consumes nothing; Continue creates one cookie session;
-  replay/expired links show resend/code recovery. Missing/null/foreign Origin and
-  foreign/protocol-relative callback URLs are rejected. Test both same-tab pending
-  invite resumption and a fresh-browser mobile mail-client handoff (reopen the
-  invite there); code fallback still signs in in the original tab. These live
-  behaviors remain UNVERIFIED until separately approved provider/browser smoke.
-- New cache page opens before discovery catches up; stale/removed indexes never
-  authorize a tap; request aggregation stays caller-scoped and bounded.
-- Queue-driven notification email arrives (auth-code success does not prove this).
-- An authorized photo streams; non-member/removed access gets 404.
-- Push arrives in an installed iOS PWA; permission was gesture-driven.
-- Pending-sync failures repeatedly re-arm alarms; registry Cron flush and outbox
-  Cron rescue work; Queue duplicates/expired claims do not lose events.
-- Migration-compatible Worker update preserves existing DO/D1 state.
-
-Track Worker CPU/resource-limit failures, Queue retry/backlog, failed outbox rows,
-oldest pending-sync/outbox ages and discovery drift. Never log OTPs, session cookies,
-auth/link tokens, invite secrets, push credentials or emails as debug payloads. Testing locally does not prove
-production fetch private-IP restrictions; those remain UNVERIFIED.
+- Runtime public-only config; API failures JSON; cookies/Origin/profile exemptions,
+  caller-only session/email, disabled password/admin and D1 multi-instance limits.
+- Real Resend magic-link-only mail → scanner-safe landing → Continue/session,
+  replay/expiry/callback rejection, same-tab invite resume and fresh-browser mobile
+  handoff; explicit code-only fallback still works. Auth failure visible.
+- Cache creation immediately appears in canonical Home; non-member/pending/removed
+  cache/item/photo access 404; valid-secret removed join 403. Rotation racing join
+  does not accept old secret. No stale discovery table can grant anything.
+- One library item attached to two caches has one stock count; concurrent requests
+  cannot overbook, double approval deducts once; Lent out blocks new requests but
+  keeps pending, reusable checkbox atomic. Private library survives cache removal.
+- Removal/detach/delete includes affected pending requests/recipient snapshots in
+  its batch; next statement checks removed membership immediately. No sync wait.
+- Owner photo upload/finalization/private stream and idempotent cleanup retry;
+  no public bucket; known orphan coverage/remaining window documented honestly.
+- Queue notification email/push (auth mail does not prove this); installed iOS
+  gesture permission/live push. Enqueue gap/expired claims/Cron rescue and R2
+  cleanup recover without DO alarms. Compatible Worker update/fix-forward drill.
 
 ### Backlog and budget triage
 
-Start with Worker CPU percentiles/resource-limit errors by route, D1 rows read and
-written, DO duration/storage, Queue backlog/retry/retention and R2 operations.
-Measure OTP hashing/session reads, five-way request fan-out and push encryption
-under representative approved staging load; local timings are not a production
-CPU benchmark. Free HTTP CPU is 10 ms, D1 writes 100,000 rows/day, Queues 10,000
-operations/day with 24-hour retention; use the plan's sourced limits rather than
-assuming these independent budgets fit together. Typical Queue write/read/delete
-already costs three operations per notification, before replay/recovery. Rate
-counters add one D1 statement/attempt and four rows/user. Rejected fixed-window
-attempts do not update a counter. The Workers Rate Limiting binding is a possible
-upgrade only after plan availability/approval, not a promised global quota.
+Track Worker CPU/resource errors, D1 query duration/rows read/written/database size,
+Queue retry/backlog/retention, terminal outbox failure counts and oldest nonterminal
+outbox/cleanup age. Single primary round trips and query serialization can affect
+distant users/long queries; no specific workload throughput number is VERIFIED.
+Free D1: 100k rows written/day, 5M read/day, 500 MB/database, 50 queries/invocation.
+Auth/counters/index maintenance/outbox/cleanup share those ceilings. Worker Free
+HTTP CPU 10ms; Queue 10k operations/day, 24h retention; typical write/read/delete
+three operations/message. See [sourced facts](plan.md#verified-platform-facts).
 
-Read-only diagnostics, containing no email or notification payload:
+Read-only **target** diagnostics (remote reads still require explicit approval):
 
 ```sql
 SELECT COUNT(*) AS pending, MIN(created_at) AS oldest_pending_at
 FROM outbox WHERE sent_at IS NULL AND failed_at IS NULL;
-SELECT COUNT(*) AS expired_claims
-FROM outbox WHERE sent_at IS NULL AND failed_at IS NULL
+SELECT COUNT(*) AS expired_claims FROM outbox
+WHERE sent_at IS NULL AND failed_at IS NULL
   AND claim_until IS NOT NULL AND claim_until <= unixepoch() * 1000;
 SELECT kind, COUNT(*) AS terminal_failures FROM outbox
 WHERE failed_at IS NOT NULL GROUP BY kind;
+SELECT COUNT(*) AS cleanup_pending, MIN(created_at) AS oldest_cleanup_at
+FROM r2_cleanup;
 SELECT route, COUNT(*) AS active_counters, SUM(count) AS admitted_attempts
 FROM write_limits WHERE window_start >= unixepoch() * 1000 - 60000 GROUP BY route;
 ```
 
-Use approved dashboard/read-only D1 tools in the explicitly selected environment;
-remote reads still require approval. Never dump `outbox.payload`, auth tables or
-push credentials. Counts over reusable counters show the current minute, not a
-historical usage meter. Track Worker 429 responses separately for rejected attempts.
+Never dump outbox payloads/auth rows/push credentials, emails, invite secrets,
+tokens or cookies. Current-minute write counters are not historical usage meters;
+track rejected 429s separately. Existing notification_delivery_failed logs only ID,
+claim attempts and terminal outcome, not provider/recipient payload. Target cleanup
+telemetry must be similarly secret-free. Current cache_sync_failed logging is
+historical and retires with DO sync, not a target alert/recovery dependency.
 
-`cache_sync_failed` logs contain oldest pending age, capped consecutive-failure
-count and next retry time; they do not enumerate caches or report healthy objects'
-backlog. `notification_delivery_failed` contains outbox UUID, claim attempts and
-whether an observed failure became terminal. Neither logs provider responses or
-recipient data. For private DO backlog diagnosis, use approved per-object tools;
-do not expose an HTTP diagnostics endpoint or treat D1 discovery as permission.
+Initial alerts (tune to measured workload): CPU/resource ceiling pressure, rising
+D1 query latency/rows/storage, new terminal outbox failures, Queue age/retries,
+oldest nonterminal outbox >15 minutes, growing cleanup age. Cursor page 25 every
+five minutes is bounded progress, not an immediate whole-database sweep guarantee.
+Read replication/Sessions API fit remains UNVERIFIED for our authorization and
+read-after-write needs; regional sharding requires a new ownership/stock boundary.
+A future per-cache DO could fan out live WebSockets, not own canonical data.
 
-Suggested initial alerts (tune to measured workload): resource-limit errors or CPU
-p95 near the selected plan ceiling; any new terminal outbox failures; increasing
-Queue age/retries; oldest nonterminal outbox above 15 minutes; repeated DO sync
-failures or pending age above two hours (backoff reaches one hour). A 25-entry cursor
-page every five minutes means large registries/outboxes need multiple ticks; this
-is bounded recovery, not an immediate global sweep guarantee. Missing discovery
-rows have no aggregate detector; compare a known authoritative cache page with its
-home entry to diagnose drift, never grant access from the index.
+Recovery: verify approved bindings/provider dependencies, restore availability,
+let Queue/Cron replay durable IDs/claims/cleanup, confirm backlog age falls.
+Attempts never bound outbox eligibility; terminal failed_at needs separately
+approved explicit replay/repair. Do not delete intents, clear claims/counters/
+terminal flags or recreate storage to make metrics healthy. Provider acceptance
+before terminal recording can duplicate sends; Resend idempotency headers remain
+disabled without a verified contract. Failed cleanup persists until success, not a
+finite hidden retry cutoff. Production export/restore needs approval.
 
-Recovery order: verify bindings/provider availability and errors; restore the
-approved dependency; let alarms/Queue/Cron replay stable IDs, and confirm backlog
-age falls and discovery converges. Failed DO drains keep ordered work and persisted
-backoff; registry Cron respects it. Expired outbox claims remain eligible even past
-six attempts. Terminal `failed_at` rows do not auto-retry: inspect the cause and
-get separate approval for an explicit replay/data repair. Do not delete intents,
-reset attempt/claim counters, clear terminal flags or recreate a DO namespace to
-make metrics look healthy. Provider acceptance before terminal recording can
-still duplicate mail; Resend idempotency headers are not enabled without repo/
-installed documentation proving the contract.
+## Legacy cutover (separate approval)
 
-Record the approved environment, revision, provider/browser receipts and before/
-after backlog/CPU measurements for each release smoke item. Prove a compatible
-Worker update and a staging fix-forward/revert drill before production promotion;
-rollback cannot undo schema migrations. Keep the OTP migration 0003 until a reviewed
-Better Auth upgrade proves the same resend/late-restore behavior. None of these
-remote measurements, provider sends or rollback actions were performed by Polish.
+Inventory verified Supabase emails; match/insert Better Auth users and preserve
+display names. Import caches, memberships, canonical items, item_caches and
+requests **straight into D1**, rewriting owner/requester/user IDs and outbox/photo
+references. Re-key private photos ownerId/itemId/uploadUUID. Approve ambiguous
+identities/duplicate-item mapping; equal titles are not identity. Never link an
+unverified email or transfer old sessions/JWTs. Reconcile stock/ownership/status,
+photos, outbox/cleanup and notification recovery at a controlled write boundary.
 
-## Rollback and cutover
-
-A previous Worker version must understand the schemas left by the new one. Code
-rollback does not revert D1 migrations or already upgraded DO databases. Prefer
-fix-forward after incompatible schema changes; production restore/export actions
-need approval and a documented effect on outbox/sync replay.
-
-Cutover is separate work: inventory legacy Supabase users and verified emails;
-insert/match Better Auth users by verified email, preserve app display names and
-rewrite all user_id/owner_id/requester_id references in D1/DO tables and pending/
-outbox payloads. Resolve duplicates/unverified-email conflicts before migration;
-never transfer sessions/JWTs or attach an unverified identity to a legacy account.
-Verify codes, app/domain routing, ownership/status, photos/intents and notification
-recovery; choose a controlled write boundary. Keep legacy Fly + Supabase live until
-approval to cut over, then require separate approval to decommission. No automatic
-data migration, dual-write transition, teardown or provider changes in this PR.
+Keep Fly/Supabase live until separately approved cutover, then obtain separate
+decommissioning approval. No automatic dual write, teardown, provider change,
+legacy migration or staging reset in this spec PR. Code rollback does not undo
+D1 migration or restore deleted DO data; use compatible fix-forward/revert or an
+explicitly approved recovery plan.

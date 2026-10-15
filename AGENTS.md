@@ -6,19 +6,19 @@ addresses, return/holder tracking or loan lifecycle. Lent out is only a manual
 owner availability flag/note, not a borrower or return record.
 
 Target: one TypeScript Cloudflare Worker serves `/api/*` and React static assets.
-Cache DOs own membership, permanent owner-target registration and display-only
-listings. One SQLite Owner DO per user owns canonical items, cache attachments,
-shared stock, requests and revocation tombstones. D1 holds auth/discovery/outbox,
-including requester-to-owner request_index; R2 holds owner-scoped private photos.
-Queues plus both DOs' alarms/Cron recovery drain durable work.
-Better Auth runs in our Worker, with D1 users/sessions and six-digit email codes
-sent through Resend fetch. Magic links are a planned follow-up; SMS is deferred.
+ONE D1 database is the source of truth for auth, caches, memberships, canonical
+items, cache attachments, shared stock, requests and the notification outbox.
+Private R2 holds owner-scoped photos. Queue/Cron recover notification delivery;
+Cron also retries durable R2 cleanup intents. No Cache or Owner Durable Objects,
+projections, discovery copies or cross-object sync are in the target.
+Better Auth runs in the Worker: magic-link sign-in with explicit six-digit email
+code fallback, D1 sessions and bounded Resend fetch. SMS is deferred.
 Intended production URL is https://communalcache.com; provisioning needs approval.
 
 ## How to work on this repo
 
 - Build [docs/build-guide.md](docs/build-guide.md) in order, one feature per PR:
-  Worker/DO logic, the feature's UI slice and its tests together.
+  Worker/D1 logic, the feature's UI slice and its tests together.
 - Feature branches are `feat/<short-name>`; docs branches are `docs/<short-name>`.
   Exactly one commit per PR; amend, do not stack commits on that branch.
 - If the previous PR is unmerged, base the new branch/PR on it and include
@@ -28,10 +28,11 @@ Intended production URL is https://communalcache.com; provisioning needs approva
   genuine risks/deviations/questions. Keep building; apply feedback by amending
   the relevant branch and restacking those above it.
 - Run the applicable gates before committing. Docs-only work changes no tooling
-  or app code; distinguish existing-code checks from target-stack tests not yet built.
+  or app code; distinguish existing-code checks from target tests not yet built.
 - **All external changes need explicit human approval:** Cloudflare resources,
   account commands/deploys/secrets, Resend/domain settings, or changes to the legacy
-  Fly/Supabase deployment. No decommissioning without separately approved cutover.
+  Fly/Supabase deployment. DO deletion and staging reset need explicit approval;
+  no decommissioning without separately approved cutover.
 - Review against the invariants/traps. Say when something is a real bug rather
   than a preference; do not invent problems or claim undocumented guarantees.
 
@@ -40,57 +41,59 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 - [docs/plan.md](docs/plan.md) is the settled product/architecture spec. Do not
   rewrite its decisions without explicit approval.
 - [docs/build-guide.md](docs/build-guide.md) gives feature order, status, traps and
-  the proving checks; start there.
-- [docs/database.md](docs/database.md) explains D1/DO placement, migrations and
-  local test setup; [docs/deploy.md](docs/deploy.md) is the approval-gated runbook.
+  proving checks; start there.
+- [docs/database.md](docs/database.md) explains D1 schemas, guarded batches,
+  migrations and local tests; [docs/deploy.md](docs/deploy.md) is the approval-gated
+  runbook. Current Cache DO code is historical, not target authority.
 
 ## Non-negotiable invariants
 
-1. **Split authority, never a projection grant.** Cache DO synchronously authorizes
-   membership; Owner DO authorizes canonical item/attachment/stock/revocation state.
-   Cache-context reads check both. Requests first check R/O active plus listing in
-   Cache, then all Owner guards locally; no browser-supplied admission flag bypass.
-   Cache pending queues never disclose another cache's requester identities. Non-members get 404; only valid-secret
-   removed joins retain 403. A listing or D1 row routes a call, never authorizes it.
-2. **No await inside local check-then-write.** Each Cache/Owner mutation uses one
-   `ctx.storage.transactionSync`; throw rolls back its local state and intents.
-   No cross-object RPC/D1/R2/Queue await belongs inside it. Completed admission
-   RPCs may precede an Owner transaction; they are not a distributed transaction
-   or timeless membership grant. Tombstones reconcile the removal race eventually.
-3. **One stock count across caches; never overbook.** Owner request transaction:
-   item exists/attached to C, neither (C,R) nor (C,O) revoked, R != O, valid quantity,
-   manual available flag on, `quantity - pending_sum >= requested` across ALL caches,
-   request + notification + request_index intent. Pending-only decisions deduct
-   once; stock edits respect the global reservation floor; lost races return 409.
-   Lent out blocks new requests, not existing pending rows. The reusable approval
-   checkbox sets that flag/note and projection intents in the same transaction.
-4. **Register targets before attachments; cascade locally, deliver durably.** Cache
-   attach admission checks O active and inserts `owner_targets(O)` in one transaction
-   BEFORE the Owner attachment commits. Never delete registrations while C exists.
-   Cache removal marks R removed plus revocation intents for EVERY registered owner,
-   not eventual listings. Each target atomically inserts permanent `revoked(C,R)`,
-   rejects R's pending requests via C, and if R is that owner detaches all from C and
-   rejects pending via those attachments. Either delivery order must converge with
-   no surviving pending row. No instant rollback of completed approvals is claimed.
-   Losing C preserves library items/photos/other caches. Global item deletion
-   snapshots all pending recipients and records listing/notification/R2 cleanup
-   before local cascade. No destructive route before its full protocol is proved.
-5. **State plus `pending_sync` commits atomically; external effects are idempotent.**
-   Stable intent/outbox IDs, ordered single drain per DO, no pending-row deletion
-   until D1/R2/Queue effects succeed. Alarm and `flushSync` must not reorder work.
-6. **Recovery keeps re-arming while work remains.** Alarm catches failures and
-   reschedules; every DO entry point re-arms pending work. Six automatic retries
-   are not indefinite recovery. Registry Cron flushes and outbox Cron re-enqueues
-   expired nonterminal work. Test the new-cache commit/alarm scheduling window.
-7. **D1 discovery never authorizes.** `my_caches` discovers Home caches;
-   `request_index(requester_id, owner_id)` discovers outgoing request targets, each
-   Owner DO filtering requester/party, never bypassing cache item/photo gates.
-   Incoming requests and Your items use the caller's own Owner DO, not cache fan-out. Registry/known owner IDs discover
-   recovery work only. Missing/stale rows mean delayed/empty/404 results, never access.
-8. **Outbox eligibility is bounded by `failed_at`, never `attempts`.** A guarded
-   expiring claim decides who sends; zero D1 `meta.changes` means ack/skip. Both
-   terminal writes require `AND sent_at IS NULL AND failed_at IS NULL`, plus current
-   claim ownership. Only an observed failure writes `failed_at`; a crashed last
+1. **One D1 authority, no copied authorization.** Every cache-data read/write checks
+   active membership with a join/EXISTS in the same SQL statement or atomic batch.
+   Cache item access also checks the attachment and active item owner. Private
+   library operations check item ownership; cache admins cannot edit others' items.
+   Cache queues expose only that cache's pending requesters. Non-members get 404;
+   only a valid-secret removed join retains 403. No projection or cached grant.
+2. **Guard the write, not a previous read.** D1 has no interactive transaction.
+   Check-then-write is one guarded statement or one atomic batch whose first guarded
+   write records a unique per-operation token; dependent statements require that
+   token. No separate authorization/stock read then write across an await. Never
+   use SQL changes() across batch statements; inspect primary D1 meta.changes.
+   Statement failure rolls back the batch; a zero-row guard is not a SQL failure.
+3. **One stock count across caches; never overbook.** Request INSERT ... SELECT
+   checks active requester/owner membership, attachment, requester != owner, valid
+   type/quantity, manual available flag and quantity minus ALL-cache pending sum.
+   Request plus outbox commit together. Pending-only token-guarded approval deducts
+   once; stock edits cannot undercut pending reservations; lost races return 409.
+   Lent out blocks new requests, not existing pending rows. Reusable approval's
+   checkbox sets that flag/optional note in the same batch; note max 200 code points.
+4. **Destruction is one guarded atomic batch.** Removal, detach and global item
+   deletion snapshot affected recipients into outbox before deleting source rows,
+   reject affected pending requests and commit all relational changes together.
+   Removal rejects the member's pending via C and detaches their items from C,
+   rejecting pending via those attachments; library/photos/other caches survive.
+   Removal is effective for the next statement, not eventual tombstone delivery;
+   already completed approvals/authorized reads are not recalled. No early route.
+5. **State and durable effects commit together.** Insert notification outbox rows
+   and needed R2 cleanup intents in the same D1 batch as the state change, using
+   stable unique IDs/dedupe keys. Queue sends, R2 and provider calls happen after
+   commit, never inside a database transaction. External effects are idempotent
+   where possible; retain cleanup work until success. No pending_sync bridge.
+6. **Recovery follows durable D1 work.** Queue retries plus bounded cursor-paged
+   Cron rescue unsent/unfailed outbox rows with absent/expired claims, including a
+   failed post-commit enqueue. Cron also retries idempotent R2 cleanup intents.
+   Finite Queue retries are not indefinite recovery. No DO alarms, registry sweeps
+   or re-arming protocol; backlog age and terminal failures must be observable.
+7. **D1 queries authorize and aggregate directly.** Home joins active memberships;
+   Your items filters owner_id; incoming/outgoing Requests filter owner/requester.
+   Every cache-context query includes current membership/attachment predicates.
+   Party-only request history never grants cache/item/photo access or reveals
+   another cache's queue. Paginate/index real tables; no my_caches, request_index,
+   listings, owner_targets, registry or revocation-tombstone copies.
+8. **Outbox eligibility is bounded by failed_at, never attempts.** A guarded
+   expiring claim decides who sends; zero D1 meta.changes means ack/skip. Both
+   terminal writes require AND sent_at IS NULL AND failed_at IS NULL, plus current
+   claim ownership. Only an observed failure writes failed_at; a crashed last
    claim remains recoverable. Delivery is at-least-once.
 9. **No endpoint returns another user's email.** App `GET /api/me` returns only
    your own authenticated Better Auth user email. Auth endpoints may return only
@@ -102,10 +105,10 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 11. **`requireProfile` exempts `PATCH /api/me`, push routes and `/api/auth/*`.**
     Otherwise a new user cannot authenticate/set a name. Never use an email-derived
     or auth-core name to bypass the nullable app display-name profile.
-12. **Photos remain private and owner-scoped.** Cache reads check Cache membership/
-    listing, then Owner attachment and caller/owner tombstones before private R2
-    streaming. Own-library reads authenticate its owner directly. Upload is owner-only
-    with an Owner item/ownership re-check after R2 I/O; immutable keys are
+12. **Photos remain private and owner-scoped.** Cache reads check active caller and
+    owner memberships plus item attachment in D1 before private R2 streaming.
+    Own-library reads authenticate the item owner directly. Upload is owner-only
+    with a guarded item/ownership re-check after R2 I/O; immutable keys are
     ownerId/itemId/uploadUUID. Detach/removal alone never deletes a shared photo.
     Same-origin cookies suffice; no public bucket, signed URL or bearer/blob route.
 13. **Cookie auth requires app CSRF protection.** HttpOnly/Secure/SameSite=Lax
@@ -115,92 +118,82 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 14. **Auth challenges/limits stay in D1.** Hash OTPs, six digits/300s/three attempts,
     rotate on resend; persistent database rate-limit storage, never per-isolate
     memory. Auth email awaits Resend from the request, not notification Queue.
-    Magic-link landing pages must not auto-verify; Continue is the future trigger.
+    Magic-link landing pages never auto-verify; explicit Continue triggers the POST.
 
-### Old invariant mapping
+### Architecture changes from PR #29
 
-| Old # | Status | Reason |
-| --- | --- | --- |
-| 1 app schema/RLS | Dropped | New data is private D1/DO storage, not PostgREST; leave legacy protections intact. |
-| 2 no port 6543 | Dropped | Bindings/Wrangler migrations replace connection pools and advisory locks. |
-| 3 over-booking | Changed | One Owner DO transaction guards shared stock/pending sum across all caches. |
-| 4 lock order | Dropped | Object-local transactions need no Postgres row locks; no transaction spans objects. |
-| 5 lock before snapshot | Changed | Each local snapshot/cascade/intents is atomic; registered-target revocation spans objects durably, not atomically. |
-| 6 outbox recovery | Kept + extended | Failed-at eligibility/terminal guards remain; durable DO→D1 intents and self-re-arming alarms are added. |
-| 7 membership/404 | Kept, implementation changed | Cache membership plus Owner item/tombstone authority; no projection grant or global transaction. |
-| 8 email privacy | Kept | Own auth user email only; Better Auth session/user endpoints remain caller-scoped. |
-| 9 untrusted push | Changed | Origin/HTTPS/manual redirects remain; no resolved-IP fetch hook or assumed platform SSRF immunity. |
-| 10 profile exemptions | Kept + extended | Name onboarding, push and `/api/auth/*` cannot be gated out. |
+PR #29's Owner DO model is superseded, not implemented by this spec. Its product
+decisions remain: one owner/item, many cache attachments, one stock count, manual
+Lent out and private owner-scoped photos. D1 guarded SQL/batches replace local DO
+transactions, target registration, eventual revocation, projections and alarms.
+Legacy Postgres RLS/schema/pooling rules remain on the legacy service only; do not
+weaken them while Fly/Supabase is live.
 
 ## Conventions
 
-- Plain TypeScript Worker dispatch and DO RPC, no router library or ORM. Cache
-  context includes `/api/caches/{cacheId}`; its authorized listing routes to an Owner
-  DO. Private library routes use the caller's Owner DO. No D1 item locator.
-- Hand-written bound SQL. Membership/target registration stays in Cache SQL;
-  canonical item/attachment/request/stock/tombstone checks stay in Owner SQL.
-  Global D1 queries stay auditable. No transaction spans objects or D1/R2.
+- Plain TypeScript Worker dispatch, no router library or ORM; no target DO RPC.
+  Cache context includes `/api/caches/{cacheId}`. Private library routes use the
+  authenticated caller, never a body-supplied owner. IDs never grant permission.
+- Hand-written bound SQL. Global D1 queries and their authorization/stock guards
+  stay in one auditable module (`src/db.ts`). Use guarded statements and token-gated
+  atomic batches, not interactive JS transactions or SQL changes(). R2/Queue are
+  outside D1 atomicity. A no-op primary write must make all dependent writes no-op.
 - UUID app keys; Better Auth user.id is the app identity (`generateId: 'uuid'`).
   App timestamps are integer Unix milliseconds; auth columns follow its reviewed
-  generated schema. SQLite booleans have 0/1 checks; nullable columns are explicit;
-  SQL cursors are consumed before awaits. Auth schema changes are hand-written
-  Wrangler SQL migrations derived from pinned generator output, never public DDL.
+  generated schema. SQLite booleans have 0/1 checks; nullable columns are explicit.
+  Auth schema changes are hand-written Wrangler migrations derived from pinned
+  generator output, never public DDL. Preserve quantity/status/decided_at checks.
 - No new dependency without a reason that survives "does the runtime or an
   installed dependency already do this?" Target allowlist: `wrangler` (tooling and
-  bindings/types), exact `better-auth@1.7.7` (Worker auth/session/OTP library and
-  client, native D1 support), Vitest + `@cloudflare/vitest-plugin` (local runtime
-  tests), `@block65/webcrypto-web-push` (candidate RFC 8291/VAPID WebCrypto, only with
-  Push/runtime proof). No kysely-d1 is needed. New pins must have been published
-  at least seven days ago; 1.7.7 was published 2026-09-30, checked 2026-10-08.
-  Keep React/TypeScript/Vite, React Router, TanStack Query and Tailwind. Drop jose,
-  the old provider Auth client, pgx/jwx/webpush-go from the port; no Resend SDK.
-  Better Auth needs nodejs_compat for AsyncLocalStorage. The deprecated
-  vitest-pool-workers is not the test dependency.
-- `ponytail:` comments name intentional ceilings and their upgrade paths. Comments
+  bindings/types), exact `better-auth@1.7.7` (Worker auth/session library/client,
+  native D1 support), Vitest + `@cloudflare/vitest-plugin` (local runtime tests),
+  `@block65/webcrypto-web-push@2.0.0` (local crypto proof; live provider proof pending).
+  No kysely-d1 is needed. New pins must have been published at least seven days ago;
+  1.7.7 was published 2026-09-30, checked 2026-10-08. Keep React/TypeScript/Vite,
+  React Router, TanStack Query and Tailwind. No Resend SDK. Better Auth needs
+  nodejs_compat for AsyncLocalStorage. Deprecated vitest-pool-workers is not used.
+- `ponytail:` comments name intentional ceilings and upgrade paths. Comments
   explain constraints the code cannot show, not what the next line does.
 - Keep code readable cold: straight-line functions, guard clauses, no abstractions,
   interfaces or harnesses ahead of a demonstrated need. Deleting complexity wins.
 - Non-trivial logic leaves a runnable check. Concurrency/constraints/migrations
-  use local DO SQLite and D1, never mocked SQL. External HTTP providers are mocked.
-- Private push egress guarantees, free-plan viability and library integration must
-  not be promoted from UNVERIFIED to fact without evidence.
+  use real local D1, never mocked SQL. External HTTP providers are mocked.
+- Private push egress guarantees, free-plan viability, read replication/Sessions
+  API fit and throughput numbers stay UNVERIFIED until supported by evidence.
 
 ## Commands
 
-**Target commands after the Foundation port adds root Worker tooling** (this docs
-PR does not add package scripts, configuration or dependencies):
+Existing Worker tooling validates current code; the D1 target tests land with each
+port PR. This docs PR changes no tooling, config, migrations or application code.
 
 ```bash
-npx --no-install tsc --noEmit              # Worker/DO typecheck
+npx --no-install tsc --noEmit              # Worker typecheck
 npx --no-install vitest run               # whole local runtime suite
 (cd web && npx --no-install tsc --noEmit && npm run build)
-npx --no-install wrangler d1 migrations apply communalcache --local
-npx --no-install wrangler dev             # defaults to local bindings; never --remote for tests
-npx --no-install wrangler deploy --dry-run # bundle check only, not a deployment
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local
+npm run dev                              # local bindings; never --remote for tests
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --dry-run
 ```
 
 No production test bindings. D1 tests use `readD1Migrations` + `applyD1Migrations`
-in setup. DO tests use `runInDurableObject`/`runDurableObjectAlarm`; constructors
-migrate local schema under `blockConcurrencyWhile` with a version number.
-Store local secrets in gitignored `.dev.vars`; no secret values on argv or in git.
-See the build guide for current-versus-target tooling and the full gates.
+in setup through `@cloudflare/vitest-plugin`. Target tests need no DO helpers;
+current cache-local tests keep their helpers until retirement. Store local secrets
+in gitignored `.dev.vars`; no values on argv/in git. See build-guide for full gates.
 
 ## Current state
 
-Go foundation is live. Go Features 1–2 are implemented in open reference PRs
-[#2](https://github.com/ryanyz10/communalcache/pull/2) and
-[#3](https://github.com/ryanyz10/communalcache/pull/3); they are **not** Cloudflare
-ports and will be superseded. Existing Go source, dependencies and deployment
-files stay untouched by this docs PR; old commands/config are not new-stack gates.
+Current Cloudflare code stores membership/items/requests in Cache DOs and copies
+Home discovery into D1; this is the implementation to port, not target permission.
+PR #29's merged Owner DO spec is superseded by this single-D1 spec. Do not continue
+the paused Owner implementation or add an Owner namespace. Draft #28's cache
+fan-out library is superseded by the direct-D1 library in D1 PR 6.
 
-**Next: shared-items PRs 2–6**, following the approved Owner DO spec in plan.md.
-Current app code still stores canonical items/requests in Cache DOs; that is the
-old implementation, not permission to use it for new shared-stock writes. Target
-registration/revocation and Owner runtime proof are not implemented by this docs PR.
-Draft #28 is superseded by shared-items PR 5's owner library. Implementation/review
-status lives in the [build-guide table](docs/build-guide.md#status).
-The legacy Fly app and Supabase remain live until approved cutover; the target
-has no Supabase dependency. Migration maps legacy users by verified email into
-Better Auth user rows and rewrites all D1/DO identity references; canonical items/
-requests go to Owner DOs and cache relationships become attachments/listings.
-Old sessions do not transfer. No resource/config/secret/decommissioning changes in this spec PR.
+**Next: D1 PRs 2–7**, following [build-guide status](docs/build-guide.md#status).
+PR 7 retires Cache DOs with an explicitly approved destructive `deleted_classes`
+migration and staging test-data reset. This spec performs neither operation.
+The legacy Go foundation/Fly app and Supabase remain live until approved cutover;
+Go PRs #2/#3 are historical references, not Cloudflare ports. Legacy migration maps
+verified-email identities into Better Auth and imports caches, memberships, items,
+attachments and requests straight into D1, rewriting outbox/photo identity
+references. Equal titles never imply item identity; old sessions do not transfer.
+No resource/config/secret/decommissioning changes in this spec PR.
