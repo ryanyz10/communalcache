@@ -87,7 +87,7 @@ it('keeps direct sign-in and invite-link explanation separate from the landing p
 it('keeps real invite and magic-link routes in their existing explicit flows, never the public landing', ()=>{
   const joining=render(`/join/${invite}`)
   expect(joining).toContain('You&#x27;re invited')
-  expect(joining).toContain('Invite saved in this tab')
+  expect(joining).toContain('Invite saved on this browser')
   expect(joining).not.toContain(landingCopy.inviteNote)
   expect(joining).not.toContain(invite)
   const memberJoin=render(`/join/${invite}`,me)

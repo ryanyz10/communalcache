@@ -328,8 +328,11 @@ scanner GET consumes nothing, Continue POST verifies. Public verify GET denied;
 internal plugin HTTP-handler GET adaptation preserves D1 5/60s limits, no auth.api
 bypass. Exact-origin normalized callbacks reject protocol-relative/userinfo/foreign
 URLs. Resending creates independent outstanding links, not latest-link-only rotation.
-Invites stay in tab sessionStorage; new browser verifies without that state and
-must reopen invite. SMS deferred. Preserve concurrent challenge/rate-limit tests.
+Invites carry a strict relative join callback in the fragment email link, with
+one-hour session/localStorage intent fallback for same-browser tabs. Continue
+remains explicit; a new browser can resume the callback without stored state.
+Home's paste-invite sheet extracts only a valid local join path. Clear intent on
+join/cancel/sign-out/expiry. SMS deferred; retain challenge/rate-limit tests.
 
 Auth sends await bounded Resend fetch, independent of notification Queue; callback
 failure maps per-request generic JSON 502 without hiding rate-limit responses.
