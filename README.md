@@ -51,7 +51,10 @@ further account/provider changes. Photos declares local `BUCKET` bindings, but r
 `communalcache-photos` (default/production) and `communalcache-photos-staging` buckets
 still require approved private creation; no R2/Queue resources were provisioned.
 Never enable public bucket access. The intended
-five-minute registry Cron is declared in config only; no production trigger was installed.
+five-minute registry/outbox Cron is declared in config only; no production trigger was installed.
+Notifications adds `NOTIFICATIONS` producer/consumer bindings for
+`communalcache-notifications` (default/production) and
+`communalcache-notifications-staging`. Those remote queues also need approved creation.
 
 For Vite hot reload, set **both** URLs in `.dev.vars` to `http://localhost:5173`,
 run Wrangler and `npm --prefix web run dev` in separate terminals, and open the
@@ -111,7 +114,7 @@ For actual local bindings, `npm run dev -- --port 8788 --inspector-port 9238`
 works around an occupied 8787; change both gitignored URL values to that origin.
 Create/settings return authoritative DO state immediately. Home summaries contain
 only discovery id/name and may lag; refresh after a moment. Invites/ownership never
-come from D1. Sync is capped at 25 effects per drain; Cron sweeps 25 known caches
+come from D1. Sync is capped at 25 intent rows per drain; Cron sweeps 25 known caches
 per tick. Failed first alarm scheduling retains intents, but registry cannot find
 a brand-new cache until its registry intent succeeds; its returned cache ID and a
 later entry point can repair the gap. A crash before the ID response remains an
@@ -122,6 +125,25 @@ Real email sign-in requires separately approved Resend/domain setup and a local
 provider key. Delivery is awaited with a 10-second abort deadline. Better Auth
 1.7.7 catches callback rejections, so a request-local delivery result maps failures
 to generic JSON `502 email_unavailable`; a rate-limited request remains 429.
+
+### Notification delivery
+
+Joining/request events now flow from durable DO intents through D1 outbox IDs to
+Queue-driven email, using the same `EMAIL_FROM` and Resend binding as auth but an
+independent handler. There is no new notifications screen. Until Push, every
+recipient uses their private verified email; app APIs still expose only your own
+email. Provider calls abort after 10 seconds within a 30-second delivery deadline.
+Queue duplicates are harmless after terminal recording, but a crash after provider
+acceptance can still duplicate mail (at-least-once delivery).
+
+The five-minute recovery Cron cursor-pages 25 expired/unclaimed nonterminal rows
+older than three minutes and 25 registry caches. Failed DO sync backs off from
+five seconds to one hour without giving up; entry points and Cron preserve the
+delay. Tests mock Resend and use local Queue producers plus consumer ack/retry
+helpers; no external provider is contacted. A real `wrangler dev` consumer can
+send notification mail if a provider key is configured, so do not use production
+credentials or assume local persistence makes provider fetches local. For read-only
+smoke, use a fresh isolated `--persist-to` directory with no queued work.
 
 ## Validation
 
