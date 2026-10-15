@@ -89,6 +89,54 @@ const server = createServer(async (request, response) => {
       json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id),unavailable_cache_ids:[],next_cursor:null})
       return
     }
+    function libraryInfo(item) {
+      const {cache_ids,...fields}=item
+      const pending=[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending')
+      return {...fields,cache_id:null,caches:(cache_ids??[item.cache_id]).filter(id=>caches.has(id)).map(id=>({id,name:caches.get(id).name})),pending_count:pending.length,available_quantity:item.is_consumable?item.quantity-pending.reduce((sum,row)=>sum+(row.quantity??0),0):null}
+    }
+    if (path === '/api/me/items' || path.startsWith('/api/me/items/')) {
+      if (!authenticated) { json({error:'unauthorized'},401); return }
+      const match=path.match(/^\/api\/me\/items(?:\/([^/]+)(\/photo|\/attachments\/([^/]+))?)?$/)
+      if (!match) { json({error:'not_found'},404); return }
+      const itemId=match[1]
+      if (!itemId && request.method==='GET') {
+        json({items:[...items.values()].filter(item=>item.owner_id===me.id).map(libraryInfo),next_cursor:null}); return
+      }
+      if (!itemId && request.method==='POST') {
+        if (!body.title?.trim()) { json({error:'invalid_title'},400); return }
+        const item={id:randomUUID(),cache_id:null,cache_ids:[],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,unavailable_note:null,created_at:Date.now(),photo_version:null}
+        items.set(item.id,item); json(libraryInfo(item),201); return
+      }
+      const item=items.get(itemId)
+      if (!item || item.owner_id!==me.id) { json({error:'not_found'},404); return }
+      if (match[3]) {
+        if (!caches.has(match[3])) { json({error:'not_found'},404); return }
+        item.cache_ids??=[item.cache_id].filter(Boolean)
+        if (request.method==='PUT') item.cache_ids=[...new Set([...item.cache_ids,match[3]])]
+        else if (request.method==='DELETE') {
+          item.cache_ids=item.cache_ids.filter(id=>id!==match[3])
+          for (const row of requests.values()) if (row.item_id===item.id && row.cache_id===match[3] && row.status==='pending') Object.assign(row,{status:'rejected',decision_reason:'item no longer shared in this cache',decided_at:Date.now()})
+        }
+        response.writeHead(204,{'Cache-Control':'no-store'}); response.end(); return
+      }
+      if (match[2]==='/photo') {
+        if (request.method==='POST') { photos.set(item.id,{bytes:raw,type:request.headers['content-type']}); item.photo_version=randomUUID(); json(libraryInfo(item)); return }
+        const photo=photos.get(item.id)
+        if (!photo) { json({error:'not_found'},404); return }
+        response.writeHead(200,{'Content-Type':photo.type,'Cache-Control':'private, no-store'}); response.end(photo.bytes); return
+      }
+      if (request.method==='DELETE') {
+        items.delete(item.id); photos.delete(item.id)
+        for (const row of [...requests.values()].filter(row=>row.item_id===item.id)) requests.delete(row.id)
+        response.writeHead(204,{'Cache-Control':'no-store'}); response.end(); return
+      }
+      if (request.method==='PATCH') {
+        const reserved=[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)
+        if (body.quantity!==undefined && body.quantity!==null && body.quantity<reserved) { json({error:'quantity_reserved'},409); return }
+        for (const field of ['title','description','quantity','available','unavailable_note']) if (body[field]!==undefined) item[field]=body[field]
+      }
+      json(libraryInfo(item)); return
+    }
     if (path === '/api/caches' || path.startsWith('/api/caches/')) {
       if (!authenticated || !me) { json({error:'unauthorized'},401); return }
       if (path === '/api/caches' && request.method === 'GET') {
@@ -128,7 +176,7 @@ const server = createServer(async (request, response) => {
       const requestRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/requests$/)
       if (requestRoute) {
         const item=items.get(requestRoute[2])
-        if (!item || item.cache_id!==requestRoute[1]) { json({error:'not_found'},404); return }
+        if (!item || !(item.cache_ids??[item.cache_id]).includes(requestRoute[1])) { json({error:'not_found'},404); return }
         const queue=[...requests.values()].filter(row=>row.item_id===item.id)
         if (request.method==='GET') { json(queue.filter(row=>row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id)); return }
         if (item.owner_id===me.id) { json({error:'not_found'},404); return }
@@ -143,7 +191,7 @@ const server = createServer(async (request, response) => {
       const photoRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/photo$/)
       if (photoRoute) {
         const item=items.get(photoRoute[2])
-        if (!item || item.cache_id!==photoRoute[1]) { json({error:'not_found'},404); return }
+        if (!item || !(item.cache_ids??[item.cache_id]).includes(photoRoute[1])) { json({error:'not_found'},404); return }
         if (request.method==='POST') {
           photos.set(item.id,{bytes:raw,type:request.headers['content-type']})
           item.photo_version=randomUUID()
@@ -160,17 +208,17 @@ const server = createServer(async (request, response) => {
       if (itemRoute) {
         const cacheId=itemRoute[1], itemId=itemRoute[2]
         if (!caches.has(cacheId)) { json({error:'not_found'},404); return }
-        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>item.cache_id===cacheId)); return }
+        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...item,cache_id:cacheId}))); return }
         if (!itemId && request.method === 'POST') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
-          const item={id:randomUUID(),cache_id:cacheId,owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,created_at:Date.now(),photo_version:null}
+          const item={id:randomUUID(),cache_id:cacheId,cache_ids:[cacheId],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,unavailable_note:null,created_at:Date.now(),photo_version:null}
           items.set(item.id,item)
           json(item,201)
           return
         }
         const item=items.get(itemId)
-        if (!item || item.cache_id!==cacheId) { json({error:'not_found'},404); return }
+        if (!item || !(item.cache_ids??[item.cache_id]).includes(cacheId)) { json({error:'not_found'},404); return }
         if (request.method === 'DELETE') {
           if (item.owner_id!==me.id) { json({error:'not_found'},404); return }
           items.delete(item.id); photos.delete(item.id)
@@ -186,7 +234,7 @@ const server = createServer(async (request, response) => {
           item.description=body.description??null
           item.quantity=item.is_consumable?body.quantity:null
         }
-        json(item)
+        json({...item,cache_id:cacheId})
         return
       }
       const match=path.match(/^\/api\/caches\/([^/]+)(\/invite\/rotate)?$/)

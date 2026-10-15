@@ -6,6 +6,7 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheInfo, CacheSummary } from '../lib/caches'
 import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
 import { OnboardingPage } from './OnboardingPage'
+import { LibrarySection } from './LibraryPage'
 
 export function HomePage() {
   const { me } = useAuth()
@@ -42,7 +43,7 @@ export function HomePage() {
       </Link></li>)}</ul>}
       {caches.isSuccess && !caches.data.length && <div className="mt-3 rounded-[10px] border border-slate-200 bg-white p-4"><p className="text-sm text-slate-600">No caches yet. Create one to start sharing.</p><button type="button" className="cc-outline mt-3" onClick={openCreate}>New cache</button></div>}
     </section>
-    {/* Your items belongs here once its caller-scoped API ships in a separate PR. */}
+    <LibrarySection preview />
     <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="new-cache-heading" onCancel={event => { if (create.isPending) event.preventDefault() }}>
       <div aria-hidden="true" className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 lg:hidden" />
       <h2 id="new-cache-heading" className="text-xl font-semibold">New cache</h2>
