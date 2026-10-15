@@ -15,12 +15,12 @@ export function OnboardingPage() {
   function onSubmit(event: FormEvent) { event.preventDefault(); mutation.mutate(name) }
 
   return <AuthScreen>
-    <header className="mt-10 text-center">
+    <header className="mt-10 text-center lg:mt-0">
       <NamePreview name={name} />
       <h1 className="cc-auth-heading">What should neighbors call you?</h1>
       <p className="mt-2 text-slate-600">This is the only name other members see.</p>
     </header>
-    <form className="cc-auth-card mt-8" onSubmit={onSubmit}>
+    <form className="cc-auth-card mt-8 lg:border-0 lg:p-0 lg:shadow-none" onSubmit={onSubmit}>
       <div>
         <label htmlFor="display_name" className="block text-sm font-medium">Display name</label>
         <input id="display_name" name="display_name" type="text" autoComplete="nickname" required maxLength={60}

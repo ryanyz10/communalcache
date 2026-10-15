@@ -41,11 +41,12 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
   }
 
   return <AuthScreen>
-    {!sent ? <header>
+    {!sent && <header className="hidden lg:block"><h1 className="lg:text-2xl lg:font-bold">{inviteToken ? "You're invited" : 'Sign in'}</h1><p className="lg:mt-2 lg:text-slate-600">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : "We'll email you a link. No password."}</p></header>}
+    {!sent ? <header className="lg:hidden">
       <BrandMark />
       <h1 className="cc-auth-heading">{inviteToken ? "You're invited" : <>Share more,<br />buy less.</>}</h1>
       <p className="mt-2 text-slate-600">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : 'Borrow and lend with your neighbors on Communal Cache.'}</p>
-    </header> : <header className="mt-10 text-center">
+    </header> : <header className="mt-10 text-center lg:mt-0">
       <div aria-hidden="true" className="mx-auto flex size-16 items-center justify-center rounded-full bg-blue-100 text-blue-800">{sent === 'link' ? <MailIcon /> : <span className="text-[22px] font-bold">123</span>}</div>
       <h1 className="cc-auth-heading">{sent === 'link' ? 'Check your email' : 'Enter your code'}</h1>
       <p role="status" className="mt-2 text-slate-600">{sent === 'link' ? 'We sent a sign-in link to' : 'Sent to'}<br /><strong className="break-all text-slate-900">{email.trim()}</strong></p>
@@ -54,8 +55,8 @@ export function LoginForm({ inviteToken }: { inviteToken?: string }) {
       <div aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-800"><MailIcon /></div>
       <div className="text-sm"><p className="font-semibold">Invite saved in this tab</p><p className="text-slate-600">Open the link in this same tab to keep it, or use a code here.</p></div>
     </aside>}
-    <form className={inviteToken && !sent ? 'mt-4' : 'mt-8'} onSubmit={onSubmit}>
-      <div className="cc-auth-card">
+    <form className={inviteToken && !sent ? 'mt-4 lg:mt-6' : 'mt-8 lg:mt-6'} onSubmit={onSubmit}>
+      <div className="cc-auth-card lg:border-0 lg:p-0 lg:shadow-none">
         <div className={sent ? 'sr-only' : undefined} aria-hidden={sent ? true : undefined}>
           <label htmlFor="email" className="block text-sm font-medium">Email</label>
           <input ref={emailInput} id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required readOnly={!!sent} disabled={pending} tabIndex={sent ? -1 : undefined}

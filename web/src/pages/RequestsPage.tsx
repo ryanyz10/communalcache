@@ -51,7 +51,7 @@ export function ItemRequests({ item }: { item: Item }) {
   function submit(event: FormEvent) { event.preventDefault(); ask.mutate() }
   const pending = query.data?.filter(row => row.status === 'pending') ?? []
   const available = item.quantity === null ? null : item.quantity - pending.reduce((sum, row) => sum + (row.quantity ?? 0), 0)
-  return <section className="mt-8" aria-labelledby="requests-heading">
+  return <section className="mt-8 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="requests-heading">
     <div className="flex items-center justify-between gap-3"><h2 id="requests-heading" className="text-xl font-semibold">Requests</h2></div>
     <p className="mt-2 text-sm text-slate-600">Pending requests are visible to cache members. Decisions are visible only to the requester and item owner.</p>
     {query.isPending && <p role="status" className="mt-3">Loading requests…</p>}
@@ -67,7 +67,7 @@ export function ItemRequests({ item }: { item: Item }) {
         {ask.isError && <p role="alert" className="text-red-700">{errorMessage(ask.error)}</p>}
         {ask.isSuccess && <p role="status" className="text-emerald-700">Request sent. Arrange the handoff in person if approved.</p>}
       </form>}
-      <ul className="cc-list mt-4">{query.data.map(request => <RequestCard key={request.id} request={request} callerId={me?.id ?? ''} />)}</ul>
+      <ul className="cc-list mt-4 lg:border-0">{query.data.map(request => <RequestCard key={request.id} request={request} callerId={me?.id ?? ''} />)}</ul>
       {!query.data.length && <p className="mt-4 text-slate-600">No visible requests for this item yet.</p>}
     </>}
     <Link to="/requests" className="mt-4 inline-block underline">Your incoming and outgoing requests</Link>
@@ -81,21 +81,23 @@ export function RequestsPage() {
   if (!me.display_name) return <OnboardingPage />
   const requests = query.data?.pages.flatMap(page => page.requests) ?? []
   const unavailable = query.data?.pages.flatMap(page => page.unavailable_cache_ids) ?? []
-  return <main className="cc-page">
+  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
     <Link to="/" className="underline">Your caches</Link>
-    <h1 className="mt-4 text-2xl font-semibold tracking-tight">Your requests</h1>
+    <h1 className="mt-4 text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Your requests</h1>
     {query.isPending && <p role="status" className="mt-4">Loading requests…</p>}
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)} Some requests may be unavailable.</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try requests again</button></div>}
     {!!unavailable.length && <div className="mt-4"><p role="alert" className="text-amber-800">Requests from {unavailable.length} cache(s) could not be loaded. These lists are incomplete.</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try unavailable caches again</button></div>}
     {query.data && <>
+      <div className="contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       {(['Incoming', 'Outgoing'] as const).map(direction => {
         const rows = requests.filter(request => direction === 'Incoming' ? request.owner_id === me.id : request.requester_id === me.id)
-        return <section key={direction} className="mt-8" aria-label={direction}>
+        return <section key={direction} className="mt-8 lg:mt-6 lg:min-w-0 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-label={direction}>
           <h2 className="text-xl font-semibold">{direction}</h2>
-          <ul className="cc-list mt-4">{rows.map(request => <RequestCard key={request.id} request={request} callerId={me.id} />)}</ul>
+          <ul className="cc-list mt-4 lg:border-0">{rows.map(request => <RequestCard key={request.id} request={request} callerId={me.id} />)}</ul>
           {!rows.length && <p className="mt-3 text-slate-600">{unavailable.length || query.isError || query.hasNextPage ? `No ${direction.toLowerCase()} requests visible in the loaded caches yet. This list may be incomplete.` : `No ${direction.toLowerCase()} requests in the loaded caches.`}</p>}
         </section>
       })}
+      </div>
       {query.hasNextPage && <button className="mt-6 rounded-md border border-slate-300 px-4 py-2 disabled:opacity-60" disabled={query.isFetching} onClick={() => void query.fetchNextPage()}>{query.isFetchingNextPage ? 'Loading more…' : 'Load more caches'}</button>}
       <p className="mt-6 text-sm text-slate-600">Cache discovery can lag after joining. Open the item directly if a request has not appeared here yet.</p>
     </>}
