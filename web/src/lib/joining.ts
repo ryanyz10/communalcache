@@ -8,6 +8,6 @@ export async function joinFromToken(token: string) {
   if (!validJoinToken(token)) throw new Error('Invalid invite link')
   const [cacheId, secret] = token.split('.')
   const result = await apiFetch<JoinResult>(`/api/caches/${cacheId}/join`, { body: { secret } })
-  clearJoinToken()
+  clearJoinToken(token)
   return result
 }

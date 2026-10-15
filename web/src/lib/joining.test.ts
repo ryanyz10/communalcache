@@ -26,6 +26,8 @@ beforeEach(() => {
     setItem: (key: string, value: string) => { values.set(key, value) },
     removeItem: (key: string) => { values.delete(key) },
   })
+  const shared = new Map<string,string>()
+  vi.stubGlobal('localStorage', {getItem:(key:string)=>shared.get(key)??null,setItem:(key:string,value:string)=>{shared.set(key,value)},removeItem:(key:string)=>{shared.delete(key)}})
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
@@ -43,10 +45,10 @@ const me = { id: 'caller', email: 'own@example.test', display_name: 'Neighbor' }
 it('keeps login and name onboarding on the invite page, then offers a join action', () => {
   const signedOut = renderJoin(null)
   expect(signedOut).toContain('You&#x27;re invited')
-  expect(signedOut).toContain('Invite saved in this tab')
+  expect(signedOut).toContain('Invite saved on this browser')
   expect(signedOut).toContain('Email me a sign-in link')
   expect(signedOut).toContain('Use a 6-digit code instead')
-  expect(signedOut.indexOf('Invite saved in this tab')).toBeLessThan(signedOut.indexOf('<form'))
+  expect(signedOut.indexOf('Invite saved on this browser')).toBeLessThan(signedOut.indexOf('<form'))
   expect(signedOut).not.toContain(secret)
   expect(renderJoin({ ...me, display_name: null })).toContain('What should neighbors call you?')
   expect(renderJoin(me)).toContain('Join cache')
@@ -84,6 +86,8 @@ it('retains the invite across code/name onboarding and failures, then POSTs only
   expect(fetchMock).toHaveBeenLastCalledWith(`/api/caches/${id}/join`, expect.objectContaining({ method: 'POST', credentials: 'same-origin', body: JSON.stringify({ secret }) }))
   expect(fetchMock.mock.calls.every(call => !String(call[0]).includes(secret))).toBe(true)
   expect(peekJoinToken()).toBeNull()
+  expect(sessionStorage.getItem('cc_pending_join')).toBeNull()
+  expect(localStorage.getItem('cc_pending_join')).toBeNull()
   expect(destinationAfterLogin()).toBe('/')
 })
 

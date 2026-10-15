@@ -385,11 +385,21 @@ JSON while preserving the session cookie. Callback/new-user/error URLs resolve
 against fixed APP_BASE_URL, require exact origin, reject protocol-relative/userinfo/
 foreign URLs; missing special callbacks default to the normal callback.
 
-Pending invite cacheId/secret stays in tab sessionStorage, never auth metadata,
-callback URLs or mail. Same-tab sign-in resumes join after display-name onboarding;
-clear stash on success/cancel. A fresh browser can verify with no requesting-tab
-cookie but does not inherit its invite: reopen it there or use code in the original
-tab. Account changes clear private query state and reconcile push registration.
+Pending invite intent uses one-hour records in sessionStorage plus localStorage
+for same-browser tab handoff. A magic-link send also carries a strict relative
+`/join/<valid-token>` callback; its normalized destination stays in the email link's
+fragment with the sign-in token. It is never a profile field, copied membership or
+permission grant. Existing general same-origin callbacks remain supported; invite
+callbacks additionally require the exact token/path shape and no query/fragment.
+
+After explicit Continue, a valid invite callback wins over stored intent; otherwise
+the current tab's record, then the shared local record, then Home is used. Name
+onboarding and the explicit Join tap remain; approval-required joins still become
+pending. Clear intent on successful join/cancel/sign-out and discard expired or
+malformed records. A different browser can follow the callback without prior
+storage; Home also offers paste-link/code entry if needed. Pasted HTTP(S) origins
+are discarded and only the validated `/join/<token>` path is opened on this app.
+Account changes still clear private queries and reconcile push registration.
 Live mobile mail-client handoff and Resend delivery stay **UNVERIFIED** pending
 approved smoke. SMS remains deferred; a proposal must address provider compliance,
 sender registration, costs, rate limits and pumping protection before provisioning.
