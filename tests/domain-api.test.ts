@@ -66,7 +66,7 @@ it('resumes a body-only invite after onboarding and protects join decisions with
   expect((await worker.fetch(appRequest(path,{cookie:applicant.cookie}),env)).status).toBe(404)
   expect((await worker.fetch(appRequest(path+'/join-requests',{cookie:applicant.cookie}),env)).status).toBe(404)
   expect((await post(decision)).status).toBe(404)
-  expect(await (await worker.fetch(appRequest(path+'/join-requests',{cookie:owner.cookie}),env)).json()).toEqual([{user_id:applicant.id,display_name:'Neighbor',created_at:expect.any(Number)}])
+  expect(await (await worker.fetch(appRequest(path+'/join-requests',{cookie:owner.cookie}),env)).json()).toEqual([{user_id:applicant.id,display_name:'Neighbor',created_at:expect.any(Number),profile_photo_version:null}])
   expect((await post(`/api/caches/${crypto.randomUUID()}/join-requests/${applicant.id}/approve`,owner.cookie)).status).toBe(404)
   expect((await post(decision,owner.cookie)).status).toBe(200)
   expect((await post(decision.replace('/approve','/reject'),owner.cookie)).status).toBe(409)

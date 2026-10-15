@@ -8,6 +8,7 @@ import { invalidateRequestViews } from '../lib/requests'
 import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
+import { Avatar } from '../components/Avatar'
 
 function OwnerSettings({ cache }: { cache: CacheDetail }) {
   const client = useQueryClient()
@@ -119,7 +120,7 @@ export function CacheSettingsPage() {
     </nav>
     <div className="contents lg:block lg:min-w-0 lg:space-y-5">
     {owner && <JoinRequests cacheId={cache.id} />}
-    <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="members-heading" id="members"><h2 id="members-heading" tabIndex={-1} className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Members</h2><ul className="cc-list lg:border-0">{cache.members.map(member => <li key={member.user_id} className="cc-row"><div className="min-w-0 flex-1"><p className="break-words font-semibold">{member.display_name ?? 'Member'}</p>{member.user_id === cache.owner_id && <p className="text-sm text-slate-600">Owner</p>}</div>{owner && member.user_id !== cache.owner_id && <RemoveMember cache={cache} member={member} />}</li>)}</ul></section>
+    <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="members-heading" id="members"><h2 id="members-heading" tabIndex={-1} className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Members</h2><ul className="cc-list lg:border-0">{cache.members.map(member => <li key={member.user_id} className="cc-row"><Avatar userId={member.user_id} name={member.display_name ?? 'Member'} photoVersion={member.profile_photo_version} /><div className="min-w-0 flex-1"><p className="break-words font-semibold">{member.display_name ?? 'Member'}</p>{member.user_id === cache.owner_id && <p className="text-sm text-slate-600">Owner</p>}</div>{owner && member.user_id !== cache.owner_id && <RemoveMember cache={cache} member={member} />}</li>)}</ul></section>
     <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="invite-heading" id="invite"><h2 id="invite-heading" className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Invite link</h2><div className="cc-list lg:border-0"><div className="cc-row"><a href={invite} className="min-w-0 flex-1 font-mono text-sm break-all select-all">{invite}</a><button type="button" className="cc-pill" onClick={() => void copy()}>Copy</button></div>{owner && <button type="button" className="cc-row w-full text-left" onClick={() => { rotate.reset(); dialog.current?.showModal() }}><span className="flex-1"><span className="block font-semibold">Reset link</span><span className="block text-sm text-slate-600">Old link stops working</span></span><span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span></button>}</div>
       {copyStatus && <p role="status" className="mt-3 text-sm">{copyStatus}</p>}{rotationStatus && <p role="status" className="mt-3 text-sm text-emerald-700">{rotationStatus}</p>}
     </section>

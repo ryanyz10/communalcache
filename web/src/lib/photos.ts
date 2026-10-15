@@ -1,4 +1,4 @@
-import { ApiError } from './api'
+import { ApiError, type Me } from './api'
 import type { Item } from './items'
 
 export const PHOTO_READ_ERROR = "Couldn't read that image, try another."
@@ -25,8 +25,14 @@ export async function resizePhoto(file: File): Promise<Blob> {
   } catch { throw new Error(PHOTO_READ_ERROR) }
 }
 
-export async function uploadPhoto(cacheId: string | null, itemId: string, photo: Blob): Promise<Item> {
-  const response = await fetch(`${cacheId ? `/api/caches/${cacheId}/items` : '/api/me/items'}/${itemId}/photo`, {
+export function uploadPhoto(cacheId: string | null, itemId: string, photo: Blob) {
+  return uploadImage<Item>(`${cacheId ? `/api/caches/${cacheId}/items` : '/api/me/items'}/${itemId}/photo`,photo)
+}
+
+export function uploadProfilePhoto(photo: Blob) { return uploadImage<Me>('/api/me/photo',photo) }
+
+async function uploadImage<T>(path: string, photo: Blob): Promise<T> {
+  const response = await fetch(path, {
     method: 'POST', credentials: 'same-origin',
     headers: { Accept: 'application/json', 'Content-Type': photo.type }, body: photo,
   })
@@ -34,5 +40,5 @@ export async function uploadPhoto(cacheId: string | null, itemId: string, photo:
     const data = await response.json().catch(() => ({})) as { error?: string; limit?: string }
     throw new ApiError(response.status,data.error ?? 'request_failed',undefined,typeof data.limit === 'string' ? data.limit : undefined)
   }
-  return response.json() as Promise<Item>
+  return response.json() as Promise<T>
 }

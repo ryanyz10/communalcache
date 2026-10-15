@@ -10,6 +10,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { ItemPhoto, PhotoUpload } from './ItemPhoto'
 import { ItemRequests } from './RequestsPage'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
+import { Avatar } from '../components/Avatar'
 import { ItemForm } from './ItemForm'
 import { ShownIn } from './ShownIn'
 
@@ -26,7 +27,7 @@ export function ItemList({ cacheId, onAdd }: { cacheId: string; onAdd?: () => vo
       <Link to={`/caches/${cacheId}/items/${item.id}`} className="flex items-center gap-3 px-4 py-3.5 lg:block lg:h-full lg:overflow-hidden lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-0">
         <ItemPhoto key={item.photo_version} item={item} thumbnail />
         <div className="min-w-0 flex-1 lg:px-3.5 lg:py-3"><h3 className="break-words font-semibold">{item.title}</h3>
-        <p className="text-sm text-slate-600">{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</p>{item.available === false && <p className="mt-1 text-sm text-slate-600">Lent out{item.unavailable_note ? ` · ${item.unavailable_note}` : ''}</p>}</div><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:hidden">›</span>
+        <p className="flex items-center gap-2 text-sm text-slate-600"><Avatar userId={item.owner_id} name={item.owner_name ?? 'Member'} photoVersion={item.owner_photo_version} size={24} /><span>{item.owner_name ?? 'Member'} · {item.is_consumable ? `${item.quantity} in stock` : 'Reusable'}</span></p>{item.available === false && <p className="mt-1 text-sm text-slate-600">Lent out{item.unavailable_note ? ` · ${item.unavailable_note}` : ''}</p>}</div><span aria-hidden="true" className="text-xl leading-none text-slate-500 lg:hidden">›</span>
       </Link>
     </li>)}<li className="hidden lg:block"><button type="button" onClick={onAdd} className="lg:flex lg:h-full lg:min-h-[120px] lg:w-full lg:items-center lg:justify-center lg:rounded-[14px] lg:border-2 lg:border-dashed lg:border-slate-300 lg:font-semibold lg:text-slate-600">+ Add item</button></li></ul> : <p className="mt-4 text-slate-600">Nothing shared yet. Add the first item for your neighbors.</p>)}
     {query.isSuccess && !query.data.length && <button type="button" onClick={onAdd} className="hidden lg:mt-4 lg:flex lg:min-h-[120px] lg:w-full lg:items-center lg:justify-center lg:rounded-[14px] lg:border-2 lg:border-dashed lg:border-slate-300 lg:font-semibold lg:text-slate-600">+ Add item</button>}
@@ -96,7 +97,7 @@ export function ItemPage() {
     {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 underline" onClick={() => void query.refetch()}>Try again</button></div>}
     {query.isSuccess && <div className="contents lg:mt-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-x-10">
       <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight lg:col-start-2 lg:row-start-1 lg:mt-0 lg:text-[28px] lg:font-bold">{query.data.title}</h1>
-      <p className="mt-2 text-slate-600 lg:col-start-2 lg:row-start-2">Shared by {query.data.owner_name ?? 'Member'}</p>
+      <p className="mt-2 flex items-center gap-2 text-slate-600 lg:col-start-2 lg:row-start-2"><Avatar userId={query.data.owner_id} name={query.data.owner_name ?? 'Member'} photoVersion={query.data.owner_photo_version} size={28} /><span>Shared by {query.data.owner_name ?? 'Member'}</span></p>
       <div className="contents lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:block"><ItemPhoto key={query.data.photo_version} item={query.data} /></div>
       <div className="contents lg:col-start-2 lg:row-start-3 lg:block">
       <p className="mt-4">{query.data.is_consumable ? `${query.data.quantity} in stock` : 'Reusable · no stock quantity'}</p>

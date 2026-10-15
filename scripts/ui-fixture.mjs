@@ -11,6 +11,7 @@ const users = new Map()
 const caches = new Map()
 const items = new Map()
 const photos = new Map()
+const profilePhotos = new Map()
 const requests = new Map()
 const magicLinks = new Map()
 let lastMagicLink = ''
@@ -42,6 +43,10 @@ const server = createServer(async (request, response) => {
     const sessionId = request.headers.cookie?.match(/(?:^|;\s*)ui_fixture=([^;]+)/)?.[1]
     let me = [...users.values()].find(user=>user.id===sessionId) ?? null
     const authenticated = !!me
+    // The mock shares all fixture caches; real visibility is proved by D1 tests.
+    const avatar = id => id===me?.id || caches.size>0 ? [...users.values()].find(user=>user.id===id)?.profile_photo_version ?? null : null
+    const itemAvatar = item => ({...item,owner_photo_version:avatar(item.owner_id)})
+    const requestAvatars = row => ({...row,owner_photo_version:avatar(row.owner_id),requester_photo_version:avatar(row.requester_id)})
     if (path === '/api/auth/sign-in/magic-link') {
       if (body.email === 'failure@example.test') { json({error:'email_unavailable'},502); return }
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
@@ -84,15 +89,26 @@ const server = createServer(async (request, response) => {
       json(me)
       return
     }
+    const profileRead=path.match(/^\/api\/users\/([^/]+)\/photo$/)
+    if (path==='/api/me/photo' || profileRead) {
+      if (!authenticated) { json({error:'not_found'},404); return }
+      const ownerId=profileRead?.[1]??me.id
+      if (profileRead && request.method!=='GET') { json({error:'method_not_allowed'},405); return }
+      if (request.method==='POST') { profilePhotos.set(me.id,{bytes:raw,type:request.headers['content-type']}); me.profile_photo_version=randomUUID(); json(me); return }
+      if (request.method==='DELETE') { profilePhotos.delete(me.id); me.profile_photo_version=null; response.writeHead(204,{'Cache-Control':'no-store'}); response.end(); return }
+      const photo=profilePhotos.get(ownerId)
+      if (!photo || !avatar(ownerId)) { json({error:'not_found'},404); return }
+      response.writeHead(200,{'Content-Type':photo.type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}); response.end(photo.bytes); return
+    }
     if (path === '/api/requests') {
       if (!authenticated) { json({error:'unauthorized'},401); return }
-      json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id),unavailable_cache_ids:[],next_cursor:null})
+      json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id).map(requestAvatars),unavailable_cache_ids:[],next_cursor:null})
       return
     }
     function libraryInfo(item) {
       const {cache_ids,...fields}=item
       const pending=[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending')
-      return {...fields,cache_id:null,caches:(cache_ids??[item.cache_id]).filter(id=>caches.has(id)).map(id=>({id,name:caches.get(id).name})),pending_count:pending.length,available_quantity:item.is_consumable?item.quantity-pending.reduce((sum,row)=>sum+(row.quantity??0),0):null}
+      return {...itemAvatar(fields),cache_id:null,caches:(cache_ids??[item.cache_id]).filter(id=>caches.has(id)).map(id=>({id,name:caches.get(id).name})),pending_count:pending.length,available_quantity:item.is_consumable?item.quantity-pending.reduce((sum,row)=>sum+(row.quantity??0),0):null}
     }
     if (path === '/api/me/items' || path.startsWith('/api/me/items/')) {
       if (!authenticated) { json({error:'unauthorized'},401); return }
@@ -178,7 +194,7 @@ const server = createServer(async (request, response) => {
         const item=items.get(requestRoute[2])
         if (!item || !(item.cache_ids??[item.cache_id]).includes(requestRoute[1])) { json({error:'not_found'},404); return }
         const queue=[...requests.values()].filter(row=>row.item_id===item.id)
-        if (request.method==='GET') { json(queue.filter(row=>row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id)); return }
+        if (request.method==='GET') { json(queue.filter(row=>row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id).map(requestAvatars)); return }
         if (item.owner_id===me.id) { json({error:'not_found'},404); return }
         if (item.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<1 || body.quantity>9999)) { json({error:'invalid_request_quantity'},400); return }
         const pending=queue.filter(row=>row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)
@@ -208,7 +224,7 @@ const server = createServer(async (request, response) => {
       if (itemRoute) {
         const cacheId=itemRoute[1], itemId=itemRoute[2]
         if (!caches.has(cacheId)) { json({error:'not_found'},404); return }
-        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...item,cache_id:cacheId}))); return }
+        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...itemAvatar(item),cache_id:cacheId}))); return }
         if (!itemId && request.method === 'POST') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
@@ -234,7 +250,7 @@ const server = createServer(async (request, response) => {
           item.description=body.description??null
           item.quantity=item.is_consumable?body.quantity:null
         }
-        json({...item,cache_id:cacheId})
+        json({...itemAvatar(item),cache_id:cacheId})
         return
       }
       const match=path.match(/^\/api\/caches\/([^/]+)(\/invite\/rotate)?$/)
@@ -245,7 +261,7 @@ const server = createServer(async (request, response) => {
         if (body.name !== undefined) cache.name=body.name.trim()
         if (body.requires_approval !== undefined) cache.requires_approval=body.requires_approval
       }
-      json({...cache,members:[{user_id:me.id,display_name:me.display_name}]})
+      json({...cache,members:[{user_id:me.id,display_name:me.display_name,profile_photo_version:avatar(me.id)}]})
       return
     }
     json({error:'not_found'},404)
