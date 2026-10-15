@@ -26,12 +26,13 @@ export function AccountPage() {
     setPending(true); setError('')
     try { await signOut() } catch (error) { setError(errorMessage(error)) } finally { setPending(false) }
   }
-  return <main className="cc-page lg:max-w-[880px] lg:p-8">
+  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <h1 className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Account</h1>
-    <section className="mt-6 lg:mt-0 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-8 lg:border-b lg:border-slate-200 lg:py-6" aria-labelledby="profile-heading">
-      <h2 id="profile-heading" className="cc-section-title lg:col-start-1 lg:row-start-1 lg:mb-1 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Profile</h2>
-      <p className="hidden lg:col-start-1 lg:row-start-2 lg:block lg:text-sm lg:text-slate-600">What neighbors see.</p>
-      <div className="contents lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block">
+    <div className="contents lg:mt-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
+    <section className="mt-6 lg:mt-0 lg:min-w-0" aria-labelledby="profile-heading">
+      <h2 id="profile-heading" className="cc-section-title lg:mb-2 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Profile</h2>
+      <p className="hidden lg:mb-3 lg:block lg:text-sm lg:text-slate-600">What neighbors see.</p>
+      <div className="contents lg:block">
       <div className="cc-list">
         <ProfilePhotoControls key={me.id} />
         <div className="cc-row">
@@ -49,13 +50,14 @@ export function AccountPage() {
     </section>
     <ContactControls key={me.id} />
     <PushControls userId={me.id} />
-    <section className="contents lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start lg:gap-8 lg:border-b lg:border-slate-200 lg:py-6">
-      <h2 className="hidden lg:block lg:text-[17px] lg:font-semibold">Session</h2>
+    <section className="contents lg:block lg:min-w-0">
+      <h2 className="hidden lg:mb-3 lg:block lg:text-[17px] lg:font-semibold">Session</h2>
       <div className="contents lg:flex lg:flex-wrap lg:items-center lg:justify-between lg:gap-4 lg:rounded-[10px] lg:border lg:border-slate-200 lg:bg-white lg:p-4">
         <p className="hidden lg:block lg:text-sm lg:text-slate-600">On this browser</p>
         {error && <p role="alert" className="mt-4 text-red-700">{error}</p>}
         <button type="button" disabled={pending} className="mt-8 w-full rounded-md border border-slate-300 px-4 py-2 lg:mt-0 lg:w-auto" onClick={() => void logout()}>{pending ? 'Signing out…' : 'Sign out'}</button>
       </div>
     </section>
+    </div>
   </main>
 }

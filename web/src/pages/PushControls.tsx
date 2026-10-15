@@ -36,10 +36,10 @@ export function PushControls({ userId }: { userId: string }) {
     catch (error) { setError(errorMessage(error)) }
     finally { setPending(false) }
   }
-  return <section className="mt-6 lg:mt-0 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-8 lg:border-b lg:border-slate-200 lg:py-6" aria-labelledby="push-heading">
-    <h2 id="push-heading" className="cc-section-title lg:col-start-1 lg:row-start-1 lg:mb-1 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Notifications on this device</h2>
-    <p className="hidden lg:col-start-1 lg:row-start-2 lg:block lg:text-sm lg:text-slate-600">On this device.</p>
-    <div className="contents lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:block">
+  return <section className="mt-6 lg:mt-0 lg:min-w-0" aria-labelledby="push-heading">
+    <h2 id="push-heading" className="cc-section-title lg:mb-2 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Notifications on this device</h2>
+    <p className="hidden lg:mb-3 lg:block lg:text-sm lg:text-slate-600">On this device.</p>
+    <div className="contents lg:block">
     <div className="cc-list"><label className="cc-row"><span className="min-w-0 flex-1"><span className="block font-semibold">Push notifications</span><span id="push-help" className="block text-sm text-slate-600">Otherwise you get email.</span></span><input type="checkbox" role="switch" aria-label="Push notifications" aria-describedby="push-help" aria-checked={hasSubscription} checked={hasSubscription} disabled={pending || (!hasSubscription && (!registration || !config.data?.vapid_public_key || (support.ios && !support.standalone)))} onChange={() => { if (hasSubscription) void disable(); else void enable() }} className="cc-switch" /></label></div>
     <p className="mt-3 text-sm text-slate-600">Enable for the account you are using. Signing out removes this browser's subscription.</p>
     {support.ios && !support.standalone && <p className="mt-3">On iPhone or iPad, tap Share, then Add to Home Screen. Open the installed app and turn on Push notifications.</p>}

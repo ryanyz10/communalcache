@@ -90,7 +90,7 @@ export function ItemPage() {
   const back = cacheId ? `/caches/${cacheId}` : '/items'
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <WideBreadcrumbs><Link to="/">Home</Link><span aria-hidden="true">›</span><Link to={back}>{cacheId ? 'Cache' : 'Your items'}</Link>{query.data && <><span aria-hidden="true">›</span><span>{query.data.title}</span></>}</WideBreadcrumbs>
     <Link to={back} className="text-sm underline lg:hidden">‹ {cacheId ? 'Back to cache' : 'Your items'}</Link>
     {query.isPending && <p role="status" className="mt-4">Loading item…</p>}

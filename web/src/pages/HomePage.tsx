@@ -32,7 +32,7 @@ export function HomePage() {
   if (!me.display_name) return <OnboardingPage />
   function openCreate() { create.reset(); dialog.current?.showModal() }
   function onCreate(event: FormEvent) { event.preventDefault(); create.mutate() }
-  return <main className="cc-page lg:max-w-[1120px] lg:p-8">
+  return <main className="cc-page lg:max-w-[1200px] lg:p-8">
     <section aria-labelledby="caches-heading">
       <div className="cc-hero"><div className="flex items-center justify-between gap-3">
         <h1 id="caches-heading" className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Your caches</h1>

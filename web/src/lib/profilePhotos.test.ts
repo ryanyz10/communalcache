@@ -65,7 +65,7 @@ it('renders labeled Account Change/Choose/Remove controls in a native neutral-st
   expect(markup).toContain('accept="image/jpeg,image/png,image/webp"')
   expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Remove photo<\/button>/)
   expect(markup).toContain('cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6')
-  expect(markup).toContain('lg:grid-cols-[200px_minmax(0,1fr)]')
+  expect(markup).toContain('contents lg:mt-6 lg:grid lg:grid-cols-2')
   expect(fetch).not.toHaveBeenCalled()
   expect(render(createElement(AccountPage))).not.toMatch(/<button[^>]*disabled=""[^>]*>Remove photo<\/button>/)
 })

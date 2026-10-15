@@ -30,7 +30,7 @@ export function ContactControls() {
   }
   function submit(event: FormEvent) { event.preventDefault(); change.mutate(false) }
   const currentPreview = value === previewValue ? preview.data?.contact : null
-  return <section className="mt-6 lg:border-b lg:border-slate-200 lg:py-6" aria-labelledby="contact-heading">
+  return <section className="mt-6 lg:mt-0 lg:min-w-0" aria-labelledby="contact-heading">
     <h2 id="contact-heading" className="cc-section-title lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">How to reach me</h2>
     <div className="cc-list"><div className="cc-row">
       {own.data?.contact && <PlatformIcon kind={own.data.contact.kind} />}

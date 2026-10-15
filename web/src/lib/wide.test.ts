@@ -1,4 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { PixelHorizon } from '../components/PixelArt'
 import { createElement, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -38,6 +40,21 @@ function render(element: ReactElement, options: { caller?: string | null; path?:
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
+it('scales desktop sprites with the scene width only at 1024px, retaining the original phone geometry', () => {
+  const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
+  const markup = renderToStaticMarkup(createElement(PixelHorizon, { kind: 'houses', entries: [{ id: 'member', name: 'Ryan' }] }))
+  expect(markup).toMatch(/class="cc-horizon-phone" width="100%" height="96" style="min-width:280px"/)
+  expect(markup).toContain('class="cc-horizon-desktop" width="100%" height="96" viewBox="0 0 440 96"')
+  expect(markup).toContain('min-width:880px')
+  expect(css).toContain('.cc-horizon .cc-horizon-desktop { display: none; }')
+  const desktop = css.split('@media (min-width: 1024px) {')[1].split('@media (prefers-reduced-motion')[0]
+  expect(desktop).toContain('.cc-horizon .cc-horizon-phone { display: none; }')
+  expect(desktop).toContain('.cc-horizon .cc-horizon-desktop { display: block; height: auto; }')
+  expect(desktop).toContain('font-size: clamp(48px,4vw,72px)')
+  // At 1200px the shared 2px sprites render with ~5.5px cells; no stretched tiny art.
+  expect(2 * 1200 / 440).toBeGreaterThan(5)
+})
+
 it('uses a shared profile menu on phone and desktop rather than tabs or a Requests icon', () => {
   const markup = render(createElement(AppHeader), { path: '/requests', route: '/requests' })
   expect(markup).toContain('aria-label="Home"')
@@ -47,7 +64,7 @@ it('uses a shared profile menu on phone and desktop rather than tabs or a Reques
   expect(markup).toMatch(/<a(?=[^>]*href="\/requests")(?=[^>]*aria-current="page")(?=[^>]*role="menuitem")[^>]*>/)
   expect(markup).not.toContain('Desktop navigation')
   expect(markup).not.toContain('Main navigation')
-  expect(markup).toContain('lg:max-w-[1120px]')
+  expect(markup).toContain('lg:max-w-[1200px]')
   expect(markup).not.toContain('private@example.test')
 })
 
@@ -73,6 +90,9 @@ it('uses wide-only breadcrumbs, Settings label and photo cards without duplicati
   expect(markup).toContain('lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]')
   expect(markup).toContain('lg:aspect-[4/3]')
   expect(markup).toContain('lg:border-dashed')
+  expect(markup).toContain('lg:grid-cols-[minmax(0,1fr)_240px]')
+  expect(markup).toMatch(/<aside class="hidden lg:mt-6 lg:block[^>]*aria-labelledby="cache-members-heading"/)
+  expect(markup).toContain('Members · 2')
   expect(markup.match(/>Starter<\/h3>/g)).toHaveLength(1)
   expect(markup).not.toContain('>Pending</span>')
   const detail = render(createElement(ItemPage), { route: '/caches/:cacheId/items/:itemId', path: `/caches/${id}/items/${itemId}` })
@@ -118,16 +138,16 @@ it('adds a hidden sticky settings menu with only authorized sections and matchin
   expect(member).not.toContain('href="#cache"')
 })
 
-it('places existing request groups side by side and account sections in labeled wide rows without duplicate actions', () => {
+it('places outgoing requests on the right and account settings in two columns without duplicate actions', () => {
   const requests = render(createElement(RequestsPage))
   expect(requests).toContain('contents lg:grid lg:grid-cols-2')
   expect(requests).toContain('aria-label="Needs your answer"')
-  expect(requests).toContain('aria-label="Your requests"')
+  expect(requests).toMatch(/<section[^>]*lg:col-start-2 lg:row-span-2 lg:row-start-1[^>]*aria-label="Your requests"/)
   expect(requests.match(/>Approve request from Priya<\/button>/g)).toHaveLength(1)
   const account = render(createElement(AccountPage))
-  expect(account).toContain('cc-page lg:max-w-[880px]')
-  expect(account).toContain('lg:grid-cols-[200px_minmax(0,1fr)]')
-  expect(account).toContain('class="hidden lg:block lg:text-[17px] lg:font-semibold">Session')
+  expect(account).toContain('cc-page lg:max-w-[1200px]')
+  expect(account).toContain('contents lg:mt-6 lg:grid lg:grid-cols-2')
+  expect(account).toContain('class="hidden lg:mb-3 lg:block lg:text-[17px] lg:font-semibold">Session')
   expect(account.match(/>Sign out<\/button>/g)).toHaveLength(1)
 })
 
@@ -139,6 +159,8 @@ it('uses a hidden-until-lg brand panel and contents wrappers while retaining one
   expect(markup).toContain('class="contents lg:flex lg:min-h-dvh')
   expect(markup).toContain('<header class="lg:hidden">')
   expect(markup).toContain('Hand it off in person')
+  expect(markup).toContain('lg:max-w-[440px]')
+  expect(markup).toContain('viewBox="0 -100 440 196"')
   expect(markup.match(/<form\b/g)).toHaveLength(1)
   expect(markup.match(/type="email"/g)).toHaveLength(1)
   expect(fetchMock).not.toHaveBeenCalled()
