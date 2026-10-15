@@ -62,14 +62,15 @@ it('does not turn an unavailable item queue into empty data or expose an ask for
   expect(markup).not.toContain('Ask to use')
 })
 
-it('groups pending incoming decisions separately from my outgoing statuses and hides decided incoming rows', () => {
+it('groups pending incoming decisions separately and includes answered incoming rows for contact', () => {
   const approved = { ...request, id: 'approved', requester_id: 'owner', owner_id: 'other', status: 'approved' as const, decided_at: 2 }
   const rejected = { ...approved, id: 'rejected', status: 'rejected' as const, decision_reason: '<Not today>' }
   const decidedIncoming = { ...request, id: 'decided-incoming', item_title: 'Decided incoming item', status: 'approved' as const, decided_at: 3 }
   const markup = render('all', { caller: 'owner', requests: [request, approved, rejected, decidedIncoming] })
   expect(markup).toContain('Needs your answer')
   expect(markup).toContain('Your requests')
-  expect(markup).not.toContain('Decided incoming item')
+  expect(markup).toContain('Decided incoming item')
+  expect(markup).toContain('Answered for your things')
   expect(markup).not.toContain('>Your caches</a>')
   expect(markup).toContain('Approved')
   expect(markup).toContain('Rejected')
