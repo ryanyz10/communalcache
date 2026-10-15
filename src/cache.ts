@@ -379,6 +379,51 @@ export class Cache extends DurableObject<Env> {
     return result
   }
 
+  private cascadeItemDeletion(cache: { id: string; name: string }, item: { id: string; title: string; photo_path: string | null }, actorId: string, reason: string) {
+    // Both callers hold the authorization check, recipient snapshot and cascade in one local transaction.
+    const pending = this.ctx.storage.sql.exec<{ id: string; requester_id: string; quantity: number | null }>("SELECT id, requester_id, quantity FROM requests WHERE item_id=? AND status='pending' ORDER BY created_at,id", item.id).toArray()
+    for (const request of pending) {
+      this.recordIntent('notification', { event: 'item_deleted', cache_id: cache.id, cache_name: cache.name, item_id: item.id, item_title: item.title, request_id: request.id, recipient_id: request.requester_id, user_id: actorId, quantity: request.quantity, reason })
+    }
+    if (item.photo_path) this.recordIntent('r2_delete', { key: item.photo_path })
+    this.recordIntent('r2_delete_prefix', { prefix: `${cache.id}/${item.id}/` })
+    this.ctx.storage.sql.exec('DELETE FROM items WHERE id=?', item.id)
+  }
+
+  async deleteItem(userId: string, itemId: string) {
+    await this.rearm()
+    this.ctx.storage.transactionSync(() => {
+      const item = this.readItem(userId, itemId, true)
+      const cache = this.readCache(userId)
+      this.cascadeItemDeletion(cache, item, userId, 'item deleted')
+    })
+    await this.rearm()
+  }
+
+  async removeMember(userId: string, memberId: string) {
+    await this.rearm()
+    this.ctx.storage.transactionSync(() => {
+      const cache = this.readCache(userId, true)
+      const member = this.ctx.storage.sql.exec<{ role: string; status: string }>('SELECT role,status FROM members WHERE user_id=?', memberId).toArray()[0]
+      if (!member || member.status !== 'active') throw new Error('not_found')
+      if (member.role === 'owner') throw new Error('owner_cannot_be_removed')
+      const owned = this.ctx.storage.sql.exec<{ id: string; title: string; photo_path: string | null }>('SELECT id,title,photo_path FROM items WHERE owner_id=? ORDER BY id', memberId).toArray()
+      const outgoing = this.ctx.storage.sql.exec<{ id: string; item_id: string; item_title: string; quantity: number | null }>(`
+        SELECT r.id,r.item_id,i.title AS item_title,r.quantity FROM requests r JOIN items i ON i.id=r.item_id
+        WHERE r.requester_id=? AND r.status='pending' AND i.owner_id<>? ORDER BY r.created_at,r.id
+      `, memberId, memberId).toArray()
+      this.ctx.storage.sql.exec("UPDATE members SET status='removed' WHERE user_id=?", memberId)
+      for (const item of owned) this.cascadeItemDeletion(cache, item, userId, 'left the cache')
+      for (const request of outgoing) {
+        const changed = this.ctx.storage.sql.exec("UPDATE requests SET status='rejected',decision_reason='left the cache',decided_at=? WHERE id=? AND status='pending' RETURNING id", Date.now(), request.id).toArray()
+        if (!changed.length) throw new Error('request_not_pending')
+        this.recordIntent('notification', { event: 'member_removed', cache_id: cache.id, cache_name: cache.name, item_id: request.item_id, item_title: request.item_title, request_id: request.id, recipient_id: memberId, user_id: userId, quantity: request.quantity, reason: 'left the cache' })
+      }
+      this.recordIntent('discovery_delete', { cache_id: cache.id, user_id: memberId })
+    })
+    await this.rearm()
+  }
+
   async photoKey(userId: string, itemId: string) {
     await this.rearm()
     return this.ctx.storage.transactionSync(() => {
@@ -432,6 +477,14 @@ export class Cache extends DurableObject<Env> {
       if (row.kind === 'r2_delete') {
         const { key } = JSON.parse(row.payload) as { key: string }
         await this.env.BUCKET.delete(key)
+      } else if (row.kind === 'r2_delete_prefix') {
+        const { prefix } = JSON.parse(row.payload) as { prefix: string }
+        // Re-list the first page after deletion: cursors over a changing key set can skip orphan versions.
+        const page = await this.env.BUCKET.list({ prefix, limit: 100 })
+        if (page.objects.length) {
+          await this.env.BUCKET.delete(page.objects.map(object => object.key))
+          continue
+        }
       } else {
         await applyCacheIntent(this.env.DB, row.kind, row.payload, row.id, row.created_at)
         if (row.kind === 'notification') await this.env.NOTIFICATIONS.send(row.id)
