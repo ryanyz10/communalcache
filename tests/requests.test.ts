@@ -242,43 +242,13 @@ it('limits concurrent aggregation RPCs to five while still reading real local DO
   expect(calls).toBe(9)
 })
 
-it('Worker routes enforce profiles, CSRF, quantities, owner decisions, public names and bounded cursor validation', async () => {
-  const owner = await login('owner@example.test')
-  await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: owner.cookie, body: { display_name: 'Owner' } }), env)
-  const { id, stub } = cache()
-  const info = await stub.create(id, owner.id, 'Pantry', false)
-  const item = await stub.createItem(owner.id, { title: 'Sugar', is_consumable: true, quantity: 5 })
-  const caller = await login('requester@example.test')
-  const path = `/api/caches/${id}/items/${item.id}/requests`
-  const post = (body: unknown, cookie = caller.cookie) => worker.fetch(appRequest(path, { method: 'POST', cookie, body }), env)
-  expect((await post({ quantity: 1 })).status).toBe(409)
-  await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Requester' } }), env)
-  expect((await post({ quantity: 1 })).status).toBe(404)
-  await stub.join(caller.id, info.invite_token.split('.')[1])
-  for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, origin, body: { quantity: 1 } }), env)).status).toBe(403)
-  expect((await post({ quantity: 0 })).status).toBe(400)
-  expect((await post({ quantity: 6 })).status).toBe(409)
-  const response = await post({ quantity: 2 })
-  expect(response.status).toBe(201)
-  const request = await response.json() as { id: string }
-  expect(request).toMatchObject({ requester_id: caller.id, requester_name: 'Requester', owner_name: 'Owner' })
-  const decision = `/api/caches/${id}/requests/${request.id}`
-  expect((await worker.fetch(appRequest(decision + '/approve', { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(404)
-  expect((await worker.fetch(appRequest(decision + '/reject', { method: 'POST', cookie: owner.cookie, body: { reason: '' } }), env)).status).toBe(400)
-  for (const action of ['approve', 'reject']) for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(decision + '/' + action, { method: 'POST', cookie: owner.cookie, origin, body: { reason: 'No' } }), env)).status).toBe(403)
-  expect((await worker.fetch(appRequest(decision + '/approve', { method: 'POST', cookie: owner.cookie, body: {} }), env)).status).toBe(200)
-  expect((await worker.fetch(appRequest(decision + '/reject', { method: 'POST', cookie: owner.cookie, body: { reason: 'No' } }), env)).status).toBe(409)
-  expect((await worker.fetch(appRequest(decision + '/cancel', { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(404)
-  expect((await worker.fetch(appRequest('/api/requests?after=bad', { cookie: caller.cookie }), env)).status).toBe(400)
-  await stub.flushSync()
-  const all = await worker.fetch(appRequest('/api/requests', { cookie: caller.cookie }), env)
-  const payload = await all.json()
-  expect(JSON.stringify(payload)).not.toContain('example.test')
-  expect(payload).toMatchObject({ requests: [{ id: request.id, status: 'approved' }], unavailable_cache_ids: [], next_cursor: null })
-  const queue = await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)
-  expect(queue.status).toBe(200)
-  expect(JSON.stringify(await queue.json())).not.toContain('example.test')
-  await runInDurableObject(stub, (_instance, state) => { state.storage.sql.exec("UPDATE members SET status = 'removed' WHERE user_id = ?", caller.id) })
-  expect((await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)).status).toBe(404)
-  expect((await post({ quantity: 1 })).status).toBe(404)
+it('gates legacy aggregate and decision routes without returning old DO requests', async () => {
+  const caller = await login()
+  await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
+  const base = `/api/caches/${crypto.randomUUID()}/requests/${crypto.randomUUID()}`
+  for (const action of ['approve', 'reject']) {
+    expect((await worker.fetch(appRequest(base + '/' + action, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(503)
+    for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(base + '/' + action, { method: 'POST', cookie: caller.cookie, origin, body: {} }), env)).status).toBe(403)
+  }
+  expect((await worker.fetch(appRequest('/api/requests?after=bad', { cookie: caller.cookie }), env)).status).toBe(503)
 })

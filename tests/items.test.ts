@@ -144,61 +144,12 @@ it('rolls back thrown item mutations without new cross-store work, and item entr
   }
 })
 
-it('Worker item routes enforce cookies, CSRF, profiles, validation, owner-only writes, and public-only enrichment', async () => {
-  const caller = await login()
-  const { id, stub } = cache()
-  await stub.create(id, caller.id, 'Tools', false)
-  const path = `/api/caches/${id}/items`
-  const body = { title: '  Sugar  ', is_consumable: true, quantity: 0 }
-  expect((await worker.fetch(appRequest(path, { method: 'POST', body }), env)).status).toBe(401)
-  expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body }), env)).status).toBe(409)
+it('gates legacy Worker item routes while retaining cookie, Origin and profile protection', async () => {
+  const caller = await login(), path = `/api/caches/${crypto.randomUUID()}/items`
+  expect((await worker.fetch(appRequest(path, { method: 'POST', body: {} }), env)).status).toBe(401)
+  expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(409)
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
-  const post = (value: unknown) => worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: value }), env)
-  const response = await post(body)
-  expect(response.status).toBe(201)
-  const item = await response.json() as { id: string; owner_id: string }
-  expect(item).toMatchObject({ cache_id: id, owner_id: caller.id, owner_name: 'Neighbor', title: 'Sugar', quantity: 0, is_consumable: true })
-  const detailPath = `${path}/${item.id}`
-  for (const [route, method] of [[path, 'POST'], [detailPath, 'PATCH']]) {
-    for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(route, { method, cookie: caller.cookie, origin, body }), env)).status).toBe(403)
-  }
-  expect((await post({ ...body, owner_id: 'forged' })).status).toBe(404)
-  expect((await post({ ...body, quantity: null })).status).toBe(400)
-  expect((await post({ ...body, title: '' })).status).toBe(400)
-  const patch = (value: unknown) => worker.fetch(appRequest(detailPath, { method: 'PATCH', cookie: caller.cookie, body: value }), env)
-  expect((await patch({ is_consumable: false })).status).toBe(400)
-  expect((await patch({ quantity: 0.5 })).status).toBe(400)
-  expect((await patch({ description: 3 })).status).toBe(400)
-  expect((await patch({})).status).toBe(400)
-  expect((await patch({ quantity: 5 })).status).toBe(200)
-  await runInDurableObject(stub, (_instance, state) => {
-    state.storage.sql.exec("INSERT INTO members VALUES ('requester','member','active',1)")
-    state.storage.sql.exec("INSERT INTO requests VALUES ('reservation', ?, 'requester', 3, 'pending', NULL, NULL, 1)", item.id)
-  })
-  const conflict = await patch({ quantity: 2 })
-  expect(conflict.status).toBe(409)
-  expect(await conflict.json()).toEqual({ error: 'quantity_reserved' })
-  const list = await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)
-  const detail = await worker.fetch(appRequest(detailPath, { cookie: caller.cookie }), env)
-  expect(await list.json()).toEqual([await detail.json()])
-  expect(JSON.stringify(item)).not.toContain('example.test')
-  expect((await worker.fetch(appRequest(detailPath, { method: 'PUT', cookie: caller.cookie }), env)).status).toBe(405)
-  expect((await worker.fetch(appRequest(detailPath + '/photo', { cookie: caller.cookie }), env)).status).toBe(404)
-  const other = cache()
-  await other.stub.create(other.id, caller.id, 'Other', false)
-  expect((await worker.fetch(appRequest(`/api/caches/${other.id}/items/${item.id}`, { cookie: caller.cookie }), env)).status).toBe(404)
-  await runInDurableObject(stub, (_instance, state) => {
-    state.storage.sql.exec("INSERT INTO members VALUES ('replacement','member','active',1)")
-    state.storage.sql.exec("UPDATE members SET role = 'member' WHERE user_id = ?", caller.id)
-    state.storage.sql.exec("UPDATE members SET role = 'owner' WHERE user_id = 'replacement'")
-    state.storage.sql.exec("UPDATE items SET owner_id = 'replacement' WHERE id = ?", item.id)
-  })
-  expect((await patch({ title: 'Not mine' })).status).toBe(404)
-  for (const status of ['pending', 'removed']) {
-    await runInDurableObject(stub, (_instance, state) => { state.storage.sql.exec('UPDATE members SET status = ? WHERE user_id = ?', status, caller.id) })
-    expect((await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)).status).toBe(404)
-    expect((await worker.fetch(appRequest(detailPath, { cookie: caller.cookie }), env)).status).toBe(404)
-    expect((await post(body)).status).toBe(404)
-    expect((await patch({ title: 'No access' })).status).toBe(404)
-  }
+  for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, origin, body: {} }), env)).status).toBe(403)
+  expect((await worker.fetch(appRequest(path, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(503)
+  expect((await worker.fetch(appRequest(path, { cookie: caller.cookie }), env)).status).toBe(503)
 })

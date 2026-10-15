@@ -86,7 +86,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Historical | Owner DO specification | [#29](https://github.com/ryanyz10/communalcache/pull/29) merged, **superseded** by single-D1 architecture; do not implement its namespaces/protocol |
 | Historical | Your items cache fan-out | Draft [#28](https://github.com/ryanyz10/communalcache/pull/28) superseded by direct-D1 library, not target design |
 | D1 1 | Single-D1 specification | This docs-only PR; no implementation/migration/resource changes |
-| D1 2 | Caches / membership / joining | Planned; canonical D1 config, secrets, memberships, atomic join outbox |
+| D1 2 | Caches / membership / joining | Implemented; in review: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
 | D1 3 | Shared items / attachments / photos | Planned; direct own library, one item across caches, private R2 and cleanup |
 | D1 4 | Requests / shared stock / Lent out / notifications | Planned; guarded INSERT and token-gated decision batches, direct Requests queries |
 | D1 5 | Removal / detach / deletion / races | Planned; atomic cascades/snapshots and immediate membership enforcement |
@@ -117,6 +117,18 @@ rotation/join/config races, open/gated/idempotent joins, reject/retry and remove
 403. UI create/open/copy/rotate and invite → login → name → saved join body.
 Retain cookie/profile/Origin rules. Gate old destructive routes now, before porting
 shared data; no parallel membership source for new D1 routes.
+
+**Approved PR 2 transition:** no D1-to-DO membership compatibility bridge. All
+legacy item/photo/request APIs, including GET /api/requests and destructive
+routes, return temporary 503 items_moving after normal auth/profile/Origin guards.
+The UI shows only “Items are being moved, back soon” where lists would be and
+hides add/remove actions. Keep Cache code/bindings, legacy direct-DO regression
+tests and legacy-only sync until their assigned retirement. Canonical D1 rows are
+excluded from legacy registry sweeps and cannot be overwritten by old projections.
+Staging holds test data only; PRs 2–4 are meant to merge together, so staging only
+briefly goes without items. Existing DO data is not imported/reset implicitly;
+new D1 caches/joining work immediately, and any old-data reset remains separately
+approval-gated in PR 7.
 
 ### PR 3 — Shared items, attachments and photos
 

@@ -4,6 +4,7 @@ import { applyD1Migrations, runInDurableObject, type D1Migration } from 'cloudfl
 import worker from '../src/index'
 import { requireWriteLimit, writeLimits, type WriteRoute } from '../src/rate-limit'
 import { HttpError } from '../src/http'
+import { cacheJoinRequests, createCache, joinCache } from '../src/db'
 import { appRequest, login } from './helpers'
 
 async function profile(email = 'owner@example.test') {
@@ -57,12 +58,10 @@ it('isolates users and route families and reuses only four counter rows rather t
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM write_limits WHERE user_id=?').bind(first).first('n')).toBe(4)
 })
 
-it('limits Worker join/request writes across arbitrary cache/item IDs with Retry-After and no local mutation', async () => {
+it('limits Worker join writes across arbitrary cache IDs with Retry-After and no mutation', async () => {
   const owner = await profile(), member = await profile('member@example.test')
-  const id = crypto.randomUUID(), stub = env.CACHES.get(env.CACHES.idFromName(id))
-  const info = await stub.create(id, owner.id, 'Tools', true)
-  const item = await stub.createItem(owner.id, { title: 'Mixer', is_consumable: false })
-  await stub.join(member.id, info.invite_token.split('.')[1])
+  const info = await createCache(env.DB, owner.id, 'Tools', true), id = info.id
+  await joinCache(env.DB, id, member.id, info.invite_token.split('.')[1])
   const now = Date.now(), windowStart = Math.floor(now / 60_000) * 60_000
   // Exhaust through the real atomic D1 statement without racing wall-clock minutes in a long loop.
   for (const route of Object.keys(writeLimits) as WriteRoute[]) {
@@ -71,8 +70,6 @@ it('limits Worker join/request writes across arbitrary cache/item IDs with Retry
   const routes = [
     `/api/caches/${id}/join`, `/api/caches/${crypto.randomUUID()}/join`,
     `/api/caches/${id}/join-requests/${owner.id}/approve`, `/api/caches/${id}/join-requests/${owner.id}/reject`,
-    `/api/caches/${id}/items/${item.id}/requests`, `/api/caches/${id}/items/${crypto.randomUUID()}/requests`,
-    `/api/caches/${id}/requests/${crypto.randomUUID()}/approve`, `/api/caches/${id}/requests/${crypto.randomUUID()}/reject`,
   ]
   for (const path of routes) {
     const response = await worker.fetch(appRequest(path, { method: 'POST', cookie: member.cookie, body: { secret: info.invite_token.split('.')[1] } }), env)
@@ -82,8 +79,7 @@ it('limits Worker join/request writes across arbitrary cache/item IDs with Retry
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     expect(await response.json()).toEqual({ error: 'rate_limited' })
   }
-  expect(await stub.joinRequests(owner.id)).toHaveLength(1)
-  expect(await stub.itemRequests(owner.id, item.id)).toEqual([])
+  expect(await cacheJoinRequests(env.DB, id, owner.id)).toHaveLength(1)
   expect((await worker.fetch(appRequest(`/api/caches/${id}`, { cookie: owner.cookie }), env)).status).toBe(200)
   expect((await worker.fetch(appRequest(`/api/caches/${id}/join-requests/${member.id}/approve`, { method: 'POST', cookie: owner.cookie, body: {} }), env)).status).toBe(200)
 })
@@ -122,10 +118,9 @@ it('reports sync retry/backlog age without cache names, payloads or invite secre
   await runInDurableObject(stub, (_instance, state) => { expect(state.storage.sql.exec('SELECT 1 FROM pending_sync').toArray()).toEqual([]) })
 })
 
-it('canonicalizes mixed-case cache, item, request and member IDs before DO/SQL access without changing secrets', async () => {
+it('canonicalizes mixed-case D1 cache/applicant IDs and gates mixed-case legacy paths without changing secrets', async () => {
   const owner = await profile(), member = await profile('member@example.test')
-  const id = crypto.randomUUID(), stub = env.CACHES.get(env.CACHES.idFromName(id))
-  const info = await stub.create(id, owner.id, 'Pantry', true)
+  const info = await createCache(env.DB, owner.id, 'Pantry', true), id = info.id
   const base = `/api/caches/${id.toUpperCase()}`
   const call = (path: string, method = 'GET', body?: unknown, cookie = owner.cookie) => worker.fetch(appRequest(path, { method, cookie, body }), env)
   expect((await call(base)).status).toBe(200)
@@ -133,24 +128,11 @@ it('canonicalizes mixed-case cache, item, request and member IDs before DO/SQL a
   expect((await call(base + '/join', 'POST', { secret: info.invite_token.split('.')[1] }, member.cookie)).status).toBe(200)
   expect((await call(base + '/join-requests')).status).toBe(200)
   expect((await call(base + `/join-requests/${member.id.toUpperCase()}/approve`, 'POST', {})).status).toBe(200)
-  const item = await stub.createItem(owner.id, { title: 'Mixer', is_consumable: false })
-  const itemPath = base + `/items/${item.id.toUpperCase()}`
-  expect((await call(base + '/items')).status).toBe(200)
-  expect((await call(itemPath)).status).toBe(200)
-  expect((await call(itemPath, 'PATCH', { title: 'Hand mixer' })).status).toBe(200)
-  const created = await call(itemPath + '/requests', 'POST', {}, member.cookie)
-  expect(created.status).toBe(201)
-  const request = await created.json() as { id: string }
-  expect((await call(base + `/requests/${request.id.toUpperCase()}/approve`, 'POST', {})).status).toBe(200)
-  const key = await stub.photoUploadKey(owner.id, item.id)
-  await env.BUCKET.put(key, new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: 'image/jpeg' } })
-  await stub.finishPhotoUpload(owner.id, item.id, key, true)
-  expect((await call(itemPath + '/photo')).status).toBe(200)
-  expect((await call(itemPath, 'DELETE')).status).toBe(204)
-  expect((await call(base + `/members/${member.id.toUpperCase()}`, 'DELETE')).status).toBe(204)
-  expect((await call(base, 'GET', undefined, member.cookie)).status).toBe(404)
-  await runInDurableObject(stub, (_instance, state) => {
-    expect(state.storage.sql.exec('SELECT status FROM members WHERE user_id=?', member.id).one().status).toBe('removed')
-    expect(state.storage.sql.exec('SELECT 1 FROM items').toArray()).toEqual([])
-  })
+  const itemPath = base + `/items/${crypto.randomUUID().toUpperCase()}`
+  expect((await call(base + '/items')).status).toBe(503)
+  expect((await call(itemPath)).status).toBe(503)
+  expect((await call(itemPath + '/photo')).status).toBe(503)
+  expect((await call(base + `/requests/${crypto.randomUUID().toUpperCase()}/approve`, 'POST', {})).status).toBe(503)
+  expect((await call(base + `/members/${member.id.toUpperCase()}`, 'DELETE')).status).toBe(503)
+  expect((await call(base, 'GET', undefined, member.cookie)).status).toBe(200)
 })
