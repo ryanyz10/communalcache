@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { BoxMark, PixelHorizon } from '../components/PixelArt'
 import { landingCopy as copy } from '../lib/landingCopy'
+import { SupportLink } from '../components/Support'
 
 const boxes = ['Street','Friends','Club','Neighbors','Building','Garden','Community'].map(name=>({id:name,name}))
 
@@ -45,6 +46,7 @@ export function LandingPage() {
           <footer className="cc-landing-footer">
             <Link to="/login" className="cc-landing-primary">{copy.getStarted}</Link>
             <p>{copy.footer}</p>
+            <SupportLink />
           </footer>
         </div>
       </main>

@@ -14,6 +14,7 @@ import { AccountPage } from './pages/AccountPage'
 import { CacheSettingsPage } from './pages/CacheSettingsPage'
 import { AppHeader } from './components/AppHeader'
 import { RouteMotion } from './components/RouteMotion'
+import { AppFooter } from './components/Support'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
@@ -49,7 +50,7 @@ export default function App() {
   return <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <BrowserRouter>
-        <Ready><AppHeader /><RouteMotion><AppRoutes /></RouteMotion></Ready>
+        <Ready><AppHeader /><RouteMotion><AppRoutes /></RouteMotion><AppFooter /></Ready>
       </BrowserRouter>
     </AuthProvider>
   </QueryClientProvider>

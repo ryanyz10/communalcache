@@ -106,7 +106,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 6 | Turnstile and bot setup | Implemented; in review: one strict Worker siteverify guard for magic-link/OTP sends and cache creation, explicit action/theme widgets, one-use token reset and fail-closed errors. Owner-approved shared public sitekey with separate staging/production hostname lists; secrets remain owner-managed. Real-token staging validation pending after deploy; Bot Fight Mode remains separate. |
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
 | Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
-| Readiness 9 | Supporter tips link | not started — needs owner setup; hosted link only, hidden until configured, no webhooks/app storage/unlocks |
+| Readiness 9 | Supporter tips link | Implemented; in review: owner-approved Buy Me a Coffee anchor on Account and quiet signed-in/landing footers, one URL constant, new-tab noopener/noreferrer. No provider script/widget/iframe, tracking params, webhooks, payment storage or unlocks; hidden when unconfigured. |
 | Readiness | Signed-out landing page | Implemented; in review: public `/` uses the cozy landing mock and shared pixel art, centralized copy/metadata and sign-in CTAs. Session resolution gates rendering; signed-in Home and invite/magic-link paths are unchanged. No new dependencies or public cache data. |
 | Fix | Invite sign-in continuity / paste-to-join | Implemented; in review: strict invite callback survives magic-link tab changes, one-hour session/local intent fallback, clear-on-join/sign-out/expiry, and Home paste sheet. Explicit Continue + Join and gated pending flow remain; general same-origin callback contract is preserved. |
 | Gate 10 | Full user-flow parity and cleanup refactor | not started — final release scope, regression-backed cleanup and phone/wide/theme/accessibility/error checklist |
@@ -630,11 +630,16 @@ writes; denied access has zero effects. Names/IDs-only query/response snapshots,
 suspension enforcement and operational-data redaction tests. Live Access policy
 and direct-API deny receipts need separately approved owner setup.
 
-### Readiness 9 — Supporter tips (needs owner setup)
+### Readiness 9 — Supporter tips (implemented)
 
-Owner supplies an approved hosted link, for example a Stripe Payment Link. Keep
-**Support Communal Cache** hidden until configured. No webhooks, app supporter or
-payment records, plan changes, unlocks or billing/upgrade UI.
+The owner-approved hosted link is https://buymeacoffee.com/ryanyz10, held in one
+`web/src/lib/support.ts` constant. Account has a small cozy card; signed-in pages
+and the landing page have quiet footer links. Anchors open a new tab with
+`rel="noopener noreferrer"`; no provider script/widget/iframe or tracking params.
+**Support Communal Cache** stays hidden if unconfigured. No webhooks, app supporter
+or payment records, plan changes, unlocks or billing/upgrade UI. Copy uses the
+existing copy module; tests check exact destination, safe attributes, visibility
+and no provider loading. Native Account phone/wide palette receipts stay in the PR.
 
 **Traps:** donor/entitlement state, analytics carrying app identity/contact data,
 auth tokens in URLs, fake checkout controls or showing an unconfigured link.
