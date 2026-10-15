@@ -11,9 +11,10 @@ export async function sweepPhotoCleanup(env: Env) {
     const row = await claimCleanup(env.DB, id, token, Date.now())
     if (!row) continue
     try {
-      const prefix = `${row.owner_id}/${row.item_id}/`
-      if (!uuid.test(row.owner_id) || !uuid.test(row.item_id)
-        || (row.kind === 'prefix' ? row.target !== prefix : !row.target.startsWith(prefix) || !uuid.test(row.target.slice(prefix.length)))) throw new Error('Invalid cleanup scope')
+      if (!uuid.test(row.owner_id)) throw new Error('Invalid cleanup owner')
+      const prefix = row.scope === 'profile' ? `users/${row.owner_id}/` : `${row.owner_id}/${row.item_id}/`
+      if (row.scope === 'profile' ? row.item_id !== null || row.kind !== 'exact' : !row.item_id || !uuid.test(row.item_id)) throw new Error('Invalid cleanup scope')
+      if (row.kind === 'prefix' ? row.target !== prefix : !row.target.startsWith(prefix) || !uuid.test(row.target.slice(prefix.length))) throw new Error('Invalid cleanup target')
       let done = true
       if (row.kind === 'exact') await env.BUCKET.delete(row.target)
       else {

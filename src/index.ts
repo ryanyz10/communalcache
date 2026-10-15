@@ -3,7 +3,7 @@ import { magicCallbacks } from './magic-links'
 import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile } from './db'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
-import { serveItemPhoto } from './photos'
+import { serveItemPhoto, serveProfilePhoto } from './photos'
 import { sweepPhotoCleanup } from './cleanup'
 import { HttpError, json, readBody, requireOrigin } from './http'
 import { consumeNotifications, sweepNotifications } from './notifications'
@@ -96,14 +96,16 @@ async function dispatch(request: Request, env: Env) {
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
   const libraryRoute = path.match(/^\/api\/me\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))?)?$/i)
+  const profilePhotoRoute = path.match(/^\/api\/users\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/photo$/i)
   const ownRequestRoute = path.match(/^\/api\/me\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   // UUIDs are case-insensitive; SQLite text keys are not.
-  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute, ownRequestRoute]) {
+  for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute, ownRequestRoute, profilePhotoRoute]) {
     if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
   }
-  const photoRoute = itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
-  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute) throw new HttpError(404, 'not_found')
-  const methods = libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
+  const ownPhoto = path === '/api/me/photo'
+  const photoRoute = ownPhoto || !!profilePhotoRoute || itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
+  if (path !== '/api/me' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute && !ownPhoto && !profilePhotoRoute) throw new HttpError(404, 'not_found')
+  const methods = ownPhoto ? ['GET','POST','DELETE'] : profilePhotoRoute ? ['GET'] : libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
     : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute || ownRequestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
@@ -120,6 +122,7 @@ async function dispatch(request: Request, env: Env) {
     if (!session.user.emailVerified) throw new HttpError(401, 'unauthorized')
     await requireWriteLimit(env.DB, profile.id, writeRoute)
   }
+  if (ownPhoto || profilePhotoRoute) return serveProfilePhoto(request,env,profilePhotoRoute?.[1] ?? profile.id,profile.id)
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
     const body = await readBody(request)

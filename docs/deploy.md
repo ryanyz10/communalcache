@@ -206,7 +206,8 @@ free/plus CHECK) and seeds one `plan_limits` table. Free values are owned_caches
 new_caches_per_day 2, member_caches 20, cache_members 30, owned_items 100,
 open_requests 20, photos_per_item 1 and profile_photos 1. Plus keeps owned_caches 3 and
 cache_members 100; every other value intentionally equals free until the owner
-decides otherwise. Profile photo is seeded only; its endpoint/guard is a later PR.
+decides otherwise. Migration 0013's profile-photo endpoint now consumes the
+profile_photos allowance in its guarded finalization.
 There is no plan UI, upgrade flow, billing or automatic assignment job.
 
 **No remote plan command is run by this feature PR.** The owner must approve each
@@ -246,8 +247,9 @@ active/pending replays and rejection are not blocked by a downgrade. Daily usage
 counts owned canonical caches with created_at strictly newer than now minus 24h;
 exactly 24h old expires. No cache-delete endpoint currently erases that history.
 Photo replacement uses one current pointer; allowance is rechecked after R2 I/O
-and a rejected upload retains durable cleanup. Profile-photo enforcement waits
-for its future endpoint. Missing plan policy denies writes, never grants unlimited
+and a rejected upload retains durable cleanup. Profile-photo finalization applies
+the same rule with its own current pointer; remove is allowed at quota zero.
+Missing plan policy denies writes, never grants unlimited
 capacity. API quota failures are 409 limit_reached plus a stable limit name.
 
 Migration 0012 is additive and preserves existing over-cap rows; only growth is
@@ -255,6 +257,33 @@ blocked. An old Worker does not enforce the new quotas during the migration/
 deployment overlap. Release enforcement proof must use the new revision after
 rollout (with an approved write boundary if strict activation timing is needed).
 No code rollback restores deleted DO data from the inherited retirement draft.
+
+## Profile-photo rollout and smoke
+
+Migration 0013 adds app-owned user_photos plus explicit cleanup scope (item default;
+profile requires item_id=NULL and exact-key kind). Cleanup rebuild preserves old
+IDs/targets/timestamps/claims; no binding, bucket exposure or provider setup is
+added. Existing item writers remain compatible. An older cleanup Worker may
+reject profile-scoped work as invalid during rollout; it retains the intent for
+the new Cron instead of deleting a user prefix. Do not interpret that transient
+backlog as permission to erase cleanup work or bypass scope validation.
+
+`GET/POST/DELETE /api/me/photo` is self-only for mutations. The read route
+`GET /api/users/{userId}/photo` streams only for self or a currently shared active
+cache. The SQL check precedes private R2 access, with private/no-store and nosniff
+headers. Named views include only nullable version flags under the same predicate,
+never raw keys or another user's email. A historical request alone is insufficient;
+losing the last shared cache denies the next photo request, not an already
+completed/in-flight authorized read.
+
+After explicit deployment approval, smoke Account Change photo → choose → save,
+replace and remove; initials on no/missing image, header/member/item/request
+avatars, a second active-cache sharer, non-sharer/pending/left/removed 404 and
+survival through another shared cache. Verify quota-zero rejection after R2 I/O,
+known cleanup retry and one current photo under replacement. Local D1/R2 tests
+prove those guards/atomic effects; browser upload success is not claimed when the
+host/container file transport cannot deliver a readable file. No theme change,
+remote command or live profile-photo rollout is run by this PR.
 
 ## Provider and secret setup (approval required)
 

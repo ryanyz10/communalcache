@@ -96,8 +96,8 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | D1 6 | Library / add sheet / checkboxes / items board | Implemented; in review: owner-scoped paginated library/Home preview, Existing/New cache add sheet, atomic create+attach, Shown in confirmations, shared availability and private photos; items board 1a–1d, supersedes #28. |
 | D1 7 | Retire Durable Objects / staging reset | Implemented for draft review only: Cache code/bindings/RPC/sweeps and historical tests removed; inherited v2-retire-cache deleted_classes and D1 0011 projection-table drop prepared. Explicit owner approval required before merge/deploy. Staging test-data reset is NOT included and remains separately approval-gated. |
 | Readiness 1 | Plans foundation | Implemented; in review: 0012 free/plus user/cache plans, one plan_limits table, guarded free limits and stable API/web errors; free owned_caches is 1; plus keeps owned_caches at 3 and cache_members at 100. No plan UI/billing or remote assignment. |
-| Readiness 2 | Free quotas and limit-reached UX | Implemented with readiness 1 for existing endpoints: atomic cache/membership/item/request/photo guards, rolling 24h and active-only member counts, races and clear limit-reached copy. Profile-photo guard remains readiness 3; only its allowance is seeded. |
-| Readiness 3 | Private profile photo | not started — Account upload/replace/remove, users/{userId}/{uploadUUID}, self/shared-active-cache read guard, durable cleanup and initials fallback |
+| Readiness 2 | Free quotas and limit-reached UX | Implemented with readiness 1 for existing endpoints: atomic cache/membership/item/request/photo guards, rolling 24h and active-only member counts, races and clear limit-reached copy. Profile-photo enforcement now lands with readiness 3. |
+| Readiness 3 | Private profile photo | Implemented; in review: 0013 app-owned user_photos + explicit profile cleanup scope, self/shared-active SQL read and metadata guards, post-R2 plan recheck, Account Change photo sheet and avatars/initials across named views. No theme/dependency/resource changes. Browser upload is blocked by shared item/profile transport read errors; API/D1/UI-unit proof is separate. |
 | Readiness 4 | Contact after approval | not started — optional single contact and server-built platform links; approved parties + both active in request cache; optional approval message starts empty; auth email stays private |
 | Readiness 5 | Cozy theme and app identity | not started — round-6 pixel horizon, sunny/evening prefers-color-scheme, open-box-with-cat mark and complete icon set; accessible/reduced-motion layouts |
 | Readiness 6 | Turnstile and bot setup | not started — needs owner setup; email sends + cache creation, Worker siteverify; Bot Fight Mode zone toggle separately approved |
@@ -353,7 +353,8 @@ not a compatible rollback; fix forward rather than assuming data is restored.
 
 The [approved readiness additions](plan.md#production-readiness-additions--approved-scope)
 are tracked individually above. Readiness 1–2 now ship together for existing
-endpoints; remaining rows are not implemented. Build each later feature with its
+endpoints; readiness 3 adds profile photos. Remaining feature rows are not
+implemented. Build each later feature with its
 backend guards, UI slice and tests together. Rows 1–5 are core work; 6–9 are last among features
 and remain **needs owner setup** until the owner supplies the required external
 configuration/approvals. Terminal gates 10 → 11 → 12 cover the final intended
@@ -429,11 +430,15 @@ one shared cache must not deny another valid shared cache; losing the last denie
 the next read. Cleanup must preserve the current key across replacement/removal/
 uncertain finalization and must never cross item/user prefix boundaries.
 
-**Proving checks:** real-D1 self/shared-active/other-cache/pending/removed/left
-matrix; last-shared-cache races; ownership recheck after R2 I/O; replacement/remove
-batch rollback and durable cleanup retry. Mock R2 failures, actual-byte/type caps
-and missing image/initials UI; browser cookie/no-store reads, Account controls and
-account-switch stale-photo isolation. Preserve the documented unknown-orphan gap.
+**Proving checks:** `tests/profile-photos.test.ts` covers the real-D1 self/shared/
+pending/removed/left matrix, last shared cache, metadata/history privacy, post-R2
+user/plan rechecks, concurrent replace/remove, pointer/cleanup rollback, R2 retry,
+strict scope and caps/Origin. UI units cover Account controls, all avatar locations,
+initials, self-upload/limit errors and a real PNG input through the shared resize
+function (native decoder/canvas mocked in Node). The browser displayed the sheet,
+read-error state and Escape dismissal; a valid host PNG failed identically in the
+existing item uploader, so successful browser upload/replace/remove remains
+blocked/unverified pending the transport fix. Preserve the unknown-orphan gap.
 
 ### Readiness 4 — Contact reveal and optional approval message
 
