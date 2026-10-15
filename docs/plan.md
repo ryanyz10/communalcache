@@ -243,8 +243,11 @@ The cache pending queue deliberately exposes requester display name, quantity,
 time, user_id/request_id to active members of **that cache only**. The all-cache
 availability sum does not expose other caches' requester identities. Decided rows
 are party-scoped. Party history may survive membership loss; cache details, photos,
-queue access and new writes do not. No endpoint returns another user's email;
-`GET /api/me` and auth endpoints return only the caller's own user/session email.
+queue access and new writes do not. No endpoint returns another user's
+**authentication email**; `GET /api/me` and auth endpoints return only the caller's
+own user/session email. The production-readiness contact feature below permits
+only an explicitly chosen, separately stored contact email under its stricter
+approved-request/current-membership visibility rule; never derive it from auth.
 
 Home directly joins memberships/caches. Your items directly filters owner_id,
 including unattached items. Incoming/outgoing Requests join items and filter owner/
@@ -482,6 +485,244 @@ visible in every attachment, without projections. Keep mobile layout, accessible
 sheets/focus, loading/error/empty states and bounded cursor pagination. Complete
 items board 1a–1d in PR 6, after backend protocols; do not invent additional product
 behavior from an architecture change.
+
+## Production readiness additions — approved, not implemented
+
+These decisions extend the settled D1 architecture; they do not replace its
+membership/attachment checks, shared stock, guarded token batches, durable outbox
+or private storage. This is a **docs-only specification**: no schema, API, UI,
+config, dependency, resource or provider setup changes are implemented here.
+[Build-guide readiness rows](build-guide.md#production-readiness-build-order)
+order each future feature and its proof. Nothing below authorizes merging draft
+DO retirement, deleting data, provisioning services or releasing production.
+
+### Plans foundation and launch limits
+
+Add `plan` to `caches` and app `user`, defaulting every existing/new row to `free`.
+Use **one `plan_limits` table keyed by plan** for both cache and user limits.
+There are exactly two plans: `free` and one internal `higher` placeholder tier with
+raised limits. This internal key is not a marketed plan name or plan UI. Higher
+numerical values not settled below require owner approval before implementation.
+Do not infer a third/500-member tier, prices or subscriptions from older notes.
+
+This phase has **no plan picker, upgrade flow, checkout or billing**. A cache's
+plan controls its member limit; its owner's personal plan does not silently
+upgrade it. A user's plan controls account quotas. Until the protected admin page
+exists, assignment uses a documented, exact-target manual D1 command **only after
+owner approval**, for example assigning an explicitly selected test group/user
+to the higher placeholder. Do not run it automatically or treat spec approval as
+permission for a remote D1 command. The future runbook must name the environment,
+cache/user UUID, allowed plan key, verification and reversal procedure without
+printing secrets or another user's auth email.
+
+Future manual command templates, **not executable against the current schema and
+not run by this PR** (only after the foundation migration and exact owner approval):
+
+```bash
+# Use the approved environment/database/UUID and only free or higher; never browser input.
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute <approved_database> --env <approved_environment> --remote --command "UPDATE caches SET plan='<approved_plan>' WHERE id='<approved_cache_uuid>' AND EXISTS(SELECT 1 FROM plan_limits WHERE plan='<approved_plan>')"
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 execute <approved_database> --env <approved_environment> --remote --command "UPDATE user SET plan='<approved_plan>' WHERE id='<approved_user_uuid>' AND EXISTS(SELECT 1 FROM plan_limits WHERE plan='<approved_plan>')"
+```
+
+Run only the approved target operation, verify exactly one intended row changed
+and read back only its ID/plan, not auth email. Record the previous plan for an
+approved reversal using the same guarded template; no scheduled assignment job.
+
+| Limit | Free, every account | Higher placeholder | Authority |
+| --- | --- | --- | --- |
+| Caches you own | 3 | Raised value to approve | User plan |
+| New caches per day | 2 | Raised value to approve | User plan |
+| Caches you are in, including those you own | 20 | Raised value to approve | User plan |
+| Members per cache, including its owner | 30 | 100 | Cache plan |
+| Items you own, shared or not | 100 | Raised value to approve | User plan |
+| Open requests you have made | 20 | Raised value to approve | User plan |
+| Current photos per item | 1, at the current 5 MB actual-byte cap | 1 in this phase | Photo policy, not an upgrade perk |
+| Current profile photo | 1 | 1 in this phase | Photo policy, not an upgrade perk |
+
+Open requests means `status='pending'`; approval/rejection closes them, not a
+holder/return lifecycle. One canonical item counts once regardless of cache
+attachments. Replacing a photo does not create a second current photo; obsolete
+immutable keys awaiting cleanup do not become extra photo slots. Free caps apply
+to every account; manual assignment of a higher plan is explicit, not an owner
+or admin exemption.
+
+All quota reads use the limits table **inside the same guarded SQL write or
+token-gated atomic batch** as the mutation. No hard-coded route copies, client
+counters, per-isolate state, prior entitlement SELECT across an await or copied
+membership grant. Cover cache creation and all membership activations (open joins,
+gated approvals and left-member rejoin), library creation and request creation;
+keep stock/authorization/outbox predicates in the same operation. A losing cap
+race returns a clear structured **limit reached** error and matching UI message,
+not partial state or an undisclosed billing prompt. A plan change never silently
+deletes/detaches existing canonical data; growth while at/over a cap is guarded.
+The implementation review must settle/test day-window boundaries, pending-seat
+accounting and all unspecified higher values before enabling these limits.
+
+### Profile photo and private shared-cache visibility
+
+Account supports upload, replace and remove of one optional profile photo, with
+initials fallback. Store immutable private R2 keys as
+`users/{userId}/{uploadUUID}`; keep the current pointer in D1. Reuse the item-photo
+actual-byte cap, image sniffing, upload/finalization recheck and durable cleanup
+pattern, not public URLs. Only the authenticated user may change their photo.
+
+A reader may stream a profile photo only if they are its owner **or share at
+least one currently active cache membership with that owner**, checked in one
+D1 statement before R2 streaming. Pending, removed and left memberships do not
+qualify. Approval/history/contact access alone is not a profile-photo grant.
+Use same-origin cookie-authenticated, private/no-store responses with no public
+bucket, signed URL or browser bearer. Removal from one cache still permits access
+if a different shared active cache remains; losing the last shared cache denies
+the next read. An already authorized in-flight stream is not recalled.
+
+Replacement/removal and necessary R2 cleanup intents commit atomically in D1;
+R2 I/O remains external and idempotently retryable. Extend cleanup scope explicitly
+for `users/` keys; never fabricate an item ID or let item-prefix cleanup touch a
+profile key. Rejected/uncertain finalization must preserve a currently referenced
+key. Retain the existing honest put-before-finalization orphan-window limitation.
+
+### Contact after approval, not chat or email relay
+
+Account offers one optional per-user contact: a `kind` and chosen value. Allowed
+kinds are **sms, whatsapp, signal, messenger, instagram, email**. This is user-entered
+contact data, not a public directory or authentication identity. A contact email
+is stored separately and must never be selected, inferred or prefilled from the
+Better Auth auth email field. Self-editing/preview is owner-authenticated.
+
+To return another person's contact, **one SQL statement** must require:
+
+- an existing request with `status='approved'`;
+- the caller is its item owner or requester, and the contact belongs to one of
+  those two parties, never a third user;
+- both parties are currently active members of **that request's cache**.
+
+Other cache members/admins, pending/rejected requests, a shared different cache,
+or party-only historical access after leave/removal are insufficient. Recheck on
+every read; return no contact value/link when the guard fails. Do not place contact
+values/links in cache lists, public name enrichment, admin tables, logs, push or
+outbox snapshots that would outlive the membership check. Contact permission does
+not grant cache, item, attachment or photo access.
+
+The server validates and normalizes the value for its kind and **builds the link**;
+a body-supplied URL is never trusted. Use only these forms:
+
+| Kind | Server-built destination |
+| --- | --- |
+| sms | `sms:<number>` |
+| whatsapp | `https://wa.me/<digits>` |
+| signal | `https://signal.me/#p/+<digits>` |
+| messenger | `https://m.me/<username>` |
+| instagram | `https://instagram.com/<username>` |
+| email | `mailto:<address>` |
+
+Phone kinds use validated numbers; WhatsApp/Signal paths contain normalized digits
+in the shown forms. Username kinds accept a platform username, not an arbitrary
+URL/path/query. Chosen email validation must reject header/control-character and
+URI-parameter injection. Reject unsupported schemes, userinfo, foreign hosts and
+malformed inputs; escape presentation and encode components without changing the
+allowlisted destination shape. Do not fetch/resolve the contact link server-side.
+The owner gets a preview to test it. After approval, UI shows the platform icon
+and **Message X on <platform>** button and nudges a missing contact owner to add one.
+Icons do not replace accessible button names.
+
+An approval may also carry an optional short plain-text message. It starts
+**empty**, never prefilled with a template or contact/auth data; no new chat thread,
+reply transport, email relay or automated SMS delivery is added. Keep it separate
+from rejection reason and make the pending-only approval/message/outbox state
+atomic. Only the approved request parties may see the private message; contact
+reveal retains its stricter current-membership guard. Validate a documented length
+bound and escape the text; settle that bound in the implementation review.
+Rule 9's privacy exception is **chosen contact email under the guard above only**,
+not disclosure of another person's auth email or an admin email listing.
+
+### Cozy theme and app identity
+
+Use the approved **cozy whiteboard round 6** as the visual reference, not earlier
+theme experiments. Keep mobile/wide layouts and sharing/authorization behavior.
+Add a decorative pixel horizon strip: **boxes on Home, houses inside a cache**.
+Sunny is light mode; evening is dark mode, following `prefers-color-scheme`.
+Respect `prefers-reduced-motion`; decorative motion must not be required to use
+the app. Mark the strip `aria-hidden`; it must not duplicate, reorder or replace
+accessible headings, item lists, labels, status/error states or keyboard actions.
+
+The **open box with cat** app mark replaces the black house Home button. Preserve
+its accessible Home name and focus/tap behavior. Ship a matching SVG favicon,
+32px PNG favicon, 180px apple-touch-icon and 192/512 manifest icons with maskable
+safe areas. Verify actual theme contrast, icon cropping and light/dark rendering,
+not just asset filenames or mock screenshots. No per-plan theme picker is added.
+
+### Owner-setup features — deferred until configured
+
+These are **needs owner setup**, ordered last among feature work, before final
+release gates. Do not provision resources/secrets, enable providers or expose an
+unprotected placeholder page merely because the spec is approved. Missing setup
+is not permission to bypass a guard. If any feature is deferred past release,
+rerun parity/security/release gates when it later ships.
+
+**Bot protection.** Add Turnstile to sign-in email sends (magic link, code fallback
+and resends) and cache creation. The Worker validates with server-side `siteverify`;
+a checked widget or browser token alone is not proof. Bind validation to the
+configured hostname/action, fail closed when enabled, and retain exact Origin,
+auth/profile, D1 abuse and atomic quota guards. Siteverify is outside D1 atomicity;
+its success cannot authorize a later unguarded database write. Owner supplies the
+site setup/key and secret through approved handling. A Bot Fight Mode zone toggle
+is a separate external change requiring approval, not something this docs PR runs.
+
+**Google sign-in only.** Add the Better Auth social provider after owner-supplied
+Google client credentials, authorized redirect origins and provider setup. Link
+existing app identity **only by verified email**, using reviewed Better Auth flows;
+never accept an unverified email as linking proof or create a parallel app user
+for an existing verified identity. Keep nullable display-name onboarding, D1
+sessions/revocation, exact origins, state/callback/CSRF protection and private query
+clearing on account change. Expand the auth endpoint allowlist only for reviewed
+provider paths. Apple is deferred because it needs a paid developer account; no
+Apple setup or phone/SMS auth is added by contact deep-links.
+
+**Private admin.** `/admin` and every backing admin API require Cloudflare Access,
+Worker verification of its JWT (trusted configured issuer/JWKS, audience, signature,
+expiry/not-before) **and** a current authenticated app user ID on the owner-supplied
+allowlist. Fail closed on missing/invalid config or tokens, including direct
+workers.dev/alternate-host calls. Do not trust client-supplied identity headers or
+use an email comparison as the app authorization boundary. Edge policy restricts
+the owner; it does not replace Worker verification.
+
+Show names/IDs and scoped operational metadata only, **never user auth/contact
+emails or raw outbox/contact payloads**. Admin may set a cache/user plan, view usage
+and failed-outbox metadata, and suspend. Plan values must come from the one limits
+table; changes are guarded writes, not SQL submitted by a browser. The admin role
+does not bypass item/contact/photo privacy or become an impersonation feature.
+Define/test suspension's server-side effects before enabling it; merely hiding a
+user in the admin UI is not enforcement. Access policy/JWT settings and the exact
+app user-ID allowlist need owner setup and explicit external approval.
+
+**Supporter tips.** A configured **Support Communal Cache** link may open a hosted
+payment page, for example a Stripe Payment Link. Hide it while unconfigured. No
+webhooks, app payment/supporter records, entitlement updates or other storage;
+nothing is unlocked. It is not a plan upgrade/billing flow. Do not put app identity,
+contact data or secrets in the destination/query. The owner supplies/approves the
+external link/provider setup; this spec creates no payment account or resource.
+
+### Terminal production gates
+
+1. **Full user-flow parity checklist and cleanup refactor.** Cover auth/invite/name
+   onboarding, cache create/join/approval/leave/removed denial, library and
+   Existing/New add, sharing checkboxes, stock/requests/decisions/Lent out, private
+   item/profile photos, contact reveal, quota errors, notifications/cleanup and
+   account/logout flows. Compare phone/wide, light/dark, keyboard/reduced-motion,
+   loading/empty/error/retry and wrong-account states. Remove obsolete paths only
+   with invariant-preserving regression proof; no opportunistic D1 redesign.
+2. **Independent security review.** Review the final intended release revision,
+   including quota races, auth/social linking, profile/contact privacy, link
+   validation, CSRF/Origin, Access admin/suspension, private storage and durable
+   effects. Independence means a reviewer other than the feature implementation
+   author. Record scope/revision, findings, fixes and accepted residual risks;
+   green tests are not that review. Material later changes require re-review.
+3. **Explicit release approval.** The owner approves the exact revision,
+   environment and enabled/deferred features after parity and security evidence.
+   Include separately approved external setup, migration/back-up/fix-forward
+   readiness and live-provider/device smoke receipts as applicable. Class deletion,
+   staging reset and legacy production cutover retain their separate approvals.
+   An approved spec, normal docs PR or green CI is never release approval.
 
 ## Checks and rollout
 
