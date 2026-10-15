@@ -98,7 +98,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 1 | Plans foundation | Implemented; in review: 0012 free/plus user/cache plans, one plan_limits table, guarded free limits and stable API/web errors; free owned_caches is 1; plus keeps owned_caches at 3 and cache_members at 100. No plan UI/billing or remote assignment. |
 | Readiness 2 | Free quotas and limit-reached UX | Implemented with readiness 1 for existing endpoints: atomic cache/membership/item/request/photo guards, rolling 24h and active-only member counts, races and clear limit-reached copy. Profile-photo enforcement now lands with readiness 3. |
 | Readiness 3 | Private profile photo | Implemented; in review: 0013 app-owned user_photos + explicit profile cleanup scope, self/shared-active SQL read and metadata guards, post-R2 plan recheck, Account Change photo sheet and avatars/initials across named views. No theme/dependency/resource changes. Browser upload is blocked by shared item/profile transport read errors; API/D1/UI-unit proof is separate. |
-| Readiness 4 | Contact after approval | not started — optional single contact and server-built platform links; approved parties + both active in request cache; optional approval message starts empty; auth email stays private |
+| Readiness 4 | Contact after approval | Implemented; in review: 0014 app-owned user_contacts, validated server-built links, request-scoped approved-party/both-active SQL reveal, Account editor/preview and request buttons/nudges. Optional private approval message starts empty, max 500 code points, atomic with decision/outbox; never auth-email fallback. Inline platform glyphs need official brand assets before release. |
 | Readiness 5 | Cozy theme and app identity | not started — round-6 pixel horizon, sunny/evening prefers-color-scheme, open-box-with-cat mark and complete icon set; accessible/reduced-motion layouts |
 | Readiness 6 | Turnstile and bot setup | not started — needs owner setup; email sends + cache creation, Worker siteverify; Bot Fight Mode zone toggle separately approved |
 | Readiness 7 | Google sign-in | not started — needs owner setup; Better Auth provider, verified-email linking only; Apple deferred |
@@ -450,7 +450,7 @@ Owners get a test preview; after approval show a platform icon and **Message X o
 approved request + caller party + both parties active in **that request cache** in
 one SQL statement. No chat, relay, auth-email fallback or public contact directory.
 An optional plain-text approval message is separate from rejection reason and
-starts empty; settle its documented text bound before implementation.
+starts empty; the implemented bound is 500 Unicode code points (trimmed, empty stored as NULL), separate from rejection reason.
 
 **Traps:** another member/admin, a different shared cache, pending/rejected request
 or retained party history is not contact permission. Do not copy contact into
@@ -465,6 +465,21 @@ the other party; private-message party checks. Exact server-built link tests for
 all six kinds, malicious values/schemes and Unicode/length bounds; missing-contact
 and owner preview flows; UI consent/empty message, accessible icons/buttons and
 phone deep-link behavior without initiating real messages or relay email.
+
+Implemented API: GET/PUT/DELETE `/api/me/contact`, POST `/api/me/contact/preview`
+(validates/builds without storing) and GET `/api/me/requests/{requestId}/contact`.
+Eligible missing contacts return `{contact:null}`; denied reads return 404 with no
+value/link. Lists and Better Auth output never include contact. Messages remain in
+party-scoped request history even after membership loss, but contact does not.
+Phone input accepts 7–15 ASCII digits with optional leading +, normalized to +digits;
+Messenger accepts 5–50 letters/digits/dots and Instagram 1–30 letters/digits/dots/
+underscores (neither permits leading/trailing/consecutive dots). Chosen email uses
+a simple ASCII address check, max 254 characters / 64 local-part characters, with
+no URI/header parameters. Plus in an email local part is encoded as `%2B`.
+`tests/contacts.test.ts` proves local D1 guards, upgrade, races, rollback, validation
+and HTTP/privacy; `web/src/lib/contacts.test.ts` covers presentation/deep-link
+attributes. Simplified inline brand-colour glyphs must be replaced with official
+brand assets before release; no external assets or messaging service is added.
 
 ### Readiness 5 — Cozy theme and app identity
 

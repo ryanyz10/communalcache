@@ -6,7 +6,7 @@ export type ItemRequest = {
   owner_id: string; owner_name: string | null; requester_id: string; requester_name: string | null
   owner_photo_version?: string | null; requester_photo_version?: string | null
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
-  created_at: number; decided_at: number | null
+  created_at: number; decided_at: number | null; approval_message?: string | null
 }
 export type RequestsPageData = { requests: ItemRequest[]; unavailable_cache_ids: string[]; next_cursor: string | null }
 

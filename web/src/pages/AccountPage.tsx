@@ -6,6 +6,7 @@ import { apiFetch, errorMessage } from '../lib/api'
 import { OnboardingPage } from './OnboardingPage'
 import { PushControls } from './PushControls'
 import { ProfilePhotoControls } from './ProfilePhotoControls'
+import { ContactControls } from './ContactControls'
 
 export function AccountPage() {
   const { me, refresh, signOut } = useAuth()
@@ -46,6 +47,7 @@ export function AccountPage() {
       {save.isSuccess && <p role="status" className="mt-2 text-sm text-emerald-700">Profile saved.</p>}
       </div>
     </section>
+    <ContactControls key={me.id} />
     <PushControls userId={me.id} />
     <section className="contents lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start lg:gap-8 lg:border-b lg:border-slate-200 lg:py-6">
       <h2 className="hidden lg:block lg:text-[17px] lg:font-semibold">Session</h2>

@@ -12,6 +12,7 @@ const caches = new Map()
 const items = new Map()
 const photos = new Map()
 const profilePhotos = new Map()
+const contacts = new Map()
 const requests = new Map()
 const magicLinks = new Map()
 let lastMagicLink = ''
@@ -88,6 +89,35 @@ const server = createServer(async (request, response) => {
       if (request.method === 'PATCH') me.display_name = body.display_name.trim()
       json(me)
       return
+    }
+    if (path === '/api/me/contact' || path === '/api/me/contact/preview') {
+      if (!authenticated) { json({error:'unauthorized'},401); return }
+      if (request.method === 'GET') { json({contact:contacts.get(me.id) ?? null}); return }
+      if (request.method === 'DELETE') { contacts.delete(me.id); response.writeHead(204); response.end(); return }
+      // Presentation fixture only; validation and membership races are proved in real D1 tests.
+      const {kind} = body, value = typeof body.value==='string' ? body.value.trim() : ''
+      const digits = value.replace(/^\+/, '')
+      const links = {sms:`sms:+${digits}`,whatsapp:`https://wa.me/${digits}`,signal:`https://signal.me/#p/+${digits}`,messenger:`https://m.me/${value}`,instagram:`https://instagram.com/${value}`,email:`mailto:${value}`}
+      if (!value || !Object.hasOwn(links,kind) || /[:/?#\s]/.test(value)) { json({error:'invalid_contact'},400); return }
+      const contact={kind,value,link:links[kind]}
+      if (path === '/api/me/contact') contacts.set(me.id,contact)
+      json({contact}); return
+    }
+    const ownRequest = path.match(/^\/api\/me\/requests\/([^/]+)\/(approve|reject|contact)$/)
+    if (ownRequest) {
+      if (!authenticated) { json({error:'unauthorized'},401); return }
+      const row=requests.get(ownRequest[1]), action=ownRequest[2]
+      if (!row || (row.owner_id!==me.id && row.requester_id!==me.id)) { json({error:'not_found'},404); return }
+      if (action==='contact') { if(row.status!=='approved') {json({error:'not_found'},404);return} json({contact:contacts.get(row.owner_id===me.id?row.requester_id:row.owner_id)??null}); return }
+      if (row.owner_id!==me.id) { json({error:'not_found'},404); return }
+      if (row.status!=='pending') { json({error:'request_not_pending'},409); return }
+      if (action==='reject' && !body.reason?.trim()) { json({error:'invalid_reason'},400); return }
+      if ([...(body.approval_message??'')].length>500) {json({error:'invalid_approval_message'},400);return}
+      Object.assign(row,{status:action==='approve'?'approved':'rejected',decided_at:Date.now(),decision_reason:action==='reject'?body.reason.trim():null,approval_message:action==='approve'?body.approval_message?.trim()||null:null})
+      const item=items.get(row.item_id)
+      if (action==='approve' && row.quantity!==null) item.quantity-=row.quantity
+      if (action==='approve' && body.mark_lent_out) {item.available=false;item.unavailable_note=body.unavailable_note??null}
+      json(row); return
     }
     const profileRead=path.match(/^\/api\/users\/([^/]+)\/photo$/)
     if (path==='/api/me/photo' || profileRead) {
