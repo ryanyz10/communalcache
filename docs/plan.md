@@ -732,6 +732,11 @@ webhooks, app payment/supporter records, entitlement updates or other storage;
 nothing is unlocked. It is not a plan upgrade/billing flow. Do not put app identity,
 contact data or secrets in the destination/query. The owner supplies/approves the
 external link/provider setup; this spec creates no payment account or resource.
+Implemented with the owner-approved https://buymeacoffee.com/ryanyz10 hosted link:
+a small Account card and quiet signed-in/landing footer anchors, opening a new tab
+with noopener/noreferrer. No provider script/widget/iframe is embedded, no tracking
+parameters or app identity are added, the app stores no payments, and nothing is
+unlocked. The link remains hidden if its single URL constant is unconfigured.
 
 ### Terminal production gates
 

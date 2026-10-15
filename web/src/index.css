@@ -58,6 +58,11 @@
   .cc-auth-input { @apply mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-3; }
 }
 
+.cc-support-footer { width: 100%; max-width: 448px; margin-inline: auto; padding: 0 16px 24px; }
+@media (min-width: 640px) {
+  .cc-support-footer { width: min(calc(100% - 2 * var(--cc-gutter)),var(--cc-content-cap)); max-width: none; padding-inline: 0; }
+}
+
 .cc-sheet { margin: auto auto 0; }
 .cc-app-header { background: linear-gradient(var(--cc-sky2),var(--cc-bg)); border-color: transparent; }
 .cc-app-header-hero { background: var(--cc-sky2); }

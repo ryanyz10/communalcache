@@ -7,6 +7,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { PushControls } from './PushControls'
 import { ProfilePhotoControls } from './ProfilePhotoControls'
 import { ContactControls } from './ContactControls'
+import { SupportCard } from '../components/Support'
 
 export function AccountPage() {
   const { me, refresh, signOut } = useAuth()
@@ -58,6 +59,7 @@ export function AccountPage() {
         <button type="button" disabled={pending} className="mt-8 w-full rounded-md border border-slate-300 px-4 py-2 lg:mt-0 lg:w-auto" onClick={() => void logout()}>{pending ? 'Signing out…' : 'Sign out'}</button>
       </div>
     </section>
+    <SupportCard />
     </div>
   </main>
 }
