@@ -58,11 +58,11 @@ it('shows distinct empty and failed states for home, items and join queues, with
 
 it('never presents partial, paginated or failed aggregate lists as complete empty queues', () => {
   const empty = render(createElement(RequestsPage))
-  expect(empty).toContain('No requests need your answer in the loaded caches.')
+  expect(empty).toContain('No requests need your answer in the loaded results.')
   expect(empty).not.toContain('may be incomplete')
   for (const options of [{ unavailable: ['cache'] }, { next: 'next' }, { errors: [['requests']] }]) {
     const partial = render(createElement(RequestsPage), options)
-    expect(partial).toContain('No requests need your answer in the loaded caches. This list may be incomplete.')
+    expect(partial).toContain('No requests need your answer in the loaded results. This list may be incomplete.')
     expect(partial).not.toContain('Refresh all requests')
   }
 })

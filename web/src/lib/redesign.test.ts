@@ -57,10 +57,10 @@ it('renders accessible header destinations, avatar and a first-page-only badge, 
   expect(render(createElement(AppHeader), { route: '/login', path: '/login' })).toBe('')
 })
 
-it('hides stale request counts in the header while the aggregate API is gated', () => {
-  const markup = render(createElement(AppHeader, { itemsMoving: true }))
-  expect(markup).not.toContain('pending incoming on the first page')
-  expect(markup).not.toContain('1 request needs your answer')
+it('restores the pending request badge with the direct-D1 aggregate page', () => {
+  const markup = render(createElement(AppHeader))
+  expect(markup).toContain('pending incoming on the first page')
+  expect(markup).toContain('1 request needs your answer')
 })
 
 it('renders caches only on home without a request preview, account controls or invented counts', () => {

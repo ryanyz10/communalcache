@@ -242,13 +242,14 @@ it('limits concurrent aggregation RPCs to five while still reading real local DO
   expect(calls).toBe(9)
 })
 
-it('gates legacy aggregate and decision routes without returning old DO requests', async () => {
+it('reopens canonical aggregate/decision routes without returning old DO requests', async () => {
   const caller = await login()
   await worker.fetch(appRequest('/api/me', { method: 'PATCH', cookie: caller.cookie, body: { display_name: 'Neighbor' } }), env)
   const base = `/api/caches/${crypto.randomUUID()}/requests/${crypto.randomUUID()}`
   for (const action of ['approve', 'reject']) {
-    expect((await worker.fetch(appRequest(base + '/' + action, { method: 'POST', cookie: caller.cookie, body: {} }), env)).status).toBe(503)
+    expect((await worker.fetch(appRequest(base + '/' + action, { method: 'POST', cookie: caller.cookie, body: action === 'reject' ? { reason: 'Not today' } : {} }), env)).status).toBe(404)
     for (const origin of [null, 'null', 'https://foreign.test']) expect((await worker.fetch(appRequest(base + '/' + action, { method: 'POST', cookie: caller.cookie, origin, body: {} }), env)).status).toBe(403)
   }
-  expect((await worker.fetch(appRequest('/api/requests?after=bad', { cookie: caller.cookie }), env)).status).toBe(503)
+  expect((await worker.fetch(appRequest('/api/requests?after=bad', { cookie: caller.cookie }), env)).status).toBe(400)
+  expect(await (await worker.fetch(appRequest('/api/requests', { cookie: caller.cookie }), env)).json()).toEqual({ requests: [], unavailable_cache_ids: [], next_cursor: null })
 })
