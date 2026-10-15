@@ -95,8 +95,8 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | D1 5 | Removal / leave / detach / deletion / races | Implemented; in review: guarded atomic cascades/outbox/cleanup, 0010 left-membership rebuild and rejoin semantics, removal/leave/detach/global-delete confirmations; no DO/config retirement. |
 | D1 6 | Library / add sheet / checkboxes / items board | Implemented; in review: owner-scoped paginated library/Home preview, Existing/New cache add sheet, atomic create+attach, Shown in confirmations, shared availability and private photos; items board 1a–1d, supersedes #28. |
 | D1 7 | Retire Durable Objects / staging reset | Implemented for draft review only: Cache code/bindings/RPC/sweeps and historical tests removed; inherited v2-retire-cache deleted_classes and D1 0011 projection-table drop prepared. Explicit owner approval required before merge/deploy. Staging test-data reset is NOT included and remains separately approval-gated. |
-| Readiness 1 | Plans foundation | not started — user/cache plan columns default free; one plan_limits table; free + higher placeholder only; approved manual assignment until admin exists; no plan UI/upgrades/billing |
-| Readiness 2 | Free quotas and limit-reached UX | not started — all-account launch caps, same-write table-driven guards, concurrent boundary proof and clear errors; no copied counters/grants |
+| Readiness 1 | Plans foundation | Implemented; in review: 0012 free/plus user/cache plans, one plan_limits table, guarded free limits and stable API/web errors; free owned_caches is 1; plus keeps owned_caches at 3 and cache_members at 100. No plan UI/billing or remote assignment. |
+| Readiness 2 | Free quotas and limit-reached UX | Implemented with readiness 1 for existing endpoints: atomic cache/membership/item/request/photo guards, rolling 24h and active-only member counts, races and clear limit-reached copy. Profile-photo guard remains readiness 3; only its allowance is seeded. |
 | Readiness 3 | Private profile photo | not started — Account upload/replace/remove, users/{userId}/{uploadUUID}, self/shared-active-cache read guard, durable cleanup and initials fallback |
 | Readiness 4 | Contact after approval | not started — optional single contact and server-built platform links; approved parties + both active in request cache; optional approval message starts empty; auth email stays private |
 | Readiness 5 | Cozy theme and app identity | not started — round-6 pixel horizon, sunny/evening prefers-color-scheme, open-box-with-cat mark and complete icon set; accessible/reduced-motion layouts |
@@ -351,9 +351,10 @@ not a compatible rollback; fix forward rather than assuming data is restored.
 
 ## Production readiness build order
 
-The [approved readiness additions](plan.md#production-readiness-additions--approved-not-implemented)
-are **not implemented by this docs PR**. Build one feature per PR, backend guards,
-its UI slice and tests together. Rows 1–5 are core work; 6–9 are last among features
+The [approved readiness additions](plan.md#production-readiness-additions--approved-scope)
+are tracked individually above. Readiness 1–2 now ship together for existing
+endpoints; remaining rows are not implemented. Build each later feature with its
+backend guards, UI slice and tests together. Rows 1–5 are core work; 6–9 are last among features
 and remain **needs owner setup** until the owner supplies the required external
 configuration/approvals. Terminal gates 10 → 11 → 12 cover the final intended
 production revision. If an owner-setup feature is deferred past release, rerun
@@ -363,13 +364,14 @@ change, a plan assignment, draft #37's destructive merge or a staging reset.
 ### Readiness 1 — Plans foundation
 
 Add app user/cache `plan` columns with free defaults and one `plan_limits` table
-keyed by `free` / internal `higher`. Keep one source for user and cache limits;
+keyed by `free` / internal placeholder `plus`. Keep one source for user and cache limits;
 plan choice is not membership, item ownership or an auth-core display name.
 No plan UI, upgrade/billing flow, prices or third tier. Use the
-[future manual command templates](plan.md#plans-foundation-and-launch-limits)
+[manual assignment runbook](deploy.md#manual-plan-assignment-owner-run)
 only for exact owner-approved targets until the protected admin page exists.
-The higher cache member limit is 100; other raised values need approval before
-implementation, not guessed numbers copied from older paid-tier notes.
+Free owned_caches is 1; plus owned_caches is 3 and cache_members is 100.
+Other plus seeds equal free pending owner decisions,
+not guessed values copied from older paid-tier notes.
 
 **Traps:** do not accept plan from signup/cache-create bodies, auto-assign it from
 email/admin status, select it once before a later unguarded write or reset data on
@@ -381,12 +383,13 @@ limit maps or implicit unlimited fallbacks for a missing plan row.
 constraints reject unknown keys; no-forged-plan tests on public writes; approved
 manual assignment/read-back/reversal documented without auth email disclosure.
 Plan/table changes racing a consuming write must use the plan observed inside
-that same guarded statement/batch. This PR's docs tests are not those proofs.
+that same guarded statement/batch. `tests/plan-limits.test.ts` provides the real-D1
+upgrade, boundary, activation, race and HTTP proofs; web limits tests cover copy.
 
 ### Readiness 2 — Free quotas and limit-reached states
 
-Enforce free caps for every account: **3 owned caches; 2 new caches/day; 20 cache
-memberships; 30 members/cache (higher: 100); 100 owned library items; 20 pending
+Enforce free caps for every account: **1 owned cache (plus: 3); 2 new caches/day; 20 cache
+active memberships; 30 members/cache (plus: 100); 100 owned library items; 20 pending
 outgoing requests; 1 current item photo at the existing 5 MB cap; 1 profile photo**.
 User plan controls account caps; cache plan controls its member cap. One item
 shared in two caches counts once; photo replacement/cleanup keys are not extra
@@ -397,9 +400,10 @@ billing upsell or silent partial success.
 
 **Traps:** cover open join, gated activation and `left` rejoin; an owner counts as
 an active member and owned caches count toward the account membership limit.
-`removed` stays valid-secret 403, not a fresh join. Settle/test day boundaries and
-pending-seat accounting in the implementation review; no cache-local item count,
-UI-only quota or auth exemption. A cap failure must not manufacture membership,
+`removed` stays valid-secret 403, not a fresh join. Rolling 24h counts owned cache
+created_at strictly newer than now-24h; pending joins reserve no active seat and
+approval rechecks both caps. Rejection and idempotent replays remain possible at
+the cap. No cache-local item count, UI-only quota or auth exemption. A cap failure must not manufacture membership,
 attachments, requests, outbox or cleanup effects. Do not introduce a loan lifecycle
 to count pending requests, or delete existing data when a plan lowers a limit.
 

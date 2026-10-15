@@ -46,6 +46,7 @@ CREATE TABLE caches (
   id TEXT PRIMARY KEY NOT NULL,
   name TEXT NOT NULL, join_secret TEXT NOT NULL,
   requires_approval INTEGER NOT NULL DEFAULT 0 CHECK(requires_approval IN (0,1)),
+  plan TEXT NOT NULL DEFAULT 'free' CHECK(plan IN ('free','plus')),
   created_at INTEGER NOT NULL, operation_token TEXT
 );
 CREATE TABLE memberships (
@@ -115,8 +116,18 @@ approval does not clear it. No current-holder/return table or new request status
 
 ### Existing global tables retained
 
-- Better Auth user/session/account/verification/rateLimit including nullable
-  app display_name: unchanged. Do not invent a second app users/email identity.
+- Better Auth core user/session/account/verification/rateLimit and nullable app
+  display_name remain. Migration 0012 adds app-managed user.plan (free default,
+  free/plus CHECK); auth input cannot assign it. No second app/email identity.
+- `plan_limits`: one free/plus policy table for user/cache caps, read inside the
+  same guarded mutation or token batch. Free owned_caches is 1; plus keeps
+  owned_caches at 3 and cache_members at 100. Other seeds equal free.
+  A missing policy row fails closed, not unlimited.
+  Counts come directly from canonical rows; pending joins reserve no active seat.
+  Rolling cache quota uses created_at > now-24h. Profile_photos=1 is seeded only
+  until the profile-photo endpoint/guard lands. See the approved
+  [quota policy](plan.md#plans-foundation-and-launch-limits) and
+  [owner-only assignment runbook](deploy.md#manual-plan-assignment-owner-run).
 - `outbox`: current id, kind, dedupe_key, payload JSON text, attempts >= 0,
   claim_until/token, sent_at, failed_at, created_at; UNIQUE(kind,dedupe_key),
   CHECK(sent_at IS NULL OR failed_at IS NULL), partial unsent index. IDs now come
@@ -338,6 +349,14 @@ attachments, requests, auth/session state, push/outbox, cleanup intents or R2
 bytes. A populated-upgrade test snapshots those tables, preserves claims/cursors,
 and verifies authorization, constraints and private photos afterward. A fresh
 migration test proves the retired tables are absent. Applied history stays intact.
+Migration **0012_plan_limits** adds free-default user/cache plan columns, the one
+policy table and a partial pending-requester index for the global outgoing count.
+It preserves auth/domain/durable rows, including existing over-cap state; guards
+block growth rather than deleting data. Public app/auth inputs do not set plans.
+Guard-failure diagnostics share the atomic batch snapshot and return 409
+limit_reached plus a stable limit name; 503 limits_unavailable denotes missing
+policy. No JavaScript pre-read authorizes a later quota write.
+
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Do not point it at legacy `internal/db/migrations/`.
 
