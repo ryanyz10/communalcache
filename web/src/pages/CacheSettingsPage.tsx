@@ -28,7 +28,7 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
     <div className="cc-list lg:border-0">
       <div className="cc-row"><div className="min-w-0 flex-1"><p className="font-semibold">Name</p><p className="break-words text-sm text-slate-600">{cache.name}</p></div><button ref={edit} type="button" className="text-sm underline" aria-expanded={editing} onClick={() => { setName(cache.name); update.reset(); setEditing(true) }}>Edit<span className="sr-only"> cache name</span></button></div>
       {editing && <form onSubmit={submit} className="border-t border-slate-100 p-4"><label htmlFor="settings-name" className="block text-sm font-medium">Cache name</label><input autoFocus id="settings-name" className="cc-input" type="text" required maxLength={60} value={name} onChange={event => setName(event.target.value)} /><div className="mt-3 flex gap-2"><button disabled={update.isPending || !name.trim()} className="cc-pill">{update.isPending ? 'Saving…' : 'Save settings'}</button><button type="button" disabled={update.isPending} className="cc-outline" onClick={() => { setEditing(false); edit.current?.focus() }}>Cancel</button></div></form>}
-      <label className="cc-row"><span className="min-w-0 flex-1"><span className="block font-semibold">Approve new members</span><span className="block text-sm text-slate-600">Off: anyone with the invite joins</span></span><input type="checkbox" role="switch" aria-checked={cache.requires_approval} checked={cache.requires_approval} disabled={update.isPending} onChange={() => update.mutate({ requires_approval: !cache.requires_approval })} className="cc-switch" /></label>
+      <label className="cc-row"><span className="min-w-0 flex-1"><span className="block font-semibold">Approve new members</span><span className="block text-sm text-slate-600">{cache.requires_approval ? 'On: you review everyone who uses the invite.' : 'Off: anyone with the invite joins right away.'}</span></span><input type="checkbox" role="switch" aria-checked={cache.requires_approval} checked={cache.requires_approval} disabled={update.isPending} onChange={() => update.mutate({ requires_approval: !cache.requires_approval })} className="cc-switch" /></label>
     </div>
     {update.isError && <p role="alert" className="mt-3 text-sm text-red-700">{errorMessage(update.error)}</p>}
     {update.isSuccess && <p role="status" className="mt-3 text-sm text-emerald-700">Settings saved.</p>}
@@ -107,7 +107,7 @@ export function CacheSettingsPage() {
     try { await navigator.clipboard.writeText(invite); setCopyStatus('Invite copied.') }
     catch { setCopyStatus('Could not copy automatically. Select the invite link and copy it.') }
   }
-  return <main className="cc-page">
+  return <main className="cc-page cc-cache-settings-page">
     <WideBreadcrumbs><Link to="/">Caches</Link><span aria-hidden="true">›</span><Link to={`/caches/${cache.id}`}>{cache.name}</Link><span aria-hidden="true">›</span><span>Settings</span></WideBreadcrumbs>
     <Link to={`/caches/${cache.id}`} className="text-sm underline lg:hidden">‹ {cache.name}</Link>
     <h1 className="mt-3 text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Cache settings</h1>

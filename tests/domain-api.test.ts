@@ -11,7 +11,8 @@ it('Worker routes use canonical D1 authority and enrich only public names', asyn
   const info = await response.json() as {id:string;owner_id:string;invite_token:string}
   expect(info.owner_id).toBe(caller.id)
   const home = await (await worker.fetch(appRequest('/api/caches',{cookie:caller.cookie}),env)).json()
-  expect(home).toEqual([{id:info.id,name:'Tools'}])
+  expect(home).toEqual([{id:info.id,name:'Tools',owner_id:caller.id,requires_approval:true,active_member_count:1,attached_item_count:0,pending_answer_count:0,
+    member_preview:[{user_id:caller.id,display_name:'Owner',cat_coat:null,profile_photo_version:null}]}])
   expect(JSON.stringify(home)).not.toContain('example.test')
   const detail = await worker.fetch(appRequest(`/api/caches/${info.id}`,{cookie:caller.cookie}),env)
   expect(await detail.json()).toMatchObject({id:info.id,members:[{user_id:caller.id,display_name:'Owner'}]})

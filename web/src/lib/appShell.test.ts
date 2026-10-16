@@ -23,7 +23,7 @@ it.each([
   for (const destination of ['/', '/items', '/requests', '/account']) expect(markup).toContain(`href="${destination}"`)
   expect(markup).toContain('aria-label="Desktop navigation"')
   expect(markup).toContain('aria-label="Mobile navigation"')
-  expect(markup).toContain('Requests, 2 pending incoming on the first page')
+  expect(markup).toContain('Requests, 2 asks need your answer')
   expect(markup).not.toMatch(/role="menu|tabindex="-1"|data-opening|private@example/)
 })
 

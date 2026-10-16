@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
-import { pendingIncomingCount, useRequests } from '../lib/requests'
+import { useHomeSummary } from '../lib/caches'
 import { Avatar } from './Avatar'
 import { BoxMark } from './Box'
 import { Tabs } from './Tabs'
@@ -9,10 +9,9 @@ export function AppHeader() {
   const { me } = useAuth()
   const { pathname } = useLocation()
   const visible = !!me?.display_name && pathname !== '/login' && pathname !== '/auth/link' && !pathname.startsWith('/join/')
-  const requests = useRequests(visible)
+  const summary = useHomeSummary(visible)
   if (!visible || !me) return null
-  // ponytail: first page only until the summary API lands with the Home redesign.
-  const count = pendingIncomingCount(requests.data?.pages[0]?.requests ?? [], me.id)
+  const count = summary.isError ? 0 : summary.data?.pending_answer_count ?? 0
   const identity = { count, userId: me.id, name: me.display_name!, photoVersion: me.profile_photo_version, coat: me.cat_coat }
   return <>
     <header className={`cc-app-header${pathname === '/' ? ' cc-app-header-home' : ''}`}>

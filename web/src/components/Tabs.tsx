@@ -25,7 +25,7 @@ export function Tabs({ mobile = false, count, userId, name, coat, photoVersion }
     : pathname === '/account' ? 'you' : 'caches'
   return <nav aria-label={mobile ? 'Mobile navigation' : 'Desktop navigation'} className={`cc-tabs ${mobile ? 'cc-tabs-mobile' : 'cc-tabs-desktop'}`}>
     {tabs.filter(tab => mobile || tab.id !== 'you').map(tab => <Link key={tab.id} to={tab.to} aria-current={active === tab.id ? 'page' : undefined}
-      aria-label={tab.id === 'requests' && count > 0 ? `Requests, ${count} pending incoming on the first page` : undefined}>
+      aria-label={tab.id === 'requests' && count > 0 ? `Requests, ${count} ${count===1?'ask needs':'asks need'} your answer` : undefined}>
       {mobile && (tab.id === 'you' ? <Avatar userId={userId} name={name} photoVersion={photoVersion} coat={coat} size={24} /> : <TabIcon tab={tab.id} />)}
       <span>{tab.label}</span>
       {tab.id === 'requests' && count > 0 && <span aria-hidden="true" className="cc-tab-badge">{count}</span>}
