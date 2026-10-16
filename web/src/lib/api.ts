@@ -1,3 +1,5 @@
+import type { CatCoat } from './cats'
+
 export class ApiError extends Error {
   status: number
   code: string
@@ -12,7 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-export type Me = { id: string; email: string; display_name: string | null; profile_photo_version?: string | null }
+export type Me = { id: string; email: string; display_name: string | null; cat_coat?: CatCoat | null; profile_photo_version?: string | null }
 
 type ApiOptions = { method?: string; body?: unknown; turnstileToken?: string }
 
@@ -59,6 +61,7 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_magic_link') return 'That sign-in link is invalid, expired or already used. Request a new link or use an email code.'
   if (error.code === 'invalid_callback') return 'That sign-in destination is not allowed. Request a new link from this app.'
   if (['INVALID_OTP', 'OTP_EXPIRED', 'TOO_MANY_ATTEMPTS', 'invalid_otp'].includes(error.code)) return 'That code is invalid or expired. Use the most recent code you requested, or request a new one.'
+  if (error.code === 'invalid_cat_coat') return 'Choose one of the six cat coats, or use your default cat.'
   if (error.code === 'invalid_display_name') return 'Choose a name between 1 and 60 characters.'
   if (error.code === 'invalid_name') return 'Use a cache name between 1 and 60 characters.'
   if (error.code === 'member_removed') return 'You were removed from this cache and cannot rejoin with an invite.'

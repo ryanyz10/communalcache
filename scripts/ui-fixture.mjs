@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inviteDestination } from '../shared/invites.ts'
+import { isCatCoat } from '../shared/cat-coats.ts'
 
 const dist = fileURLToPath(new URL('../web/dist/', import.meta.url))
 const users = new Map()
@@ -109,8 +110,9 @@ const server = createServer(async (request, response) => {
     const authenticated = !!me
     // The mock shares all fixture caches; real visibility is proved by D1 tests.
     const avatar = id => id===me?.id || caches.size>0 ? [...users.values()].find(user=>user.id===id)?.profile_photo_version ?? null : null
-    const itemAvatar = item => ({...item,owner_photo_version:avatar(item.owner_id)})
-    const requestAvatars = row => ({...row,owner_photo_version:avatar(row.owner_id),requester_photo_version:avatar(row.requester_id)})
+    const coat = id => [...users.values()].find(user=>user.id===id)?.cat_coat ?? null
+    const itemAvatar = item => ({...item,owner_photo_version:avatar(item.owner_id),owner_cat_coat:coat(item.owner_id)})
+    const requestAvatars = row => ({...row,owner_photo_version:avatar(row.owner_id),requester_photo_version:avatar(row.requester_id),owner_cat_coat:coat(row.owner_id),requester_cat_coat:coat(row.requester_id)})
     if (path === '/api/auth/sign-in/magic-link') {
       if (body.email === 'failure@example.test') { json({error:'email_unavailable'},502); return }
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
@@ -150,8 +152,13 @@ const server = createServer(async (request, response) => {
     }
     if (path === '/api/me') {
       if (!authenticated || !me) { json({error: 'unauthorized'}, 401); return }
-      if (request.method === 'PATCH') me.display_name = body.display_name.trim()
-      json(me)
+      if (request.method === 'PATCH') {
+        if ('display_name' in body && (typeof body.display_name!=='string' || !body.display_name.trim() || body.display_name.trim().length>60)) {json({error:'invalid_display_name'},400);return}
+        if ('cat_coat' in body && body.cat_coat!==null && !isCatCoat(body.cat_coat)) {json({error:'invalid_cat_coat'},400);return}
+        if ('display_name' in body) me.display_name=body.display_name.trim()
+        if ('cat_coat' in body) me.cat_coat=body.cat_coat
+      }
+      json({...me,cat_coat:me.cat_coat??null})
       return
     }
     if (path === '/api/me/contact' || path === '/api/me/contact/preview') {
@@ -362,7 +369,7 @@ const server = createServer(async (request, response) => {
         if (body.name !== undefined) cache.name=body.name.trim()
         if (body.requires_approval !== undefined) cache.requires_approval=body.requires_approval
       }
-      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id)}))})
+      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id),cat_coat:coat(member.user_id)}))})
       return
     }
     json({error:'not_found'},404)

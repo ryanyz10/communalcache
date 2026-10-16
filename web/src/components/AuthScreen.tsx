@@ -1,30 +1,36 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router'
 import { BoxMark } from './Box'
+import { Stamp } from './Stamp'
 
-export function AuthScreen({ children }: { children: ReactNode }) {
-  return <main className="cc-auth lg:grid lg:max-w-none lg:grid-cols-2 lg:bg-none lg:p-0">
-    <section className="hidden lg:flex lg:min-h-dvh lg:flex-col lg:justify-between lg:gap-8 cc-auth-brand" aria-label="About Communal Cache">
-      <div className="cc-auth-story lg:space-y-5"><BrandMark />
-      <h2 className="lg:text-5xl lg:leading-[54px] lg:font-bold lg:tracking-[-.03em]">Share more,<br />buy less.</h2>
-      <p className="lg:max-w-[420px] lg:text-lg lg:text-slate-600">Borrow and lend with your neighbors on Communal Cache.</p>
-      <ul className="lg:mt-4 lg:space-y-3 lg:text-[15px]">
-        <li><span aria-hidden="true">🧺</span> List what you're happy to lend</li>
-        <li><span aria-hidden="true">🙋</span> Ask for something in one tap</li>
-        <li><span aria-hidden="true">🤝</span> Hand it off in person</li>
-      </ul></div>
-    </section>
-    <div className="cc-auth-pane contents lg:flex lg:min-h-dvh lg:items-center lg:justify-center lg:bg-white lg:px-12 lg:py-16">
-      <div className="cc-auth-form contents lg:flex lg:w-full lg:flex-col">{children}</div>
-    </div>
+export function AuthScreen({ children, illustration, className = '' }: { children: ReactNode; illustration?: ReactNode; className?: string }) {
+  return <main className={`cc-auth-page${illustration ? ' cc-auth-split' : ''} ${className}`}>
+    {illustration && <section className="cc-auth-illustration" aria-hidden="true">{illustration}</section>}
+    <div className="cc-auth-pane"><div className="cc-auth-form">{children}</div></div>
   </main>
 }
 
-export function BrandMark() {
-  return <div aria-hidden="true" className="cc-home-mark flex size-14 shrink-0 items-center justify-center rounded-2xl">
-    <BoxMark size={45} />
+export function AuthBrand({ className = '' }: { className?: string }) {
+  return <Link to="/" aria-label="Home" className={`cc-auth-brand-link ${className}`}><BoxMark size={32} /><span>Communal Cache</span></Link>
+}
+
+export function SignInBox() {
+  return <div className="cc-signin-box">
+    <span className="cc-signin-handle"><BoxEyes /></span>
+    <span className="cc-signin-up"><Stamp tone="muted">↑ THIS SIDE UP</Stamp></span>
+    <span className="cc-signin-care"><Stamp tone="warn">HANDLE WITH CARE</Stamp></span>
+    <div className="cc-signin-box-copy"><h1>Share more, buy less.</h1><p>Borrow and lend with your neighbors. List what you're happy to share, ask in a tap, and hand it off in person.</p></div>
   </div>
 }
 
+export function BoxEyes() {
+  return <svg viewBox="0 0 60 20" aria-hidden="true" focusable="false" className="cc-box-eyes">
+    <ellipse cx="20" cy="10" rx="4.5" ry="5.5" fill="#f6a06b" /><ellipse cx="40" cy="10" rx="4.5" ry="5.5" fill="#f6a06b" />
+    <ellipse cx="20" cy="10" rx="1.3" ry="4" fill="#201e1d" /><ellipse cx="40" cy="10" rx="1.3" ry="4" fill="#201e1d" />
+  </svg>
+}
+
+export function BrandMark() { return <span aria-hidden="true" className="cc-auth-mark"><BoxMark size={32} /></span> }
 export function MailIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="size-[30px]" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>
 }

@@ -41,7 +41,7 @@ it('renders the exact owner-approved hosted URL and copy without tracking, widge
 })
 
 it('shows one quiet footer on signed-in routes without app identity and keeps auth/signed-out pages clean', () => {
-  for(const path of ['/','/requests','/items','/caches/cache-id','/account']) {
+  for(const path of ['/','/requests','/items','/caches/cache-id']) {
     const markup=render(path)
     expect(links(markup)).toHaveLength(1)
     safeLink(links(markup)[0]!)
@@ -49,7 +49,7 @@ it('shows one quiet footer on signed-in routes without app identity and keeps au
     expect(markup).not.toContain('private@example.test')
     expect(markup).not.toContain('caller')
   }
-  for(const path of ['/login','/auth/link']) expect(links(render(path))).toHaveLength(0)
+  for(const path of ['/login','/auth/link','/account','/join/token']) expect(links(render(path))).toHaveLength(0)
   expect(links(render('/',false))).toHaveLength(0)
 })
 
@@ -58,7 +58,7 @@ it('places the Account card and landing footer link in their actual page markup 
   const account=render('/account',true,true)
   expect(account).toContain('aria-labelledby="support-heading"')
   expect(account).toContain(landingCopy.support.description)
-  expect(links(account)).toHaveLength(2)
+  expect(links(account)).toHaveLength(1)
   links(account).forEach(safeLink)
   const landing=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(LandingPage)))
   expect(links(landing)).toHaveLength(1)

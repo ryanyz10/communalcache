@@ -1,6 +1,6 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, removeCacheMember, requestsPage, savePush, setDisplayName, updateCache, updateItem, type Profile, ownContact, saveContact, removeContact, requestContact } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, removeCacheMember, requestsPage, savePush, updateProfile, updateCache, updateItem, type Profile, ownContact, saveContact, removeContact, requestContact } from './db'
 import { contactInput } from './contacts'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
@@ -11,6 +11,7 @@ import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
 import { requireTurnstile } from './turnstile'
+import { isCatCoat, type CatCoat } from '../shared/cat-coats'
 
 const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
@@ -144,8 +145,17 @@ async function dispatch(request: Request, env: Env) {
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
     const body = await readBody(request)
-    if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
-    return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
+    const changes: { display_name?: string; cat_coat?: CatCoat | null } = {}
+    if ('display_name' in body) {
+      if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
+      changes.display_name = body.display_name.trim()
+    }
+    if ('cat_coat' in body) {
+      if (body.cat_coat !== null && !isCatCoat(body.cat_coat)) throw new HttpError(400,'invalid_cat_coat')
+      changes.cat_coat = body.cat_coat
+    }
+    if (!Object.keys(changes).length) throw new HttpError(400,'invalid_display_name')
+    return json(await updateProfile(env.DB,profile.id,changes))
   }
   if (memberRoute || cacheRoute?.[2] === '/leave') {
     await readOptionalBody(request)

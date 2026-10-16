@@ -36,7 +36,7 @@ export function MagicLinkPage() {
     } catch (error) { setError(errorMessage(error)) }
     finally { setPending(false) }
   }
-  return <AuthScreen>
+  return <AuthScreen className="cc-auth-recovery">
     <header className="mt-14 text-center lg:mt-0">
       <div className="flex justify-center lg:hidden"><BrandMark /></div>
       <h1 className="cc-auth-heading lg:mt-0">Almost there</h1>
@@ -44,10 +44,10 @@ export function MagicLinkPage() {
     </header>
     {!link && <p role="alert" className="mt-4 text-red-700">This sign-in link is missing or invalid. Request a new link or use an email code.</p>}
     {error && <p role="alert" className="mt-4 text-red-700">{error}</p>}
-    {link && <button type="button" disabled={pending || attempted} onClick={() => void proceed()} className="cc-auth-primary mt-8">{pending ? 'Signing in…' : 'Continue'}</button>}
+    {link && <button type="button" disabled={pending || attempted} onClick={() => void proceed()} className="cc-profile-primary">{pending ? 'Signing in…' : 'Continue'}</button>}
     <p className="mt-4 text-center text-[13px] leading-[18px] text-slate-600">Opening this page does not use your link. Links work once and expire after 5 minutes.</p>
     <div className="min-h-8 flex-1 lg:flex-none" />
-    <Link to="/login" className="cc-auth-text">Link not working? Get a new one</Link>
+    <Link to="/login" className="cc-text-action">Link not working? Get a new one</Link>
     <p className="mt-2 text-center text-[13px] leading-[18px] text-slate-600">You can also request an email code. Invites follow your sign-in link and are saved on this browser for up to an hour. In another browser, reopen or paste the invite.</p>
   </AuthScreen>
 }
