@@ -62,7 +62,7 @@ it('renders discovery entries and a named create sheet instead of inline setting
   expect(home).toContain('Approve new members')
   expect(home).not.toContain('Sign out')
   const detail=renderPage(true)
-  expect(detail).toContain('2 members')
+  expect(detail).toContain('2 neighbors')
   expect(detail).toContain('aria-label="Cache settings"')
   expect(detail).not.toContain('Reset link')
   expect(detail).not.toContain('Confirm removal')

@@ -32,5 +32,8 @@ export function invalidateRequestViews(client: QueryClient) {
     client.invalidateQueries({ queryKey: ['items'] }),
     client.invalidateQueries({ queryKey: ['library'] }),
     client.invalidateQueries({ queryKey: ['library-item'] }),
+    client.invalidateQueries({ queryKey: ['home-summary'] }),
+    client.invalidateQueries({ queryKey: ['caches'] }),
+    client.invalidateQueries({ queryKey: ['cache'] }),
   ])
 }
