@@ -1,4 +1,7 @@
 /* Getting-in and Account layouts from the labelled-box export. */
+#contact-sheet, #profile-photo-sheet { border: 0; box-shadow: var(--cc-shadow); padding-bottom: max(24px,env(safe-area-inset-bottom,0px)); }
+#profile-photo-sheet input[type="file"] { border-radius: 18px; }
+@media (min-width:640px) { #contact-sheet, #profile-photo-sheet { border-radius: 32px; } }
 .cc-profile-primary, .cc-profile-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 0 24px; border-radius: 999px; font: 400 16px/1.2 var(--font-heading); text-align: center; }
 .cc-profile-primary { background: var(--cc-accent); color: #201e1d; border: 1px solid transparent; }
 .cc-profile-secondary { border: 1.5px solid var(--cc-edge); color: var(--cc-fg); background: transparent; }

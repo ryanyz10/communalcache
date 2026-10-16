@@ -4,7 +4,6 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it } from 'vitest'
 import { BoxMark } from '../components/Box'
-import { MARK_COLORS } from './pixelArt'
 import { createHash } from 'node:crypto'
 
 const web = new URL('../../',import.meta.url)
@@ -70,7 +69,11 @@ it('retains reproducible installed-app assets while updating the system chrome c
   expect(manifest.background_color).toBe(palettes[0]['--cc-bg'])
   for(const size of [192,512]) expect(manifest.icons).toContainEqual({src:`/icon-${size}.png`,sizes:`${size}x${size}`,type:'image/png',purpose:'any maskable'})
   const generator=await import(new URL('../../../scripts/make-icons.mjs',import.meta.url).href)
-  expect(readFileSync(new URL('public/favicon.svg',web),'utf8')).toBe(generator.faviconSvg())
+  const svg=readFileSync(new URL('public/favicon.svg',web),'utf8')
+  expect(svg).toBe(generator.faviconSvg())
+  expect(svg).not.toContain('crispEdges')
+  expect(svg).toContain('M8 15 L9 4 L15 10 Z')
+  expect(svg).toContain('fill="#f6a06b"')
   for(const [name,size] of [['favicon-32.png',32],['apple-touch-icon.png',180],['icon-192.png',192],['icon-512.png',512]] as const) {
     const png=readFileSync(new URL(`public/${name}`,web))
     expect(png.subarray(0,8)).toEqual(Buffer.from([137,80,78,71,13,10,26,10]))
@@ -79,18 +82,19 @@ it('retains reproducible installed-app assets while updating the system chrome c
     if(size===32) continue
     let offset=8;const chunks: Buffer[]=[]
     while(offset<png.length) {const length=png.readUInt32BE(offset);if(png.toString('ascii',offset+4,offset+8)==='IDAT')chunks.push(png.subarray(offset+8,offset+8+length));offset+=length+12}
-    const pixels=inflateSync(Buffer.concat(chunks)), artColors=new Set(Object.values(MARK_COLORS))
+    const pixels=inflateSync(Buffer.concat(chunks))
     let artPixels=0, opaque=true, maxRadius=0
     for(let y=0;y<size;y++) for(let x=0;x<size;x++) {
       const at=y*(size*4+1)+1+x*4
       if(pixels[at+3]!==255) opaque=false
       const hex='#'+pixels.subarray(at,at+3).toString('hex')
-      if(!artColors.has(hex))continue
+      if(hex==='#f5ead8')continue
       artPixels++
       maxRadius=Math.max(maxRadius,Math.hypot(x-size/2,y-size/2))
     }
     expect(opaque).toBe(true)
     expect(maxRadius,`${name} mark inside 40% radius maskable safe circle`).toBeLessThanOrEqual(size*0.4)
     expect(artPixels).toBeGreaterThan(50)
+    expect(pixels.subarray(1,4).toString('hex')).toBe('f5ead8')
   }
 })

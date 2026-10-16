@@ -134,7 +134,11 @@
 .cc-cache-settings-page .cc-section-title { margin: 0 0 12px; color: var(--cc-fg); text-transform: none; letter-spacing: normal; font: 400 24px var(--font-heading); }
 .cc-cache-settings-page .cc-row { padding-inline: 0; border-bottom: 1px dashed var(--cc-line); border-top: 0; }
 .cc-cache-settings-page .cc-row:last-child { border-bottom: 0; }
-.cc-cache-settings-page dialog { border-radius: 32px; }
+.cc-cache-settings-page dialog { border: 0; border-radius: 32px; box-shadow: var(--cc-shadow); }
+.cc-cache-settings-page dialog :is(h2,h3) { font: 400 26px/1.15 var(--font-heading); }
+.cc-cache-settings-page dialog button { min-height: 44px; padding-inline: 18px; font: 400 14px var(--font-heading); }
+.cc-cache-settings-page button:has(> .sr-only), .cc-cache-settings-page button[aria-label^="Remove "] { min-height: 44px; }
+.cc-cache-settings-page nav[aria-label="Settings sections"] a { min-height: 44px; border-radius: 999px; }
 .cc-invite-paste { border: 0; box-shadow: var(--cc-shadow); }
 .cc-invite-paste h2 { font-size: 26px; }
 .cc-invite-paste .cc-input { min-height: 50px; }
