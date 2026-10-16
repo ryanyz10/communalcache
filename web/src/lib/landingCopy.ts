@@ -21,4 +21,9 @@ export const landingCopy = {
     'Free for small groups',
   ],
   footer: 'Sign in with your email. No password.',
+  support: {
+    heading: 'Support Communal Cache',
+    description: 'Communal Cache is free. If it helps your neighborhood, you can chip in for hosting.',
+    button: 'Buy me a coffee ↗',
+  },
 }
