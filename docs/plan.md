@@ -219,12 +219,13 @@ D1/R2 bindings are server-only, not PostgREST/browser database APIs. Better Auth
 provides same-origin cookies; no provider anon key or browser D1/R2 credential.
 The target drops Postgres app schema/RLS/pooling, but **legacy protections stay**.
 
-**Every cache-data SELECT and mutation checks active membership in the same SQL
-statement or atomic batch**, via joins/EXISTS. No cached membership result, copied
-authorization, token from another request or preliminary SELECT is sufficient.
-Cache item/photo access also joins attachment and active item-owner membership.
-Pending/removed/non-members get **404**, not 403; the valid-secret removed join is
-the explicit exception. Wrong cache/item/owner IDs get 404. Use the authenticated
+**Cache-data SELECTs and mutations check active membership in the same SQL
+statement or atomic batch**, via joins/EXISTS, except the narrowly approved
+pre-join invite preview below. No cached membership result, copied authorization,
+token from another request or preliminary SELECT is sufficient. Cache item/photo
+access also joins attachment and active item-owner membership. Pending/removed/
+non-members get **404**, not 403; a valid-current-secret removed join or invite
+preview retains the explicit **403** denial. Wrong cache/item/owner IDs get 404. Use the authenticated
 caller for ownership, never a request-body owner. These are invariants 1–7 in
 [AGENTS.md](../AGENTS.md#non-negotiable-invariants).
 
@@ -238,6 +239,7 @@ caller for ownership, never a request-body owner. These are invariants 1–7 in
 | Request create / decision | All request/stock predicates above; decision also requires caller=item owner and pending state |
 | Incoming/outgoing Requests | Direct item owner/requester filter; party-owned history only, never a grant to cache/item/photo data |
 | Joining | Valid current secret and guarded membership transition; no existing active membership required |
+| Pre-join invite preview | Authenticated caller + exact current secret + active cache owner in the same read; removed caller denied; only cache name, active count and bounded cat traits |
 
 The cache pending queue deliberately exposes requester display name, quantity,
 time, user_id/request_id to active members of **that cache only**. The all-cache
@@ -254,6 +256,44 @@ including unattached items. Incoming/outgoing Requests join items and filter own
 requester, with stable cursor pagination; no cache/owner RPC fan-out or request_index.
 Apply current membership again for every cache-context follow-on operation.
 Name enrichment never selects email. Cache admins cannot edit another owner's item.
+
+### Approved pre-join invite preview
+
+**Owner-approved privacy exception (2026 chat: “Invite page before joining”).**
+After sign-in, a valid current invite may reveal **only the cache name, exact
+active member count and up to five active members' cat appearances** before the
+caller joins. This is not public discovery or permission to read cache contents.
+The UI completes name setup first, then shows **“An invite to <cache name>”** in
+the small uppercase eyebrow, above member cats and a dashed YOU slot on the named
+box. The count uses “neighbors”; the main heading remains **“There's room in the
+box for you.”** and the greeting uses only the caller's own chosen name. It does
+not show an inviter, member names, item/things count or approval/configuration
+claim.
+
+`GET /api/caches/{cacheId}/invite/preview` requires the same D1-backed cookie
+identity as joining. Carry the secret in **`X-Invite-Secret`**, not an API path or
+query string. One D1 statement checks the exact current secret and active owner,
+counts active memberships and bounds the active-cat selection. A valid-current-
+secret removed caller gets 403 `member_removed` with no preview fields; missing,
+wrong-cache, malformed or rotated secrets get the same 404 `not_found` body as a
+nonexistent cache. Responses are no-store; a previous preview does not authorize
+another read or a later join. Already authorized reads are not recalled.
+
+The response is `{name, active_member_count, members}`. Each member is only the
+already-derived tuple **`{coat, pattern, folded, tip, delay}`**. Derive it from the
+real user ID and chosen `cat_coat` with the same pure `shared/cats.ts` function the
+signed-in app uses, so the cat looks identical before/after joining. Do not send
+raw IDs, identity hashes/seeds, display/auth names, auth/contact emails, inviter/
+owner identity, photos/photo metadata, item data/counts, requests or invite secret.
+Count all active members (including the owner); pending/left/removed members are
+not roof cats. Any `+N` is count minus the bounded visible cats, not a sample total.
+
+This read creates no membership, reservation or notification. **Ask to join is
+still explicit**, including active/pending replays, and the existing guarded POST
+rechecks the current secret/configuration, removed denial and applicable quotas.
+No auto-join/auto-redirect, profile-photo grant or cached permission is introduced.
+Unauthenticated invite holders keep the existing saved-invite sign-in flow and
+receive no preview metadata before authentication.
 
 ### Private photos
 
@@ -476,6 +516,8 @@ cache-local compatibility routes must not remain a second stock authority.
   cache visibility only; not a public user lookup).
 - GET/POST /api/caches; GET/PATCH /api/caches/{cacheId}.
 - POST /api/caches/{cacheId}/invite/rotate and /join (body {secret}).
+- GET /api/caches/{cacheId}/invite/preview (`X-Invite-Secret`, authenticated;
+  only the approved name/active count/bounded cat-trait tuples above).
 - GET /api/caches/{cacheId}/join-requests; POST .../{userId}/approve|reject.
 - DELETE /api/caches/{cacheId}/members/{userId}; POST /api/caches/{cacheId}/leave.
   Both use the full guarded cleanup batch; only cache owners may remove others,
