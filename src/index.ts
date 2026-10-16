@@ -6,7 +6,7 @@ import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto, serveProfilePhoto } from './photos'
 import { sweepPhotoCleanup } from './cleanup'
-import { HttpError, json, readBody, requireOrigin } from './http'
+import { HttpError, json, readBody, readOptionalBody, requireOrigin } from './http'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
@@ -132,7 +132,7 @@ async function dispatch(request: Request, env: Env) {
     if (path.endsWith('/preview')) return json({ contact: contactInput(await readBody(request)) })
     if (method === 'GET') return json({ contact: await ownContact(env.DB, profile.id) })
     if (method === 'DELETE') {
-      if (request.body) await readBody(request)
+      await readOptionalBody(request)
       await removeContact(env.DB, profile.id)
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
@@ -148,7 +148,7 @@ async function dispatch(request: Request, env: Env) {
     return json(await setDisplayName(env.DB, profile.id, body.display_name.trim()))
   }
   if (memberRoute || cacheRoute?.[2] === '/leave') {
-    if (request.body) await readBody(request)
+    await readOptionalBody(request)
     const ids = await removeCacheMember(env.DB, memberRoute?.[1] ?? cacheRoute![1], profile.id, memberRoute?.[2] ?? profile.id, !memberRoute)
     await enqueueNotifications(env, ids)
     return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
@@ -170,13 +170,13 @@ async function dispatch(request: Request, env: Env) {
   if (libraryRoute || itemRoute) {
     const cacheId = itemRoute?.[1] ?? null, itemId = itemRoute?.[2] ?? libraryRoute?.[1]
     if (libraryRoute?.[3]) {
-      if (request.body) await readBody(request)
+      await readOptionalBody(request)
       if (method === 'DELETE') await enqueueNotifications(env, await detachItem(env.DB, itemId!, libraryRoute[3], profile.id))
       else await attachItem(env.DB, itemId!, libraryRoute[3], profile.id)
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
     if (method === 'DELETE') {
-      if (request.body) await readBody(request)
+      await readOptionalBody(request)
       await enqueueNotifications(env, await deleteItem(env.DB, itemId!, profile.id, cacheId))
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
@@ -218,13 +218,13 @@ async function dispatch(request: Request, env: Env) {
   }
   if (action === '/join-requests') return json(await cacheJoinRequests(env.DB, cacheId, profile.id))
   if (cacheRoute![3]) {
-    if (request.body) await readBody(request)
+    await readOptionalBody(request)
     const result = await decideCacheJoin(env.DB, cacheId, profile.id, cacheRoute![3], cacheRoute![4] as 'approve' | 'reject')
     await enqueueNotification(env, result.notificationId)
     return json({ status: result.status })
   }
   if (action === '/invite/rotate') {
-    if (request.body) await readBody(request)
+    await readOptionalBody(request)
     return json(await updateCache(env.DB, cacheId, profile.id, {}, true))
   }
   if (method === 'PATCH') return json(await updateCache(env.DB, cacheId, profile.id, cacheChanges(await readBody(request))))
