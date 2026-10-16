@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router'
 import { Avatar } from './Avatar'
+import type { CatCoat } from '../lib/cats'
 
 type Tab = 'caches' | 'items' | 'requests' | 'you'
 const tabs: { id: Tab; label: string; to: string }[] = [
@@ -17,7 +18,7 @@ function TabIcon({ tab }: { tab: Exclude<Tab, 'you'> }) {
   </svg>
 }
 
-export function Tabs({ mobile = false, count, userId, name, photoVersion }: { mobile?: boolean; count: number; userId: string; name: string; photoVersion?: string | null }) {
+export function Tabs({ mobile = false, count, userId, name, coat, photoVersion }: { mobile?: boolean; count: number; userId: string; name: string; coat?: CatCoat | null; photoVersion?: string | null }) {
   const { pathname } = useLocation()
   const active: Tab = pathname === '/items' || pathname.startsWith('/items/') ? 'items'
     : pathname === '/requests' || pathname.startsWith('/requests/') ? 'requests'
@@ -25,7 +26,7 @@ export function Tabs({ mobile = false, count, userId, name, photoVersion }: { mo
   return <nav aria-label={mobile ? 'Mobile navigation' : 'Desktop navigation'} className={`cc-tabs ${mobile ? 'cc-tabs-mobile' : 'cc-tabs-desktop'}`}>
     {tabs.filter(tab => mobile || tab.id !== 'you').map(tab => <Link key={tab.id} to={tab.to} aria-current={active === tab.id ? 'page' : undefined}
       aria-label={tab.id === 'requests' && count > 0 ? `Requests, ${count} pending incoming on the first page` : undefined}>
-      {mobile && (tab.id === 'you' ? <Avatar userId={userId} name={name} photoVersion={photoVersion} size={24} /> : <TabIcon tab={tab.id} />)}
+      {mobile && (tab.id === 'you' ? <Avatar userId={userId} name={name} photoVersion={photoVersion} coat={coat} size={24} /> : <TabIcon tab={tab.id} />)}
       <span>{tab.label}</span>
       {tab.id === 'requests' && count > 0 && <span aria-hidden="true" className="cc-tab-badge">{count}</span>}
     </Link>)}

@@ -2,6 +2,7 @@ import { HttpError } from './http'
 import type { ItemChanges } from './items'
 import type { DecisionInput } from './requests'
 import { contactInput, type Contact } from './contacts'
+import type { CatCoat } from '../shared/cat-coats'
 
 export function consumeWriteLimit(db: D1Database, userId: string, route: string, windowStart: number, limit: number) {
   // The guarded UPSERT is one atomic D1 statement, including concurrent Worker attempts.
@@ -13,7 +14,7 @@ export function consumeWriteLimit(db: D1Database, userId: string, route: string,
     .bind(userId, route, windowStart, limit).run()
 }
 
-export type Profile = { id: string; email: string; display_name: string | null; profile_photo_version?: string | null }
+export type Profile = { id: string; email: string; display_name: string | null; cat_coat?: CatCoat | null; profile_photo_version?: string | null }
 
 const profilePhotoAccess = `u.id=? OR EXISTS(SELECT 1 FROM memberships owner
   JOIN memberships caller ON caller.cache_id=owner.cache_id AND caller.user_id=? AND caller.status='active'
@@ -23,9 +24,9 @@ const profilePhotoAccess = `u.id=? OR EXISTS(SELECT 1 FROM memberships owner
 function photoVersion(key: string | null) { return key?.split('/').at(-1) ?? null }
 
 export async function getProfile(db: D1Database, userId: string) {
-  const row = await db.prepare(`SELECT u.id,u.email,u.display_name,p.photo_path FROM user u
+  const row = await db.prepare(`SELECT u.id,u.email,u.display_name,u.cat_coat,p.photo_path FROM user u
     LEFT JOIN user_photos p ON p.user_id=u.id WHERE u.id=?`).bind(userId)
-    .first<{id:string;email:string;display_name:string|null;photo_path:string|null}>()
+    .first<{id:string;email:string;display_name:string|null;cat_coat:CatCoat|null;photo_path:string|null}>()
   if (!row) return null
   const {photo_path,...profile} = row
   return {...profile,profile_photo_version:photoVersion(photo_path)}
@@ -114,10 +115,18 @@ export async function requestContact(db: D1Database, requestId: string, userId: 
   return row.kind && row.value ? contactInput({kind:row.kind,value:row.value}) : null
 }
 
-export async function setDisplayName(db: D1Database, userId: string, name: string) {
-  await db.prepare('UPDATE user SET display_name = ?, updatedAt = ? WHERE id = ?')
-    .bind(name, new Date().toISOString(), userId).run()
+export async function updateProfile(db: D1Database, userId: string, changes: { display_name?: string; cat_coat?: CatCoat | null }) {
+  const updated = await db.prepare(`UPDATE user SET
+    display_name=CASE WHEN ? THEN ? ELSE display_name END,
+    cat_coat=CASE WHEN ? THEN ? ELSE cat_coat END,updatedAt=? WHERE id=?`)
+    .bind(changes.display_name !== undefined ? 1 : 0,changes.display_name ?? null,
+      changes.cat_coat !== undefined ? 1 : 0,changes.cat_coat ?? null,new Date().toISOString(),userId).run()
+  if (!updated.meta.changes) throw new HttpError(404,'not_found')
   return getProfile(db, userId)
+}
+
+export function setDisplayName(db: D1Database, userId: string, name: string) {
+  return updateProfile(db,userId,{display_name:name})
 }
 
 export function listMyCaches(db: D1Database, userId: string) {
@@ -268,13 +277,13 @@ export async function createCache(db: D1Database, ownerId: string, name: string,
 export async function cacheDetail(db: D1Database, cacheId: string, userId: string) {
   const [cache, members] = await db.batch([
     db.prepare(cacheRead).bind(userId, cacheId),
-    db.prepare(`SELECT m.user_id,u.display_name FROM memberships m JOIN user u ON u.id=m.user_id
+    db.prepare(`SELECT m.user_id,u.display_name,u.cat_coat FROM memberships m JOIN user u ON u.id=m.user_id
       JOIN memberships caller ON caller.cache_id=m.cache_id AND caller.user_id=? AND caller.status='active'
       JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
       WHERE m.cache_id=? AND m.status='active' ORDER BY m.created_at,m.user_id`).bind(userId, cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  const rows = members.results as {user_id:string;display_name:string|null}[]
+  const rows = members.results as {user_id:string;display_name:string|null;cat_coat:CatCoat|null}[]
   const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.user_id))
   return {...cacheInfo(cache.results[0] as CacheRow),members:rows.map(row=>({...row,profile_photo_version:photos.get(row.user_id) ?? null}))}
 }
@@ -295,13 +304,13 @@ export async function updateCache(db: D1Database, cacheId: string, userId: strin
 export async function cacheJoinRequests(db: D1Database, cacheId: string, userId: string) {
   const [cache, applicants] = await db.batch([
     db.prepare(`${cacheRead} AND caller.role='owner'`).bind(userId, cacheId),
-    db.prepare(`SELECT m.user_id,m.created_at,u.display_name FROM memberships m JOIN user u ON u.id=m.user_id
+    db.prepare(`SELECT m.user_id,m.created_at,u.display_name,u.cat_coat FROM memberships m JOIN user u ON u.id=m.user_id
       JOIN memberships caller ON caller.cache_id=m.cache_id AND caller.user_id=? AND caller.role='owner' AND caller.status='active'
       JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
       WHERE m.cache_id=? AND m.status='pending' ORDER BY m.created_at,m.user_id`).bind(userId, cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  const rows = applicants.results as {user_id:string;created_at:number;display_name:string|null}[]
+  const rows = applicants.results as {user_id:string;created_at:number;display_name:string|null;cat_coat:CatCoat|null}[]
   const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.user_id))
   return rows.map(row=>({...row,profile_photo_version:photos.get(row.user_id) ?? null}))
 }
@@ -378,7 +387,7 @@ export async function decideCacheJoin(db: D1Database, cacheId: string, userId: s
 }
 
 type ItemRow = {
-  id: string; owner_id: string; owner_name: string | null; title: string; description: string | null
+  id: string; owner_id: string; owner_name: string | null; owner_cat_coat: CatCoat | null; title: string; description: string | null
   photo_path: string | null; is_consumable: number; quantity: number | null; available_quantity: number | null; available: number
   unavailable_note: string | null; created_at: number
 }
@@ -389,7 +398,7 @@ function itemInfo(row: ItemRow, cacheId: string | null) {
 }
 
 const itemRead = `SELECT i.id,i.owner_id,i.title,i.description,i.photo_path,i.is_consumable,i.quantity,
-  i.available,i.unavailable_note,i.created_at,u.display_name AS owner_name,
+  i.available,i.unavailable_note,i.created_at,u.display_name AS owner_name,u.cat_coat AS owner_cat_coat,
   CASE WHEN i.is_consumable=1 THEN i.quantity-(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending') ELSE NULL END AS available_quantity
   FROM items i JOIN user u ON u.id=i.owner_id`
 const itemAccess = `(? IS NULL AND i.owner_id=?) OR EXISTS(
@@ -523,6 +532,7 @@ export type D1Request = {
   id: string; item_id: string; cache_id: string; cache_name: string; item_title: string
   owner_id: string; owner_name: string | null; requester_id: string; requester_name: string | null
   owner_photo_version?: string | null; requester_photo_version?: string | null
+  owner_cat_coat?: CatCoat | null; requester_cat_coat?: CatCoat | null
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
   decided_at: number | null; created_at: number; approval_message?: string | null
 }
@@ -533,7 +543,8 @@ async function requestPhotos(db: D1Database, readerId: string, rows: D1Request[]
 }
 
 const requestRead = `SELECT r.id AS id,r.item_id,r.cache_id,c.name AS cache_name,i.title AS item_title,
-  i.owner_id,owner.display_name AS owner_name,r.requester_id,requester.display_name AS requester_name,
+  i.owner_id,owner.display_name AS owner_name,owner.cat_coat AS owner_cat_coat,
+  r.requester_id,requester.display_name AS requester_name,requester.cat_coat AS requester_cat_coat,
   r.quantity,r.status,r.decision_reason,r.approval_message,r.decided_at,r.created_at AS created_at FROM requests r
   JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
   JOIN user owner ON owner.id=i.owner_id JOIN user requester ON requester.id=r.requester_id`

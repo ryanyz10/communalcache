@@ -13,16 +13,12 @@ export function SupportLink({ children = copy.heading, className = 'inline-flex 
 
 export function SupportCard() {
   if (!SUPPORT_URL) return null
-  return <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4 lg:mt-0" aria-labelledby="support-heading">
-    <h2 id="support-heading" className="font-semibold">{copy.heading}</h2>
-    <p className="mt-2 text-sm text-slate-600">{copy.description}</p>
-    <SupportLink className="cc-outline mt-3 min-h-11">{copy.button}</SupportLink>
-  </section>
+  return <section className="cc-account-support" aria-labelledby="support-heading"><div><h2 id="support-heading">{copy.heading}</h2><p>{copy.description}</p></div><SupportLink className="cc-profile-secondary">{copy.button}</SupportLink></section>
 }
 
 export function AppFooter() {
   const { me } = useAuth()
   const { pathname } = useLocation()
-  if (!SUPPORT_URL || !me || pathname === '/login' || pathname === '/auth/link') return null
+  if (!SUPPORT_URL || !me?.display_name || pathname === '/login' || pathname === '/auth/link' || pathname === '/account' || pathname.startsWith('/join/')) return null
   return <footer className="cc-support-footer"><SupportLink /></footer>
 }

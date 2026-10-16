@@ -93,7 +93,7 @@ it('keeps real invite and magic-link routes in their existing explicit flows, ne
   expect(joining).not.toContain(landingCopy.inviteNote)
   expect(joining).not.toContain(invite)
   const memberJoin=render(`/join/${invite}`,me)
-  expect(memberJoin).toContain('Join this cache')
+  expect(memberJoin).toContain('There&#x27;s room in the box for you.')
   const magic=render('/auth/link')
   expect(magic).toContain('>Continue</button>')
   expect(magic).toContain('Opening this page does not use your link')

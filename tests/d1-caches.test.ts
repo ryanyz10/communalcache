@@ -37,7 +37,7 @@ it('creates canonical config/owner atomically and appears in Home immediately wi
   expect(cache.secret).toMatch(/^[A-Za-z0-9_-]{43}$/)
   expect(atob(cache.secret.replaceAll('-', '+').replaceAll('_', '/') + '=')).toHaveLength(32)
   expect((await listMyCaches(env.DB, cache.owner)).results).toEqual([{ id: cache.id, name: 'Tools' }])
-  expect((await cacheDetail(env.DB, cache.id, cache.owner)).members).toEqual([{user_id:cache.owner,display_name:'Owner',profile_photo_version:null}])
+  expect((await cacheDetail(env.DB, cache.id, cache.owner)).members).toEqual([{user_id:cache.owner,display_name:'Owner',cat_coat:null,profile_photo_version:null}])
   await worker.scheduled(createScheduledController(), env)
   expect((await listMyCaches(env.DB, cache.owner)).results).toEqual([{ id: cache.id, name: 'Tools' }])
 })
@@ -83,7 +83,7 @@ it('serializes concurrent open/gated joins and emits one atomic outbox only for 
     expect(results.filter(row => row.notificationId)).toHaveLength(approval ? 1 : 0)
     expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM memberships WHERE cache_id=? AND user_id=?').bind(cache.id, cache.applicant).first('n')).toBe(1)
     if (approval) {
-      expect(await cacheJoinRequests(env.DB, cache.id, cache.owner)).toEqual([{user_id:cache.applicant,display_name:'Neighbor',created_at:expect.any(Number),profile_photo_version:null}])
+      expect(await cacheJoinRequests(env.DB, cache.id, cache.owner)).toEqual([{user_id:cache.applicant,display_name:'Neighbor',cat_coat:null,created_at:expect.any(Number),profile_photo_version:null}])
       await updateCache(env.DB, cache.id, cache.owner, { requires_approval: false })
       expect((await joinCache(env.DB, cache.id, cache.applicant, cache.secret)).membership.status).toBe('pending')
     }

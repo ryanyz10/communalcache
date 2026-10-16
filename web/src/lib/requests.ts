@@ -1,10 +1,12 @@
 import { useInfiniteQuery, type QueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
+import type { CatCoat } from './cats'
 
 export type ItemRequest = {
   id: string; cache_id: string; cache_name: string; item_id: string; item_title: string
   owner_id: string; owner_name: string | null; requester_id: string; requester_name: string | null
   owner_photo_version?: string | null; requester_photo_version?: string | null
+  owner_cat_coat?: CatCoat | null; requester_cat_coat?: CatCoat | null
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
   created_at: number; decided_at: number | null; approval_message?: string | null
 }

@@ -1,8 +1,8 @@
 import { createElement as h, type CSSProperties, type ReactNode, type SVGAttributes } from 'react'
-import { catTraits } from '../lib/cats'
+import { catTraits, type CatCoat } from '../lib/cats'
 
-export function Cat({ userId, pose = 'sit', motion = true }: { userId: string; pose?: 'sit' | 'loaf' | 'peek'; motion?: boolean }) {
-  const t = catTraits(userId), c = t.coat.fill, e = t.coat.eye, d = t.delay
+export function Cat({ userId, coat, pose = 'sit', motion = true }: { userId: string; coat?: CatCoat | null; pose?: 'sit' | 'loaf' | 'peek'; motion?: boolean }) {
+  const t = catTraits(userId, coat), c = t.coat.fill, e = t.coat.eye, d = t.delay
   const WHITE = '#fffaf3', EDGE = 'rgba(32,30,29,.2)', STRIPE = 'rgba(32,30,29,.28)', LIGHT = '#ffc6a5', NOSE = '#8c491a'
   const an = (animation: string, base: CSSProperties = {}): CSSProperties => ({ ...base, ...(motion ? { animation } : {}) })
   const fb = (origin = 'center'): CSSProperties => ({ transformBox: 'fill-box', transformOrigin: origin })

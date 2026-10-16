@@ -36,21 +36,15 @@ export function PushControls({ userId }: { userId: string }) {
     catch (error) { setError(errorMessage(error)) }
     finally { setPending(false) }
   }
-  return <section className="mt-6 lg:mt-0 lg:min-w-0" aria-labelledby="push-heading">
-    <h2 id="push-heading" className="cc-section-title lg:mb-2 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Notifications on this device</h2>
-    <p className="hidden lg:mb-3 lg:block lg:text-sm lg:text-slate-600">On this device.</p>
-    <div className="contents lg:block">
-    <div className="cc-list"><label className="cc-row"><span className="min-w-0 flex-1"><span className="block font-semibold">Push notifications</span><span id="push-help" className="block text-sm text-slate-600">Otherwise you get email.</span></span><input type="checkbox" role="switch" aria-label="Push notifications" aria-describedby="push-help" aria-checked={hasSubscription} checked={hasSubscription} disabled={pending || (!hasSubscription && (!registration || !config.data?.vapid_public_key || (support.ios && !support.standalone)))} onChange={() => { if (hasSubscription) void disable(); else void enable() }} className="cc-switch" /></label></div>
-    <p className="mt-3 text-sm text-slate-600">Enable for the account you are using. Signing out removes this browser's subscription.</p>
+  return <section className="cc-account-push" aria-labelledby="push-heading">
+    <div className="cc-push-summary"><div><h2 id="push-heading"><span className="cc-push-title-desktop">Notifications on this device</span><span className="cc-push-title-mobile">Push notifications</span></h2><p id="push-help"><span className="cc-push-title-desktop">Push notifications. Otherwise you get email.</span><span className="cc-push-title-mobile">On this device. Otherwise email.</span></p></div><input type="checkbox" role="switch" aria-label="Push notifications" aria-describedby="push-help" aria-checked={hasSubscription} checked={hasSubscription} disabled={pending || (!hasSubscription && (!registration || !config.data?.vapid_public_key || (support.ios && !support.standalone)))} onChange={() => { if (hasSubscription) void disable(); else void enable() }} className="cc-switch" /></div>
     {support.ios && !support.standalone && <p className="mt-3">On iPhone or iPad, tap Share, then Add to Home Screen. Open the installed app and turn on Push notifications.</p>}
     {!support.supported && <p className="mt-3">Push notifications are not supported in this browser. You can still use email notifications.</p>}
     {config.isPending && <p role="status" className="mt-3">Loading notification configuration…</p>}
     {config.isError && <div className="mt-3"><p role="alert" className="text-red-700">Could not load notification configuration.</p><button type="button" disabled={config.isFetching} onClick={() => void config.refetch()} className="mt-2 underline">Try notification configuration again</button></div>}
     {config.isSuccess && !config.data.vapid_public_key && <p className="mt-3 text-slate-600">Push is not configured yet. Email notifications remain available.</p>}
-    {hasSubscription && <p className="mt-3 text-sm">This browser has a subscription for this account.</p>}
     {pending && <p role="status" className="mt-3 text-sm">Updating notifications…</p>}
     {error && <p role="alert" className="mt-3 text-red-700">{error}</p>}
     {status && <p role="status" className="mt-3 text-emerald-700">{status}</p>}
-    </div>
   </section>
 }
