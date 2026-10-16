@@ -10,6 +10,22 @@ export function requireOrigin(request: Request, origin: string) {
   if (request.headers.get('Origin') !== origin) throw new HttpError(403, 'invalid_origin')
 }
 
+export async function readOptionalBody(request: Request): Promise<void> {
+  if (request.headers.get('Content-Type')?.split(';')[0].trim() === 'application/json') {
+    await readBody(request)
+    return
+  }
+  const reader = request.body?.getReader({ mode: 'byob' })
+  if (!reader) return
+  try {
+    const { done } = await reader.read(new Uint8Array(1))
+    if (!done) {
+      await reader.cancel()
+      throw new HttpError(415, 'json_required')
+    }
+  } finally { reader.releaseLock() }
+}
+
 export async function readBody(request: Request): Promise<Record<string, unknown>> {
   if (request.headers.get('Content-Type')?.split(';')[0].trim() !== 'application/json') {
     throw new HttpError(415, 'json_required')
