@@ -477,19 +477,39 @@ export async function libraryItems(db: D1Database, userId: string) {
   return rows.results.map(row=>({...libraryItemInfo(row),owner_photo_version:photos.get(row.owner_id) ?? null}))
 }
 
-export async function libraryPage(db: D1Database, userId: string, after: string | null) {
+export async function libraryPage(db: D1Database, userId: string, after: string | null, filter = 'all') {
+  if (!['all','lend','give','unshared'].includes(filter)) throw new HttpError(400,'invalid_filter')
   let time: number | null = null, id: string | null = null
   if (after !== null) {
     const match = after.match(/^([0-9]{1,16})\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
     if (!match || !Number.isSafeInteger(Number(match[1]))) throw new HttpError(400, 'invalid_cursor')
     time = Number(match[1]); id = match[2].toLowerCase()
   }
-  const rows = (await db.prepare(`${libraryRead}
-    WHERE (? IS NULL OR library.created_at<? OR (library.created_at=? AND library.id<?))
-    ORDER BY library.created_at DESC,library.id DESC LIMIT 26`).bind(userId,time,time,time,id).all<LibraryRow>()).results
+  const [page,counts] = await db.batch([
+    db.prepare(`${libraryRead}
+      WHERE (? IS NULL OR library.created_at<? OR (library.created_at=? AND library.id<?))
+      AND (?='all' OR (?='lend' AND library.is_consumable=0) OR (?='give' AND library.is_consumable=1)
+        OR (?='unshared' AND NOT EXISTS(SELECT 1 FROM item_caches a
+          JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
+          JOIN memberships m ON m.cache_id=c.id AND m.user_id=library.owner_id AND m.status='active'
+          WHERE a.item_id=library.id)))
+      ORDER BY library.created_at DESC,library.id DESC LIMIT 26`).bind(userId,time,time,time,id,filter,filter,filter,filter),
+    db.prepare(`SELECT COUNT(*) AS total_count,COUNT(CASE WHEN i.is_consumable=0 THEN 1 END) AS lend_count,
+      COUNT(CASE WHEN i.is_consumable=1 THEN 1 END) AS give_count,
+      COUNT(CASE WHEN NOT EXISTS(SELECT 1 FROM item_caches a
+        JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
+        JOIN memberships m ON m.cache_id=c.id AND m.user_id=i.owner_id AND m.status='active'
+        WHERE a.item_id=i.id) THEN 1 END) AS unshared_count,
+      (SELECT COUNT(DISTINCT a.cache_id) FROM item_caches a JOIN items owned ON owned.id=a.item_id AND owned.owner_id=?
+        JOIN caches c ON c.id=a.cache_id AND c.join_secret IS NOT NULL
+        JOIN memberships m ON m.cache_id=c.id AND m.user_id=owned.owner_id AND m.status='active') AS shared_cache_count
+      FROM items i WHERE i.owner_id=?`).bind(userId,userId),
+  ])
+  const rows = page.results as LibraryRow[]
   const photos = await profilePhotoVersions(db,userId,[userId])
   const items = rows.slice(0,25).map(row=>({...libraryItemInfo(row),owner_photo_version:photos.get(row.owner_id) ?? null})), last = items.at(-1)
-  return { items, next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
+  return { items, next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null,
+    totals:counts.results[0] as {total_count:number;lend_count:number;give_count:number;unshared_count:number;shared_cache_count:number} }
 }
 
 export async function cacheItems(db: D1Database, cacheId: string, userId: string) {

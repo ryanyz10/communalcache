@@ -27,7 +27,7 @@ it('returns own unshared and multi-cache items with active cache names, shared s
   const shared = page.items.find(row => row.id === item.id)!
   expect(shared).toMatchObject({cache_id:null,quantity:8,available_quantity:5,pending_count:2,available:false,unavailable_note:'Back Sunday',caches:[{id:b.id,name:'Garden Club'},{id:a.id,name:'Maple Street'}]})
   expect(page.items.find(row=>row.id===privateItem.id)).toMatchObject({caches:[],pending_count:0})
-  expect(await libraryPage(env.DB,outsider,null)).toEqual({items:[],next_cursor:null})
+  expect(await libraryPage(env.DB,outsider,null)).toEqual({items:[],next_cursor:null,totals:{total_count:0,lend_count:0,give_count:0,unshared_count:0,shared_cache_count:0}})
   await expect(itemDetail(env.DB,item.id,neighbor)).rejects.toMatchObject({status:404})
   const publicItem = await itemDetail(env.DB,item.id,neighbor,a.id)
   expect(publicItem).not.toHaveProperty('caches')
