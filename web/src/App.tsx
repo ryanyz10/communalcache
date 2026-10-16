@@ -10,6 +10,7 @@ import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
 import { MagicLinkPage } from './pages/MagicLinkPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { RequestDetailPage } from './pages/RequestDetailPage'
 import { AccountPage } from './pages/AccountPage'
 import { CacheSettingsPage } from './pages/CacheSettingsPage'
 import { AppHeader } from './components/AppHeader'
@@ -31,6 +32,7 @@ export function AppRoutes() {
     <Route path="/join/:token" element={<JoinPage />} />
     <Route path="/" element={<HomePage />} />
     <Route path="/requests" element={<RequestsPage />} />
+    <Route path="/requests/:requestId" element={<RequestDetailPage />} />
     <Route path="/items" element={<LibraryPage />} />
     <Route path="/items/new" element={<ItemEditorPage />} />
     <Route path="/items/:itemId" element={<ItemPage />} />

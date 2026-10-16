@@ -10,6 +10,24 @@ export type ItemRequest = {
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
   created_at: number; decided_at: number | null; approval_message?: string | null
 }
+export const DEFAULT_MARK_LENT_OUT = true
+
+export function approvalBody(quantity:number|null,message:string,markLentOut:boolean,note:string,noteEdited:boolean) {
+  const mark=quantity===null && markLentOut
+  return {approval_message:message.trim(),mark_lent_out:mark,...(mark && noteEdited?{unavailable_note:note.trim() || null}:{})}
+}
+export function relativeWhen(time:number,now=Date.now()) {
+  const minutes=Math.max(0,Math.floor((now-time)/60_000)),hours=Math.floor(minutes/60),days=Math.floor(hours/24)
+  if(minutes<1)return 'just now'
+  if(hours<1)return `${minutes} ${minutes===1?'minute':'minutes'} ago`
+  if(days<1)return `${hours} ${hours===1?'hour':'hours'} ago`
+  if(days===1)return 'yesterday'
+  if(days<7)return `${days} days ago`
+  if(days<14)return 'last week'
+  return `${Math.floor(days/7)} weeks ago`
+}
+export function stockAfterApproval(quantity:number,asked:number) { return quantity-asked }
+
 export type RequestsPageData = { requests: ItemRequest[]; unavailable_cache_ids: string[]; next_cursor: string | null }
 
 export function useRequests(enabled: boolean) {
@@ -35,5 +53,7 @@ export function invalidateRequestViews(client: QueryClient) {
     client.invalidateQueries({ queryKey: ['home-summary'] }),
     client.invalidateQueries({ queryKey: ['caches'] }),
     client.invalidateQueries({ queryKey: ['cache'] }),
+    client.invalidateQueries({ queryKey: ['request-detail'] }),
+    client.invalidateQueries({ queryKey: ['request-contact'] }),
   ])
 }

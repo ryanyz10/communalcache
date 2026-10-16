@@ -107,8 +107,8 @@ it('retains settings section links only for authorized roles', () => {
 it('keeps existing request and Account actions while their screen layouts await later PRs', () => {
   const requests = render(createElement(RequestsPage))
   expect(requests).toContain('aria-label="Needs your answer"')
-  expect(requests).toContain('aria-label="Your requests"')
-  expect(requests.match(/>Approve request from Priya<\/button>/g)).toHaveLength(1)
+  expect(requests).toContain('aria-label="Your asks"')
+  expect(requests.match(/aria-label="Approve request from Priya"/g)).toHaveLength(1)
   const account = render(createElement(AccountPage))
   expect(account).toContain('cc-account-layout')
   expect(account).toContain('cc-profile-label')
