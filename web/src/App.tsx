@@ -14,7 +14,6 @@ import { RequestDetailPage } from './pages/RequestDetailPage'
 import { AccountPage } from './pages/AccountPage'
 import { CacheSettingsPage } from './pages/CacheSettingsPage'
 import { AppHeader } from './components/AppHeader'
-import { AppFooter } from './components/Support'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
@@ -51,7 +50,7 @@ export default function App() {
   return <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <BrowserRouter>
-        <Ready><div className="cc-app-shell"><AppHeader /><AppRoutes /><AppFooter /></div></Ready>
+        <Ready><div className="cc-app-shell"><AppHeader /><AppRoutes /></div></Ready>
       </BrowserRouter>
     </AuthProvider>
   </QueryClientProvider>
