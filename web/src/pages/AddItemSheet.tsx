@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/api'
 import { attachSelected, sharingHint, useLibrary } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { ItemForm } from './ItemForm'
+import { SkeletonRows, LoadingStatus, Shimmer } from '../components/Skeleton'
 
 export function AddItemSheet({ cacheId, cacheName, dialog }: { cacheId: string; cacheName: string; dialog: RefObject<HTMLDialogElement | null> }) {
   const { me } = useAuth()
@@ -36,14 +37,14 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: { cacheId: string; 
     </div>
     <div hidden={tab !== 'existing'} className="cc-add-existing">
       <p className="mt-4 text-sm text-slate-600">Pick things you already own. Same item, one shared stock count.</p>
-      {query.isPending && <p role="status" className="mt-4">Loading your items…</p>}
+      {query.isPending && <SkeletonRows label="Loading your items…" kind="plain" />}
       {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button type="button" className="underline" onClick={() => void query.refetch()}>Try your items again</button></div>}
       {query.isSuccess && !items.length && <p className="mt-4">No items yet. Choose New item to start your library.</p>}
       <ul className="cc-add-selection">{items.map(item => {
         const already = attached.includes(item.id) || item.caches.some(cache => cache.id === cacheId)
         return <li key={item.id} data-already={already}><label className="flex min-h-14 items-center gap-3 py-3"><input type="checkbox" checked={already || selected.includes(item.id)} disabled={already || busy} onChange={event => setSelected(current => event.target.checked ? [...current,item.id] : current.filter(id => id !== item.id))} /><span className="min-w-0"><span className="block break-words font-medium">{item.title}</span><span className="block break-words text-sm text-slate-600">{already ? 'Already here' : `${sharingHint(item,cacheId)}${item.is_consumable?` · ${item.available_quantity ?? item.quantity} to give`:''}`}</span></span></label></li>
       })}</ul>
-      {query.hasNextPage && <button type="button" disabled={query.isFetchingNextPage || busy} onClick={() => void query.fetchNextPage()} className="cc-outline mt-3">{query.isFetchingNextPage ? 'Loading…' : 'Load more items'}</button>}
+      {query.hasNextPage && <button type="button" disabled={query.isFetchingNextPage || busy} onClick={() => void query.fetchNextPage()} className="cc-outline mt-3">{query.isFetchingNextPage ? <><LoadingStatus label="Loading more items…" /><Shimmer width={110} height={18} /></> : 'Load more items'}</button>}
       {add.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(add.error)} Items already added are kept. Retry the remaining selection or find them in <Link to="/items" className="underline">Your items</Link>.</p>}
       {status && <p role="status" className="mt-3">{status}</p>}
       <button type="button" disabled={busy || !selected.length || query.isError} onClick={() => add.mutate()} className="cc-profile-primary cc-add-submit">{add.isPending ? 'Adding…' : `Add ${selected.length} to ${cacheName}`}</button>

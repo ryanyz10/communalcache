@@ -9,6 +9,7 @@ import { LoginForm } from './LoginPage'
 import { OnboardingPage } from './OnboardingPage'
 import { AuthBrand, AuthScreen } from '../components/AuthScreen'
 import { InviteBox } from '../components/InviteBox'
+import { LoadingStatus, Shimmer } from '../components/Skeleton'
 
 export function JoinPage() {
   const { token = '' } = useParams(), { me } = useAuth()
@@ -45,13 +46,13 @@ export function JoinPage() {
     </AuthScreen>
   }
   const details = preview.isSuccess ? preview.data : undefined
-  const scene = <InviteBox userId={me.id} coat={me.cat_coat} preview={details} />
-  const eyebrow = details && <p className="cc-invite-eyebrow">An invite to {details.name}</p>
+  const scene = <InviteBox userId={me.id} coat={me.cat_coat} preview={details} loading={preview.isPending} />
+  const eyebrow = preview.isPending ? <p className="cc-invite-eyebrow"><Shimmer width={200} height={14} /></p> : details && <p className="cc-invite-eyebrow">An invite to {details.name}</p>
   return <AuthScreen className="cc-join" illustration={<div className="cc-join-illustration">{eyebrow}{scene}</div>}>
     <AuthBrand className="cc-auth-brand-desktop" />
     <div className="cc-join-mobile-scene">{eyebrow}{scene}</div>
     <div className="cc-join-copy"><h1>There's room in the box for you.</h1><p>Hi, {me.display_name}. If this cache requires approval, its owner will review your request.</p>
-      {preview.isPending && <p role="status">Loading invitation…</p>}
+      {preview.isPending && <LoadingStatus label="Loading invitation…" />}
       {preview.isError && <div><p role="alert" className="cc-form-error">{errorMessage(preview.error)}</p><button type="button" className="cc-text-action" disabled={preview.isFetching} onClick={()=>void preview.refetch()}>Try invitation again</button></div>}
     </div>
     {join.isError && join.variables === token && <p role="alert" className="cc-form-error">{errorMessage(join.error)}</p>}

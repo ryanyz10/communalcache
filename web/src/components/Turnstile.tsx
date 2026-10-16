@@ -2,6 +2,7 @@ import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'reac
 import { useQuery } from '@tanstack/react-query'
 import { loadConfig } from '../lib/config'
 import { loadTurnstile, mountTurnstile, turnstileTheme } from '../lib/turnstile'
+import { Shimmer, LoadingStatus } from './Skeleton'
 
 export type TurnstileHandle = { reset(): void }
 export function Turnstile({ action, onToken, ref }: { action: 'signin' | 'create_cache'; onToken: (token: string) => void; ref?: Ref<TurnstileHandle> }) {
@@ -35,7 +36,7 @@ export function Turnstile({ action, onToken, ref }: { action: 'signin' | 'create
   const unavailable = config.isError || (config.isSuccess && !sitekey)
   return <section className="mt-3" aria-label="Bot protection">
     <div ref={container} />
-    {(config.isPending || (sitekey && !verified && !error)) && <p role="status" className="text-sm text-slate-600">{config.isPending ? 'Loading bot check…' : 'Checking your browser…'}</p>}
+    {config.isPending ? <div><LoadingStatus label="Loading bot check…" /><Shimmer width={300} height={64} /></div> : sitekey && !verified && !error ? <p role="status" className="text-sm text-slate-600">Checking your browser…</p> : null}
     {(error || unavailable) && <div><p role="alert" className="text-sm text-red-700">{error || 'Bot protection is unavailable. Please retry.'}</p><button type="button" className="mt-2 text-sm underline" onClick={() => { if (config.isError) void config.refetch(); else if (unavailable) location.reload(); else { onToken(''); setRetry(value => value + 1) } }}>Retry bot check</button></div>}
   </section>
 }

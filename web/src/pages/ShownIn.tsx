@@ -6,6 +6,7 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheSummary } from '../lib/caches'
 import type { Item, LibraryItem } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
+import { SkeletonRows } from '../components/Skeleton'
 
 export function ShownIn({ item }: { item: Item }) {
   const { me } = useAuth()
@@ -26,7 +27,7 @@ export function ShownIn({ item }: { item: Item }) {
   return <section className="cc-owner-sharing" aria-labelledby="shown-in-heading">
     <h2 id="shown-in-heading" className="text-xl font-semibold">Shown in</h2>
     <p className="mt-1 text-sm text-slate-600">Choose which caches can see this item. Stock and availability are shared everywhere.</p>
-    {(detail.isPending || caches.isPending) && <p role="status" className="mt-3">Loading sharing…</p>}
+    {(detail.isPending || caches.isPending) && <SkeletonRows label="Loading sharing…" kind="plain" count={2} />}
     {error && <div className="mt-3"><p role="alert" className="text-red-700">{errorMessage(error)}</p><button type="button" className="underline" onClick={() => { void detail.refetch(); void caches.refetch() }}>Try sharing again</button></div>}
     {!error && detail.data && caches.data && <>
       {!caches.data.length && <p className="mt-3 text-slate-600">You aren't in any caches yet. Your item stays private in your library. <Link to="/" className="underline">Go to Home</Link> to create a cache or join with an invite.</p>}

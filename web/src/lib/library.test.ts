@@ -88,7 +88,9 @@ it('renders private owner item controls and active-cache checkboxes with explici
   expect(markup).not.toContain('Ask to borrow')
   const other = render(createElement(ItemPage),{caller:'other',route:'/items/:itemId',path:`/items/${item.id}`})
   expect(other).not.toContain('Sugar')
-  expect(other).not.toContain('Shown in')
+  expect(other).toContain('data-skeleton="item"')
+  expect(other).toContain('role="status" class="sr-only">Loading item…')
+  expect(other).not.toMatch(/Bring a jar|Back Sunday|shown-in-heading|type="checkbox"|\/api\/me\/items\//)
 })
 
 it('creates library-only items without needing caches and invalidates every shared item view after edits or decisions', async () => {
