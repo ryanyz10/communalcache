@@ -1,5 +1,5 @@
+// No ready(): Turnstile rejects it when api.js is loaded async, as we do.
 export type TurnstileApi = {
-  ready(callback: () => void): void
   render(container: HTMLElement, options: {
     sitekey: string; action: 'signin' | 'create_cache'; theme: 'light' | 'dark'; appearance: 'interaction-only'; retry: 'never';
     callback(token: string): void; 'expired-callback'(): void; 'timeout-callback'(): void; 'error-callback'(): boolean;
@@ -13,25 +13,20 @@ let loading: Promise<TurnstileApi> | undefined
 export function loadTurnstile() {
   if (loading) return loading
   loading = new Promise<TurnstileApi>((resolve, reject) => {
-    const script = window.turnstile ? null : document.createElement('script')
-    let settled = false
+    if (window.turnstile) { resolve(window.turnstile); return }
+    const script = document.createElement('script')
+    const timer = setTimeout(failed, 15_000)
     function failed() {
-      if (settled) return
-      settled = true; clearTimeout(timer); script?.remove()
+      clearTimeout(timer); script.remove()
       reject(new Error('Bot check could not load. Please retry.'))
     }
-    const timer = setTimeout(failed, 15_000)
-    function ready() {
-      const api = window.turnstile
-      if (!api) { failed(); return }
-      try { api.ready(() => { if (!settled) { settled = true; clearTimeout(timer); resolve(api) } }) }
-      catch { failed() }
-    }
-    if (!script) { ready(); return }
     script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
     script.async = true
     script.onerror = failed
-    script.onload = ready
+    script.onload = () => {
+      if (!window.turnstile) { failed(); return }
+      clearTimeout(timer); resolve(window.turnstile)
+    }
     document.head.appendChild(script)
   }).catch(error => { loading = undefined; throw error })
   return loading
