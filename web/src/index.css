@@ -116,6 +116,14 @@ dialog::backdrop { background: var(--cc-scrim); }
 .cc-stamp-warn { color: var(--cc-warn); transform: rotate(-5deg); }
 .cc-stamp-muted { color: var(--cc-sub); }
 
+/* Cache-opening peek: overlay and eyes are created by components/peekOverlay.ts and never exist under reduced motion. */
+.cc-hole-overlay { position: fixed; z-index: 1000; border-radius: 999px; background: #201e1d; pointer-events: none; will-change: transform; }
+.cc-peek-eyes { position: fixed; z-index: 1001; left: 50%; top: 50%; width: 120px; margin: -20px 0 0 -60px; pointer-events: none; }
+.cc-peek-eyes ellipse { animation: cc-blink 1.3s .35s infinite; transform-box: fill-box; transform-origin: center; }
+.cc-peek-look { animation: cc-look 1.4s ease-in-out infinite; }
+@keyframes cc-look { 0%,100% { transform: translateX(0); } 35% { transform: translateX(-10px); } 70% { transform: translateX(10px); } }
+@media (min-width: 1024px) { .cc-peek-eyes { width: 160px; margin: -27px 0 0 -80px; } }
+@media (prefers-reduced-motion: reduce) { .cc-hole-overlay, .cc-peek-eyes { display: none; } }
 @keyframes cc-blink { 0%,93%,100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
 @keyframes cc-sway { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
 @keyframes cc-breathe { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.05); } }
