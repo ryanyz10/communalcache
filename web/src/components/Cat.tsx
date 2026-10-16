@@ -1,18 +1,21 @@
 import { createElement as h, type CSSProperties, type ReactNode, type SVGAttributes } from 'react'
-import { catTraits, type CatCoat } from '../lib/cats'
+import { catTraits, COATS, type CatCoat, type CatTraits } from '../lib/cats'
 
-export function Cat({ userId, coat, pose = 'sit', motion = true }: { userId: string; coat?: CatCoat | null; pose?: 'sit' | 'loaf' | 'peek'; motion?: boolean }) {
-  const t = catTraits(userId, coat), c = t.coat.fill, e = t.coat.eye, d = t.delay
+type CatProps = ({ userId: string; coat?: CatCoat | null; traits?: never } | { traits: CatTraits; userId?: never; coat?: never }) & { pose?: 'sit' | 'loaf' | 'peek'; motion?: boolean }
+
+export function Cat({ userId, coat, traits, pose = 'sit', motion = true }: CatProps) {
+  const t = traits ?? catTraits(userId!, coat), colors = COATS.find(value => value.key === t.coat)!
+  const c = colors.fill, e = colors.eye, d = t.delay
   const WHITE = '#fffaf3', EDGE = 'rgba(32,30,29,.2)', STRIPE = 'rgba(32,30,29,.28)', LIGHT = '#ffc6a5', NOSE = '#8c491a'
   const an = (animation: string, base: CSSProperties = {}): CSSProperties => ({ ...base, ...(motion ? { animation } : {}) })
   const fb = (origin = 'center'): CSSProperties => ({ transformBox: 'fill-box', transformOrigin: origin })
   const blink = an(`cc-blink 5.5s ${d}s infinite`, fb())
   const svg = (viewBox: string, children: ReactNode[]) => h('svg', {
     viewBox, 'aria-hidden': true, focusable: false, className: `cc-cat cc-cat-${pose}`,
-    'data-coat': t.coat.key, 'data-pattern': t.pattern,
+    'data-coat': t.coat, 'data-pattern': t.pattern,
     style: { display: 'block', width: '100%', height: 'auto', overflow: 'visible' },
   }, ...children)
-  const [pA, pB] = t.coat.key === 'ginger' ? ['#474238', WHITE] : t.coat.key === 'dusk' ? ['#d67f48', WHITE] : ['#d67f48', '#474238']
+  const [pA, pB] = t.coat === 'ginger' ? ['#474238', WHITE] : t.coat === 'dusk' ? ['#d67f48', WHITE] : ['#d67f48', '#474238']
   const W = (props: SVGAttributes<SVGElement>): SVGAttributes<SVGElement> => ({ fill: WHITE, stroke: EDGE, strokeWidth: .9, ...props })
   const flap = (path: string) => h('path', { d: path, fill: STRIPE })
   const stripe = (path: string) => h('path', { d: path, fill: 'none', stroke: STRIPE, strokeWidth: 2.2, strokeLinecap: 'round' })
