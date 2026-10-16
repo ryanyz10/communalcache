@@ -5,6 +5,10 @@ storage tests. [plan.md](plan.md) is the settled target; [database.md](database.
 gives the guarded SQL/batch protocols. Every intermediate release must be safe and
 deployable, even when a new route is gated until its full cascade is proved.
 
+The [user-flow inventory](user-flows.md) is the cleanup/refactor parity invariant:
+implemented journeys, permission/data effects, current test coverage and explicit
+local walkthrough results, including blocked cases. It is not release approval.
+
 **Single D1 replaces PR #29's Owner DO model.** Keep its product decisions (shared
 items/stock, manual Lent out, owner-scoped private photos), not its object split,
 projections, target registration or eventual revocation. PRs 2–6 implement the D1
