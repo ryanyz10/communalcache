@@ -14,7 +14,7 @@ import { mountTurnstile, turnstileTheme, type TurnstileApi } from './turnstile'
 beforeEach(() => { vi.stubGlobal('sessionStorage',{getItem:()=>null,setItem:vi.fn(),removeItem:vi.fn()}) })
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 function api() {
-  return { ready:vi.fn((callback:()=>void)=>callback()),render:vi.fn((_container:HTMLElement,_options:Parameters<TurnstileApi['render']>[1])=>'fixture-widget'),reset:vi.fn(),remove:vi.fn() }
+  return { render:vi.fn((_container:HTMLElement,_options:Parameters<TurnstileApi['render']>[1])=>'fixture-widget'),reset:vi.fn(),remove:vi.fn() }
 }
 function scripts() {
   const appended: {src:string;async:boolean;onload?:()=>void;onerror?:()=>void;remove:ReturnType<typeof vi.fn>}[] = []
@@ -23,7 +23,7 @@ function scripts() {
   return appended
 }
 
-it('loads the explicit async provider script once for multiple widgets and waits for ready', async () => {
+it('loads the explicit async provider script once for multiple widgets and resolves on load', async () => {
   vi.resetModules()
   const {loadTurnstile} = await import('./turnstile'), appended = scripts()
   const first = loadTurnstile(), second = loadTurnstile()
@@ -37,24 +37,33 @@ it('loads the explicit async provider script once for multiple widgets and waits
   expect(appended).toHaveLength(1)
 })
 
-it('does not bypass ready when the global API appears while a shared load is pending', async () => {
+it('never calls ready(), which the real provider rejects for async scripts', async () => {
   vi.resetModules()
   const {loadTurnstile} = await import('./turnstile'), appended = scripts()
-  let ready!: () => void
-  const first = loadTurnstile(), provider = {...api(),ready:vi.fn((callback:()=>void)=>{ready=callback})}
-  window.turnstile=provider; appended[0].onload?.()
-  expect(loadTurnstile()).toBe(first)
-  ready(); expect(await first).toBe(provider)
+  const ready = vi.fn(()=>{ throw new Error('turnstile.ready() would break') })
+  const pending = loadTurnstile(), provider = {...api(),ready}
+  window.turnstile = provider; appended[0].onload?.()
+  expect(await pending).toBe(provider)
+  expect(ready).not.toHaveBeenCalled()
 })
 
-it('allows retry after an already-present API throws synchronously from ready', async () => {
+it('uses an already-present API without injecting another script', async () => {
   vi.resetModules()
   const {loadTurnstile} = await import('./turnstile'), appended = scripts(), provider = api()
-  provider.ready.mockImplementationOnce(()=>{throw new Error('Not ready')})
-  window.turnstile=provider
-  await expect(loadTurnstile()).rejects.toThrow('Bot check could not load')
+  window.turnstile = provider
   expect(await loadTurnstile()).toBe(provider)
   expect(appended).toHaveLength(0)
+})
+
+it('fails and allows retry when the script loads without exposing the API', async () => {
+  vi.resetModules()
+  const {loadTurnstile} = await import('./turnstile'), appended = scripts()
+  const failed = expect(loadTurnstile()).rejects.toThrow('Bot check could not load')
+  appended[0].onload?.(); await failed
+  expect(appended[0].remove).toHaveBeenCalledOnce()
+  const retry = loadTurnstile(), provider = api()
+  window.turnstile = provider; appended[1].onload?.()
+  expect(await retry).toBe(provider)
 })
 
 it('uses the owner-approved shared sitekey with separate exact production/staging hostnames and no secret values', () => {
@@ -71,7 +80,7 @@ it('uses the owner-approved shared sitekey with separate exact production/stagin
   expect(local).toContain('TURNSTILE_HOSTNAMES=localhost')
 })
 
-it('recovers from a blocked script and bounds ready/loading at fifteen seconds', async () => {
+it('recovers from a blocked script and bounds loading at fifteen seconds', async () => {
   vi.useFakeTimers(); vi.resetModules()
   const {loadTurnstile} = await import('./turnstile'), appended = scripts()
   const failed = expect(loadTurnstile()).rejects.toThrow('Bot check could not load')
@@ -79,8 +88,6 @@ it('recovers from a blocked script and bounds ready/loading at fifteen seconds',
   expect(appended[0].remove).toHaveBeenCalledOnce()
   const pending = expect(loadTurnstile()).rejects.toThrow('Bot check could not load')
   expect(appended).toHaveLength(2)
-  window.turnstile = {...api(),ready:vi.fn()}
-  appended[1].onload?.()
   await vi.advanceTimersByTimeAsync(15_000)
   await pending
   expect(appended[1].remove).toHaveBeenCalledOnce()
