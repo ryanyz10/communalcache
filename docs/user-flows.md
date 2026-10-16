@@ -2,11 +2,142 @@
 
 The refactor invariant: **keep every implemented journey below reachable, with
 its authorization, privacy, durable effects and recovery behavior intact**.
-This is a map of the current app, not permission to add deferred features or to
-preserve bugs. Changes to intended behavior need an explicit product decision;
-fixes to the observed defects below need regression proof.
+This is a map of implemented journeys, not permission to add deferred features
+or preserve bugs. The Organic walkthrough is current; the original inventory
+below is retained as historical evidence. Product changes need an explicit
+decision and observed defects need regression proof.
 
-## Scope and evidence
+## Organic redesign closure — current walkthrough
+
+This section supersedes the **historical pre-redesign observations below** for
+screens and walk status. All 54 journeys were revisited on `feat/organic-parity`,
+stacked on Organic PRs #56–#60. A check means the stated primary local journey,
+not every race, device or provider variant. This is not security/release approval.
+
+- Real Chromium, native 390/1280 layouts and system day/night/reduced motion;
+  additional library checks at 320/640/768. Local Worker/D1/private R2 at
+  `localhost:5198` (Vite proxy to 8798), isolated persistence, three seeded
+  `@example.com` users: Ryan (owner), Maya (member/item owner/requester, then
+  actually removed) and Jun (initially unnamed applicant, then active member).
+  Seeded sessions are setup, not email-delivery proof.
+- Explicit dummy-only runtime configuration; no existing `.dev.vars` or real
+  provider credential is used. The local configuration has a producer-only Queue,
+  **no consumer and no Cron**, so durable effects can be inspected without
+  sending email/push or running cleanup. No `--remote`, deploy or setup change.
+- A seeded, hashed, five-minute magic-link challenge was redeemed through the
+  real explicit Continue page. Link sending/Turnstile and OTP sending remain
+  blocked locally. The separate `localhost:4178` fixture exercised check-email,
+  resend and invalid/valid OTP presentation only; it is **not D1/auth/provider
+  proof**. No test bypass was added to production code.
+- Uncommitted receipts: `/tmp/cc-redesign/organic-parity/`. `walk-*.log` records
+  browser steps, URLs and observed states; `final-d1-summary.log` records effects
+  **before** later gallery-only setup; `walk-retry.log` and its separate D1
+  receipt record the later full saved-item/photo/sharing recovery. Added pagination rows and gallery-only
+  pending/approved rows are explicitly setup, not extra successful decisions.
+  Browser batches were split at identity/route boundaries; failed/blank captures
+  were not accepted as observations. Some CLI timeouts reported CDP disconnects;
+  only the successful resumed steps below count.
+- Fresh `compare-B01`…`compare-B25-{day,night}.png` are source LEFT/app RIGHT at
+  native board widths, without rescaling. B04/B05 app frames are labeled fixture
+  presentation; the other boards use local D1 (including explicit gallery setup).
+  B00 is the primitive/token reference, not a shipped system-demo route. Phone
+  captures omit the export's 34px fake OS row. Landing comparisons include native
+  390/1280/1440 plus hover and night adaptation. Screenshots stay out of git.
+
+### Every-flow walk ledger
+
+**✓** = stated primary journey completed locally; **partial** = stated portion
+walked with the remaining boundary named; **blocked** = completion needs the
+named unavailable/approval-gated setup. Existing real-D1/UI tests cover additional
+races/errors; a test is not an unperformed browser step.
+
+| Flow | Redesigned screens / observed walkthrough | Status / remaining boundary |
+| --- | --- | --- |
+| AUTH-01 | L01/L02 shelf landing → Get started/Sign in or invite guidance; no cache/user data requests. | **✓** Native day/night/hover; CTAs retain `/login` and `/login?invite=1`. |
+| AUTH-02 | Starting/read failure → alert + Try again → Home; protected signed-out route → sign-in; unnamed Jun → name setup. | **✓** Real `/api/me` read abort and recovery; revocation races remain automated coverage. |
+| AUTH-03 | B01/B03 labelled sign-in; unavailable bot state disables sends. Fixture B04 check-email, resend and fallback. | **blocked** Real Turnstile/email send intentionally unconfigured; fixture is presentation only. |
+| AUTH-04 | Organic Almost there → explicit Continue → Home from a seeded real D1 challenge; invalid/missing recovery. | **✓** Fragment removed and zero verification requests before Continue. Sending/receiving that email is not proved. |
+| AUTH-05 | Organic six-box/native code input, invalid-code alert and successful name-setup destination in fixture. | **blocked** Real OTP sending/expiry/rotation needs configured bot/email; browser redemption here was fixture-only. |
+| AUTH-06 | B05 name tag/six coats → Jun enters name → preserved invite. | **✓** Real self-profile save; no email-derived name. |
+| AUTH-07 | Organic Account → Sign out → sign-in; next protected route is signed out. | **✓** Real session revocation; live push unsubscribe/account reassignment remains device/provider coverage. |
+| JOIN-01 | Saved-invite sign-in, invalid invite recovery, name setup and neutral pre-join box. | **✓** Saved intent continued to explicit join; storage-denial/TTL/cross-tab variants remain automated coverage. |
+| JOIN-02 | Organic paste sheet → malformed alert → foreign-origin link parsed into local invite → active replay. | **✓** No write until explicit join. |
+| JOIN-03 | Neutral join → Welcome/Open cache; Jun joins open Climbing crew, Ryan replays active join. | **✓** Seeded caches are not cache-creation proof. |
+| JOIN-04 | B07 applicant outside box → Waiting for owner approval. | **✓** Jun's real pending join; reject/reapply completed. Gallery-only pending replay is separate setup. |
+| JOIN-05 | Organic settings packing slip → Approve Jun → active member. | **✓** Owner-only real decision/outbox. Caps/races are SQL tests. |
+| JOIN-06 | Same slip → Reject Jun → no pending row; Jun explicitly reapplies. | **✓** Real rejection/outbox, not a seeded result. |
+| JOIN-07 | Leave → current invite → open rejoin; actual removed Maya → current-secret 403; rotated old link → 404. | **✓** Removal does not revive shares/history permissions. |
+| CACHE-01 | B08/B11 boxes, real counts/asks, desktop previews and phone create/join entry. | **✓** Real Home/navigation; empty/error variants retain tested recovery. |
+| CACHE-02 | B10/B12 representative preview, live name/count/switch, unavailable real bot check. | **blocked** Real create requires Turnstile. No fake bot-passed state or seeded-cache creation claim. |
+| CACHE-03 | B09/B13 contents/member cats, owner/member actions, search → honest no-match result. | **✓** Real authorized cache/item reads and responsive layouts. |
+| CACHE-04 | Organic settings name editor → save; approval switch OFF/ON. | **✓** Real rename/config writes. Cancel/limits/races retain automated coverage. |
+| CACHE-05 | Copy → Invite copied; reset confirmation with Cancel focus → rotate → old-link denial. | **✓** Membership unchanged; selectable fallback retained. |
+| CACHE-06 | Organic Remove Maya confirmation → actual removal → cache denial. | **✓** Her private drill and its other-cache attachment survived; affected pending ask was rejected. |
+| CACHE-07 | Organic Leave confirmation → Home → Jun rejoins open cache. | **✓** Owner has no Leave control; affected-cascade/race matrix remains SQL proof. |
+| ITEM-01 | B21/B23 personal box/slip, real totals; >25 seeded items → Load more. | **✓** Real cursor continuation; seed rows are pagination setup. |
+| ITEM-02 | B24 private New item → Parity ladder → owner detail. | **✓** One real canonical item, subsequently edited/shared/deleted. |
+| ITEM-03 | B14 New item tab → consumable Parity seeds → cache list. | **✓** Real atomic create+first attachment, stock 6. |
+| ITEM-04 | B14 Your items → select Existing proof → Add 1 → cache contents. | **✓** Real idempotent attachment; multi-selection partial variants remain tests. |
+| ITEM-05 | B15/B17 name/photo tile; own library/member detail; removed cache item denied while own/other-cache drill survives. | **✓** No cache permission from retained request history. |
+| ITEM-06 | Organic owner edit with immutable kind → saved title. | **✓** Successful real edit; reserved-stock and type errors remain automated checks. |
+| ITEM-07 | Organic availability editor → Lent out/note saved → available again. | **✓** Real flag changes; the note-clear transient acknowledgement was not separately confirmed. No return/holder model. |
+| ITEM-08 | Shown in → check two caches → same canonical item shared twice. | **✓** Bodyless PUT now works in the real browser; no copied stock. |
+| ITEM-09 | Stop sharing confirmation with Cancel focus → detach only one cache. | **✓** Other attachment and current private photo remained before subsequent global deletion. |
+| ITEM-10 | Delete everywhere confirmation with Cancel focus → library. | **✓** Real item/attachment/history deletion and durable exact/prefix cleanup rows. |
+| PHOTO-01 | Organic owner uploader → real PNG decode/resize/upload → private image natural width 512; optional-create photo failure → Retry photo. | **✓** Real local R2/D1. A browser-blocked upload retained the saved item, then retried successfully without another create; decode/size variants remain tests. |
+| PHOTO-02 | Replace photo → private image natural width 192; owner tile stays usable. | **✓** Real replacement/cleanup; broken-image retry and full permission matrix remain automated coverage. |
+| PHOTO-03 | Organic Account photo sheet → upload then replace. | **✓** Real profile pointer and exact-scope cleanup; no public/signed URL. |
+| PHOTO-04 | Remove photo → cat fallback. | **✓** Real current pointer removed, profile cleanup persisted; last-shared-cache race matrix remains SQL proof. |
+| REQ-01 | B15/B17 cache queue after sending; scope remains current cache only. | **✓** Real pending queue; other-cache/three-party matrix remains SQL proof. |
+| REQ-02 | Reusable ask sheet with no quantity → Ask sent/Done; Lent out disables new ask. | **✓** Real request/outbox, no cancellation or loan lifecycle. |
+| REQ-03 | B18 consumable sheet min 1/max server stock 6 → send 2 → Ask sent. | **✓** Real reservation; races/caps/unknown stock remain tests. |
+| REQ-04 | B16 Requests/phone adaptation, three groups and missing-contact nudge; >25 rows → Load more. | **✓** Real party-only pagination and exact summary badge, not first-page counts. |
+| REQ-05 | Consumable approval sheet: empty message, no reusable switch → approve. | **✓** Real stock 8→6 once plus durable outbox. |
+| REQ-06 | B19 reusable approval: ON toggle, empty message/note → typed private message → approve. | **✓** Real flag/message/decision/outbox; API omission semantics unchanged. |
+| REQ-07 | Separate Organic decline sheet: blank required reason disables action → valid reason → declined. | **✓** Real decision; reservations release without stock deduction. |
+| REQ-08 | B20 focused detail, owner/requester directions, actual chosen email contact; then actual removal. | **✓** History 200/contact 404/item 404 despite another shared cache; retained note remains, zero history item-photo requests. |
+| ACCT-01 | B22/B25 shipping-label profile → name save/cancel; own email stamped PRIVATE. | **✓** Real self-bound save; no auth email edit/prefill. |
+| ACCT-02 | Organic six-platform editor; Text/WhatsApp/Signal/Messenger previews and chosen-email save. | **✓** Real chosen-email destination/save; Instagram-specific rendered preview/native app launch not claimed. |
+| ACCT-03 | Remove contact → missing-contact state. | **✓** Real bodyless DELETE; auth email unaffected. |
+| ACCT-04 | Organic push panel: OFF/disabled and honest unconfigured guidance. | **blocked** VAPID/provider/device setup intentionally absent; enabled/denied/three-device/iOS-installed paths not claimed. |
+| ACCT-05 | Landing/Account support link with configured destination and noopener/noreferrer. | **partial** Link rendering/attributes inspected; external support/payment page deliberately not opened. |
+| SYS-01 | Desktop top tabs, phone bottom tabs, back links, settings/dialog Cancel/Escape, unknown route → Home; API JSON 404. | **partial** Primary routes walked; exhaustive keyboard/modified-click/assistive-technology matrix is separate. |
+| SYS-02 | Fresh B01–B25 day/night native captures; B00 primitive contracts; 320/640/768/1280 library layout, reduced motion. | **partial** No observed body overflow; reduced-motion animations 0. Forced-colors/full device matrix not claimed. |
+| SYS-03 | New flat SVG/PNG/manifest artwork, local SW registration, network-failure library → retry. | **partial** No SW data cache. Installed OS/iOS mask rendering and true installed/offline device behavior unverified. |
+| SYS-04 | Styled read failure/retry, actual guarded share failure with saved canonical item, and complete photo/share retry recovery. | **partial** Saved form locks fields. Separate browser network faults proved Retry photo → first share kept/second failed → Retry sharing → one ID, two caches and loaded private photo. Quota/429/provider-outage variants remain tests. |
+| SYS-05 | Real approved-request deep links and stale/denied reads; durable producer rows inspected. | **partial** Zero delivery attempts/sends; no real email/push delivery, notification-click/device or rescue claim. |
+| SYS-06 | Item/profile replacement/removal/deletion leave durable exact/prefix cleanup intents. | **partial** Actual cleanup rows inspected; local producer-only run intentionally did not execute Cron/Queue recovery. |
+
+### Redesign interpretation and remaining boundaries
+
+- B00–B25 use Caprasimo/Figtree, flat boxes and ID-derived cats, packing slips,
+  top/bottom tabs and native controls; the historical pixel scenery, account-menu
+  primary navigation, walker and 400ms opening delay below are **not current UI**.
+- Exact pending badges use D1 aggregates. Cache ASKS means incoming asks needing
+  the caller's answer there; rooftop previews include the caller; phone + keeps
+  create/join reachable through a menu. Reusable approval starts ON with empty
+  message/note; `/requests/:id` is the focused party-only page. These are the
+  stack's pending-owner-confirmation defaults, not newly approved product rules.
+- Neutral pre-join artwork discloses no cache name/roster/count/inviter. New-cache
+  color is representative until the server returns its UUID. Real data/kinds,
+  honest loading/empty/error states, private images and current bot/push setup
+  override illustrative populated samples. No fake OS clock/battery is shipped.
+- Support lives only in Account and the public landing footer, never a generic
+  in-app footer. The final lead review requested removal of the inherited global
+  footer; native Home/cache/library/Requests frames were corrected accordingly.
+- Accessibility ink exceptions retain readable contrast on accent buttons;
+  landing avoids the export's low-contrast hover cascade. Its night version is a
+  token adaptation, not a separate authored board. Footer support target is 44px
+  instead of the reference's 42px. Lead visual review approved landing/icons.
+- Historical D-01 is fixed before this stack and real attach/detach/delete,
+  removal and contact removal now complete. D-02's invite CTA is explicitly
+  guidance, not a paste field; paste remains on Home. D-03's Account alignment
+  was replaced in Organic 2. Historical failure receipts remain below for audit.
+- Final release scope/device/provider proof, independent security review and
+  exact revision/environment release approval remain separate gates. No blocked
+  external setup was silently bypassed to label a flow green.
+
+## Historical pre-redesign scope and evidence
 
 - Code baseline: `f8bc19090c3006cffb570eeb6197a3af8a3760f2` (`origin/master`).
   Browser walkthrough: 2026-10-16 UTC, desktop Chromium via the installed
