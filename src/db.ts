@@ -129,9 +129,54 @@ export function setDisplayName(db: D1Database, userId: string, name: string) {
   return updateProfile(db,userId,{display_name:name})
 }
 
-export function listMyCaches(db: D1Database, userId: string) {
-  return db.prepare(`SELECT c.id, c.name FROM caches c JOIN memberships m ON m.cache_id = c.id WHERE m.user_id = ? AND m.status = 'active' AND c.join_secret IS NOT NULL ORDER BY c.created_at DESC, c.id`)
-    .bind(userId).all<{ id: string; name: string }>()
+export async function listMyCaches(db: D1Database, userId: string) {
+  const rows = await db.prepare(`SELECT c.id,c.name,owner.user_id AS owner_id,c.requires_approval,
+    (SELECT COUNT(*) FROM memberships WHERE cache_id=c.id AND status='active') AS active_member_count,
+    (SELECT COUNT(*) FROM item_caches a JOIN items i ON i.id=a.item_id
+      JOIN memberships member ON member.cache_id=a.cache_id AND member.user_id=i.owner_id AND member.status='active'
+      WHERE a.cache_id=c.id) AS attached_item_count,
+    (SELECT COUNT(*) FROM requests r JOIN items i ON i.id=r.item_id
+      WHERE r.cache_id=c.id AND i.owner_id=m.user_id AND r.status='pending' AND ${requestContext}) AS pending_answer_count,
+    (SELECT json_group_array(json_object('user_id',preview.user_id,'display_name',preview.display_name,
+      'cat_coat',preview.cat_coat,'profile_photo_version',preview.photo_path)) FROM (
+        SELECT member.user_id,u.display_name,u.cat_coat,p.photo_path FROM memberships member
+        JOIN user u ON u.id=member.user_id LEFT JOIN user_photos p ON p.user_id=u.id
+        WHERE member.cache_id=c.id AND member.status='active'
+        ORDER BY (member.user_id=m.user_id) DESC,member.created_at,member.user_id LIMIT 3
+      ) preview) AS members_json
+    FROM caches c JOIN memberships m ON m.cache_id=c.id AND m.user_id=? AND m.status='active'
+    JOIN memberships owner ON owner.cache_id=c.id AND owner.role='owner' AND owner.status='active'
+    WHERE c.join_secret IS NOT NULL ORDER BY c.created_at DESC,c.id`).bind(userId)
+    .all<{id:string;name:string;owner_id:string;requires_approval:number;active_member_count:number;attached_item_count:number;pending_answer_count:number;members_json:string}>()
+  return {...rows,results:rows.results.map(({members_json,requires_approval,...row})=>({
+    ...row,requires_approval:requires_approval===1,
+    member_preview:(JSON.parse(members_json) as {user_id:string;display_name:string|null;cat_coat:CatCoat|null;profile_photo_version:string|null}[])
+      .map(member=>({...member,profile_photo_version:photoVersion(member.profile_photo_version)})),
+  }))}
+}
+
+export async function homeSummary(db: D1Database, userId: string) {
+  // Current-context previews never turn retained request history into a cache grant.
+  const incoming = `FROM requests r JOIN items i ON i.id=r.item_id
+    JOIN user person ON person.id=r.requester_id LEFT JOIN user_photos p ON p.user_id=person.id
+    WHERE i.owner_id=? AND r.status='pending' AND ${requestContext}`
+  const [counts,previews,outgoing] = await db.batch([
+    db.prepare(`SELECT (SELECT COUNT(*) FROM items WHERE owner_id=?) AS owned_item_count,
+      (SELECT COUNT(*) ${incoming}) AS pending_answer_count`).bind(userId,userId),
+    db.prepare(`SELECT r.id,r.cache_id,r.item_id,i.title AS item_title,r.quantity,r.created_at,
+      person.id AS user_id,person.display_name,person.cat_coat,p.photo_path ${incoming}
+      ORDER BY r.created_at DESC,r.id DESC LIMIT 2`).bind(userId),
+    db.prepare(`SELECT r.id,r.cache_id,r.item_id,i.title AS item_title,r.status,r.created_at,
+      person.id AS user_id,person.display_name,person.cat_coat,p.photo_path
+      FROM requests r JOIN items i ON i.id=r.item_id JOIN user person ON person.id=i.owner_id
+      LEFT JOIN user_photos p ON p.user_id=person.id
+      WHERE r.requester_id=? AND ${requestContext} ORDER BY r.created_at DESC,r.id DESC LIMIT 3`).bind(userId),
+  ])
+  type Preview = {id:string;cache_id:string;item_id:string;item_title:string;user_id:string;display_name:string|null;cat_coat:CatCoat|null;photo_path:string|null;created_at:number}
+  const display = <T extends Preview>({photo_path,...row}:T) => ({...row,profile_photo_version:photoVersion(photo_path)})
+  return {...counts.results[0] as {owned_item_count:number;pending_answer_count:number},
+    incoming:(previews.results as (Preview & {quantity:number|null})[]).map(display),
+    outgoing:(outgoing.results as (Preview & {status:'pending'|'approved'|'rejected'})[]).map(display)}
 }
 
 export type PushRow = { id: string; user_id: string; endpoint: string; p256dh: string; auth: string }
@@ -277,13 +322,16 @@ export async function createCache(db: D1Database, ownerId: string, name: string,
 export async function cacheDetail(db: D1Database, cacheId: string, userId: string) {
   const [cache, members] = await db.batch([
     db.prepare(cacheRead).bind(userId, cacheId),
-    db.prepare(`SELECT m.user_id,u.display_name,u.cat_coat FROM memberships m JOIN user u ON u.id=m.user_id
+    db.prepare(`SELECT m.user_id,u.display_name,u.cat_coat,
+      (SELECT COUNT(*) FROM item_caches a JOIN items i ON i.id=a.item_id
+        WHERE a.cache_id=m.cache_id AND i.owner_id=m.user_id) AS attached_item_count
+      FROM memberships m JOIN user u ON u.id=m.user_id
       JOIN memberships caller ON caller.cache_id=m.cache_id AND caller.user_id=? AND caller.status='active'
       JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
       WHERE m.cache_id=? AND m.status='active' ORDER BY m.created_at,m.user_id`).bind(userId, cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  const rows = members.results as {user_id:string;display_name:string|null;cat_coat:CatCoat|null}[]
+  const rows = members.results as {user_id:string;display_name:string|null;cat_coat:CatCoat|null;attached_item_count:number}[]
   const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.user_id))
   return {...cacheInfo(cache.results[0] as CacheRow),members:rows.map(row=>({...row,profile_photo_version:photos.get(row.user_id) ?? null}))}
 }
@@ -447,10 +495,14 @@ export async function libraryPage(db: D1Database, userId: string, after: string 
 export async function cacheItems(db: D1Database, cacheId: string, userId: string) {
   const [cache, items] = await db.batch([
     db.prepare(cacheRead).bind(userId, cacheId),
-    db.prepare(`${itemRead} WHERE ${itemAccess} ORDER BY i.created_at DESC,i.id`).bind(cacheId, userId, userId, cacheId),
+    db.prepare(`SELECT visible.*,(SELECT COUNT(*) FROM requests r
+      JOIN memberships requester ON requester.cache_id=r.cache_id AND requester.user_id=r.requester_id AND requester.status='active'
+      WHERE r.item_id=visible.id AND r.cache_id=? AND r.status='pending') AS pending_count
+      FROM (${itemRead} WHERE ${itemAccess}) visible ORDER BY visible.created_at DESC,visible.id`)
+      .bind(cacheId,cacheId,userId,userId,cacheId),
   ])
   if (!cache.results.length) throw new HttpError(404, 'not_found')
-  const rows = items.results as ItemRow[]
+  const rows = items.results as (ItemRow & {pending_count:number})[]
   const photos = await profilePhotoVersions(db,userId,rows.map(row=>row.owner_id))
   return rows.map(row=>({...itemInfo(row,cacheId),owner_photo_version:photos.get(row.owner_id) ?? null}))
 }

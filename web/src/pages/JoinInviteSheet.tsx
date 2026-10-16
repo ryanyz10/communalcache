@@ -12,7 +12,7 @@ export function JoinInviteSheet({ dialog }: { dialog: RefObject<HTMLDialogElemen
     dialog.current?.close()
     navigate(`/join/${token}`)
   }
-  return <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="join-invite-heading" onClose={()=>{setInput('');setError('')}}>
+  return <dialog ref={dialog} className="cc-sheet cc-invite-paste lg:w-[440px] lg:p-6" aria-labelledby="join-invite-heading" onClose={()=>{setInput('');setError('')}}>
     <div className="flex items-center justify-between gap-3"><h2 id="join-invite-heading" className="text-xl font-semibold">Join with an invite</h2><button type="button" className="cc-outline min-h-11" onClick={()=>dialog.current?.close()}>Close</button></div>
     <p className="mt-3 text-sm text-slate-600">Paste an invite link or code from someone in the cache.</p>
     <form className="mt-4 space-y-3" onSubmit={submit}>
