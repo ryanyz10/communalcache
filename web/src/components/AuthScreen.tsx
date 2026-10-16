@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BoxMark, PixelHorizon } from './PixelArt'
+import { BoxMark } from './Box'
 
 export function AuthScreen({ children }: { children: ReactNode }) {
   return <main className="cc-auth lg:grid lg:max-w-none lg:grid-cols-2 lg:bg-none lg:p-0">
@@ -12,7 +12,6 @@ export function AuthScreen({ children }: { children: ReactNode }) {
         <li><span aria-hidden="true">🙋</span> Ask for something in one tap</li>
         <li><span aria-hidden="true">🤝</span> Hand it off in person</li>
       </ul></div>
-      <PixelHorizon tall kind="boxes" entries={['Share','Borrow','Lend'].map(name=>({id:name,name}))} />
     </section>
     <div className="cc-auth-pane contents lg:flex lg:min-h-dvh lg:items-center lg:justify-center lg:bg-white lg:px-12 lg:py-16">
       <div className="cc-auth-form contents lg:flex lg:w-full lg:flex-col">{children}</div>
@@ -22,7 +21,7 @@ export function AuthScreen({ children }: { children: ReactNode }) {
 
 export function BrandMark() {
   return <div aria-hidden="true" className="cc-home-mark flex size-14 shrink-0 items-center justify-center rounded-2xl">
-    <BoxMark px={3} />
+    <BoxMark size={45} />
   </div>
 }
 

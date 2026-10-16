@@ -29,13 +29,13 @@ export function ProfilePhotoControls() {
   return <>
     <div className="cc-row">
       <Avatar userId={me.id} name={me.display_name ?? 'You'} photoVersion={me.profile_photo_version} size={48} />
-      <div className="min-w-0 flex-1"><p className="font-semibold">Profile photo</p><p className="text-sm text-slate-600">{me.profile_photo_version ? 'Shared privately with people in your active caches.' : 'Initials are shown when there is no photo.'}</p></div>
+      <div className="min-w-0 flex-1"><p className="font-semibold">Profile photo</p><p className="text-sm text-slate-600">{me.profile_photo_version ? 'Shared privately with people in your active caches.' : 'Your cat shows until you add a photo.'}</p></div>
       <button type="button" className="min-h-11 shrink-0 text-sm underline" aria-haspopup="dialog" aria-controls="profile-photo-sheet" onClick={()=>{change.reset();dialog.current?.showModal()}}>Change photo</button>
     </div>
     <dialog ref={dialog} id="profile-photo-sheet" className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="profile-photo-heading" onCancel={event=>{if(change.isPending)event.preventDefault()}} onClose={()=>{setFile(null);if(input.current)input.current.value=''}}>
       <div className="flex items-center justify-between gap-3"><h2 id="profile-photo-heading" className="text-xl font-semibold">Profile photo</h2><button type="button" autoFocus disabled={change.isPending} className="cc-outline min-h-11" onClick={()=>dialog.current?.close()}>Close</button></div>
       <div className="my-5 flex justify-center"><Avatar userId={me.id} name={me.display_name ?? 'You'} photoVersion={me.profile_photo_version} size={110} /></div>
-      <p className="text-sm text-slate-600">Only you and people who share an active cache with you can see it. Initials when there is none.</p>
+      <p className="text-sm text-slate-600">Only you and people who share an active cache with you can see it. Your cat when there is none.</p>
       <form className="mt-4 space-y-3" onSubmit={submit}>
         <label htmlFor="profile-photo-file" className="block text-sm font-medium">Choose a photo</label>
         <input ref={input} id="profile-photo-file" type="file" accept="image/jpeg,image/png,image/webp" disabled={change.isPending} onChange={event=>{setFile(event.target.files?.[0] ?? null);change.reset()}} className="block w-full rounded-md border border-slate-300 p-2" />
