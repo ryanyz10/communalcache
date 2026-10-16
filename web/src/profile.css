@@ -162,6 +162,14 @@
 .cc-account-push #push-help { margin: 0; color: var(--cc-sub); font: 400 12px var(--font-body); }
 .cc-push-title-desktop { display: none; }
 .cc-account-push > p, .cc-account-push > div:not(.cc-push-summary) { font-size: 12px; }
+/* Segmented control: native radios under a chip track; selected segment matches the switch's on colour. */
+.cc-peek-seg { display: flex; margin-top: 12px; padding: 3px; border-radius: 999px; background: var(--cc-chip); }
+.cc-peek-seg label { position: relative; flex: 1; display: flex; }
+.cc-peek-seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.cc-peek-seg span { flex: 1; padding: 10px 8px; border-radius: 999px; color: var(--cc-fg); font: 600 13px var(--font-body); text-align: center; white-space: nowrap; }
+.cc-peek-seg input:checked + span { background: var(--cc-accent); color: var(--cc-on-accent); }
+.cc-peek-seg input:focus-visible + span { outline: 2px solid var(--cc-accent); outline-offset: 2px; }
+.cc-account-peek #peek-help { margin: 0; color: var(--cc-sub); font: 400 12px var(--font-body); }
 .cc-account-support { order: 3; display: flex; align-items: center; gap: 10px; padding: 14px 0; border-bottom: 1px dashed var(--cc-line); }
 .cc-account-support > div { flex: 1; min-width: 0; }
 .cc-account-support h2 { margin: 0; font: 600 15px var(--font-body) !important; }
@@ -271,7 +279,7 @@
   .cc-contact-summary .cc-text-action { min-height: 34px; font-size: 13px; }
   .cc-account-push { padding: 20px 24px; border: 0; border-radius: 32px; background: var(--cc-card); }
   .cc-account-push h2 { font: 400 20px var(--font-heading) !important; }
-  .cc-account-push #push-help { font-size: 13px; }
+  .cc-account-push #push-help, .cc-account-peek #peek-help { font-size: 13px; }
   .cc-push-title-desktop { display: inline; }
   .cc-push-title-mobile { display: none; }
   .cc-account-session { order: 3; justify-content: space-between; padding: 16px 24px; border-radius: 32px; background: var(--cc-card); }
