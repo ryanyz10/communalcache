@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { Avatar } from '../components/Avatar'
-import { AccountMenu } from '../components/AccountMenu'
+import { AppHeader } from '../components/AppHeader'
 import { AccountPage } from '../pages/AccountPage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { ItemPage } from '../pages/ItemPages'
@@ -34,7 +34,7 @@ function render(element: ReactElement, options: {version?: string|null;route?:st
   return markup
 }
 
-it('uses Unicode-safe initials and identity/version-specific same-origin image paths', () => {
+it('keeps identity/version-specific private image paths and uses id-derived cats for avatar fallback', () => {
   expect(initials('  Ryan Zhou ')).toBe('RZ')
   expect(initials('Priya')).toBe('P')
   expect(initials('😀 Neighbor')).toBe('😀N')
@@ -44,7 +44,8 @@ it('uses Unicode-safe initials and identity/version-specific same-origin image p
   expect(profilePhotoSrc(owner,'version')).not.toBe(profilePhotoSrc(member,'version'))
   expect(profilePhotoSrc(owner,'version')).not.toBe(profilePhotoSrc(owner,'new-version'))
   const fallback = renderToStaticMarkup(createElement(Avatar,{userId:owner,name:'Ryan Zhou'}))
-  expect(fallback).toContain('RZ')
+  expect(fallback).toContain('cc-cat-peek')
+  expect(fallback).toContain('data-coat=')
   expect(fallback).not.toContain('<img')
   const photo = renderToStaticMarkup(createElement(Avatar,{userId:owner,name:'Ryan Zhou',photoVersion:'owner-photo'}))
   expect(photo).toContain(`src="/api/users/${owner}/photo?v=owner-photo"`)
@@ -53,10 +54,10 @@ it('uses Unicode-safe initials and identity/version-specific same-origin image p
   expect(photo).not.toMatch(/blob:|r2\.dev|Authorization/)
 })
 
-it('renders labeled Account Change/Choose/Remove controls in a native neutral-style sheet with initials fallback', () => {
+it('renders labeled Account Change/Choose/Remove controls in a native sheet with cat fallback', () => {
   const fetch = vi.spyOn(globalThis,'fetch')
   const markup = render(createElement(AccountPage),{version:null})
-  for(const copy of ['Profile photo','Change photo','Choose a photo','Remove photo','Save photo','Only you and people who share an active cache','Initials when there is none'])expect(markup).toContain(copy)
+  for(const copy of ['Profile photo','Change photo','Choose a photo','Remove photo','Save photo','Only you and people who share an active cache','Your cat when there is none'])expect(markup).toContain(copy)
   expect(markup.match(/<dialog\b/g)).toHaveLength(2)
   expect(markup).toContain('aria-labelledby="profile-photo-heading"')
   expect(markup).toContain('aria-haspopup="dialog"')
@@ -72,7 +73,7 @@ it('renders labeled Account Change/Choose/Remove controls in a native neutral-st
 
 it('uses guarded photo metadata in the header, members, request parties and item owner without another email', () => {
   const ownSource = `/api/users/${owner}/photo?v=owner-photo`, otherSource = `/api/users/${member}/photo?v=member-photo`
-  expect(render(createElement(AccountMenu,{name:'Ryan Zhou',count:0}))).toContain(ownSource)
+  expect(render(createElement(AppHeader))).toContain(ownSource)
   const members = render(createElement(CacheSettingsPage),{route:'/caches/:cacheId/settings',path:`/caches/${cacheId}/settings`})
   expect(members).toContain(ownSource)
   expect(members).toContain(otherSource)

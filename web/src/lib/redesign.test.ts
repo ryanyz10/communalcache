@@ -48,7 +48,7 @@ it('renders accessible header destinations, avatar and a first-page-only badge, 
   const markup = render(createElement(AppHeader), { pages })
   expect(markup).toContain('aria-label="Home"')
   expect(markup).toContain('href="/account"')
-  expect(markup).toContain('aria-label="Account menu, 1 request needs your answer"')
+  expect(markup).toContain('aria-label="Account"')
   expect(markup).toContain('Requests, 1 pending incoming on the first page')
   expect(markup).not.toContain('2 pending incoming')
   expect(markup).not.toContain('private@example.test')
@@ -60,7 +60,7 @@ it('renders accessible header destinations, avatar and a first-page-only badge, 
 it('restores the pending request badge with the direct-D1 aggregate page', () => {
   const markup = render(createElement(AppHeader))
   expect(markup).toContain('pending incoming on the first page')
-  expect(markup).toContain('1 request needs your answer')
+  expect(markup).toContain('Requests, 1 pending incoming on the first page')
 })
 
 it('renders caches and a library link on home without a request preview, account controls or invented counts', () => {
