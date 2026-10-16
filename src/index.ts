@@ -1,6 +1,6 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, libraryPage, listMyCaches, homeSummary, removeCacheMember, requestDetail, requestsPage, savePush, updateProfile, updateCache, updateItem, type Profile, ownContact, saveContact, removeContact, requestContact } from './db'
+import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, invitePreview, libraryPage, listMyCaches, homeSummary, removeCacheMember, requestDetail, requestsPage, savePush, updateProfile, updateCache, updateItem, type Profile, ownContact, saveContact, removeContact, requestContact } from './db'
 import { contactInput } from './contacts'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
@@ -96,7 +96,7 @@ async function dispatch(request: Request, env: Env) {
       turnstile_site_key: env.TURNSTILE_SITE_KEY,
     })
   }
-  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/leave|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
+  const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/invite\/preview|\/leave|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
   const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/requests)?)?$/i)
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
   const memberRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/members\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)
@@ -111,7 +111,7 @@ async function dispatch(request: Request, env: Env) {
   const ownPhoto = path === '/api/me/photo'
   const photoRoute = ownPhoto || !!profilePhotoRoute || itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
   if (path !== '/api/me' && path !== '/api/me/summary' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute && !ownPhoto && !profilePhotoRoute && !ownContactRoute) throw new HttpError(404, 'not_found')
-  const methods = path === '/api/me/summary' ? ['GET'] : ownContactRoute ? (path.endsWith('/preview') ? ['POST'] : ['GET','PUT','DELETE']) : ownRequestRoute && (!ownRequestRoute[2] || ownRequestRoute[2] === 'contact') ? ['GET'] : ownPhoto ? ['GET','POST','DELETE'] : profilePhotoRoute ? ['GET'] : libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
+  const methods = cacheRoute?.[2] === '/invite/preview' || path === '/api/me/summary' ? ['GET'] : ownContactRoute ? (path.endsWith('/preview') ? ['POST'] : ['GET','PUT','DELETE']) : ownRequestRoute && (!ownRequestRoute[2] || ownRequestRoute[2] === 'contact') ? ['GET'] : ownPhoto ? ['GET','POST','DELETE'] : profilePhotoRoute ? ['GET'] : libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
     : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute || ownRequestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
@@ -221,6 +221,7 @@ async function dispatch(request: Request, env: Env) {
     return json(await createCache(env.DB, profile.id, changes.name, changes.requires_approval ?? false), 201)
   }
   const cacheId = cacheRoute![1], action = cacheRoute![2]
+  if (action === '/invite/preview') return json(await invitePreview(env.DB,cacheId,profile.id,request.headers.get('X-Invite-Secret') ?? ''))
   if (action === '/join') {
     const body = await readBody(request)
     if (typeof body.secret !== 'string') throw new HttpError(400, 'invalid_secret')

@@ -13,6 +13,8 @@ This section supersedes the **historical pre-redesign observations below** for
 screens and walk status. All 54 journeys were revisited on `feat/organic-parity`,
 stacked on Organic PRs #56–#60. A check means the stated primary local journey,
 not every race, device or provider variant. This is not security/release approval.
+The approved invite-preview follow-up below updates the JOIN interpretation;
+the other walkthrough results remain the Organic parity baseline.
 
 - Real Chromium, native 390/1280 layouts and system day/night/reduced motion;
   additional library checks at 320/640/768. Local Worker/D1/private R2 at
@@ -44,6 +46,41 @@ not every race, device or provider variant. This is not security/release approva
   captures omit the export's 34px fake OS row. Landing comparisons include native
   390/1280/1440 plus hover and night adaptation. Screenshots stay out of git.
 
+### Approved invite-preview follow-up
+
+The owner's 2026 chat decision, **“Invite page before joining”**, supersedes the
+neutral pre-join default. After sign-in/name setup, the valid-current-secret page
+shows **only the cache name, exact active count and up to five cat trait tuples**,
+with a true +N and YOU slot. The uppercase eyebrow says “An invite to <cache
+name>”; the main heading stays “There's room in the box for you.” and the greeting
+uses only the caller's own chosen name. The count label says “neighbors”. No
+inviter, member names, IDs/hashes/seeds, emails, photos, things count or approval
+stamp/configuration is returned or inferred.
+
+`GET /api/caches/{id}/invite/preview` requires a D1-backed cookie and carries the
+secret in `X-Invite-Secret`, not an API URL. One guarded SQL read checks the current
+secret/active owner and removed denial, then returns only
+`{name,active_member_count,members:[{coat,pattern,folded,tip,delay}]}`. Shared
+`shared/cats.ts` derives exactly the same cats the signed-in app renders; no
+per-cache identity seed changes their appearance. No preview creates a membership
+or notification, grants item/profile-photo access or authorizes a later join.
+The explicit POST still rechecks all existing secret/config/quota guards. Active
+and pending members still tap Ask to join; no automatic redirect/join was added.
+
+Follow-up local receipts are uncommitted in `/tmp/cc-redesign/invite-preview/`.
+This is another isolated producer-only local Worker/D1 with a fresh dummy-only
+`.dev.vars`, no Queue consumer/Cron and no real mail/push. Signed-out UI made zero
+preview requests; authenticated preview200 returned only the allowlist while
+cache/items/profile-photo reads stayed404. Cancel cleared both intent stores.
+A real gated ask stayed outside the roof/count until owner approval; pending and
+active replays remained explicit. After approval, real preview traits equaled
+traits derived from the authorized member read. Open join completed separately.
+Owner invite rotation between a loaded preview and Ask made the write/read fail;
+previously loaded name/count/cats disappeared and Join became disabled. Removed
+current-secret403, stale-secret404 and left→pending rejoin were walked. The four
+native source/app comparisons are `compare-invite-{phone,wide}-{day,night}.png`
+(B02 desktop/B06 phone; B05 is onboarding, not the invite board).
+
 ### Every-flow walk ledger
 
 **✓** = stated primary journey completed locally; **partial** = stated portion
@@ -60,13 +97,13 @@ races/errors; a test is not an unperformed browser step.
 | AUTH-05 | Organic six-box/native code input, invalid-code alert and successful name-setup destination in fixture. | **blocked** Real OTP sending/expiry/rotation needs configured bot/email; browser redemption here was fixture-only. |
 | AUTH-06 | B05 name tag/six coats → Jun enters name → preserved invite. | **✓** Real self-profile save; no email-derived name. |
 | AUTH-07 | Organic Account → Sign out → sign-in; next protected route is signed out. | **✓** Real session revocation; live push unsubscribe/account reassignment remains device/provider coverage. |
-| JOIN-01 | Saved-invite sign-in, invalid invite recovery, name setup and neutral pre-join box. | **✓** Saved intent continued to explicit join; storage-denial/TTL/cross-tab variants remain automated coverage. |
+| JOIN-01 | Saved-invite sign-in/name setup → current-secret name/count/cat preview; Cancel clears both intent stores. | **✓** Follow-up signed-out page made no preview read; authenticated allowlist/Cancel walked. Storage-denial/TTL/cross-tab variants remain tests. |
 | JOIN-02 | Organic paste sheet → malformed alert → foreign-origin link parsed into local invite → active replay. | **✓** No write until explicit join. |
-| JOIN-03 | Neutral join → Welcome/Open cache; Jun joins open Climbing crew, Ryan replays active join. | **✓** Seeded caches are not cache-creation proof. |
-| JOIN-04 | B07 applicant outside box → Waiting for owner approval. | **✓** Jun's real pending join; reject/reapply completed. Gallery-only pending replay is separate setup. |
-| JOIN-05 | Organic settings packing slip → Approve Jun → active member. | **✓** Owner-only real decision/outbox. Caps/races are SQL tests. |
+| JOIN-03 | Valid preview → explicit Ask to join → Welcome/Open cache; open join and active replay. | **✓** Follow-up open admission and active replay walked; zero join requests before tapping. Preview itself is not a membership grant. |
+| JOIN-04 | Valid preview → B07 applicant outside box → Waiting for owner approval. | **✓** Follow-up real gated ask/replay kept count6 and cache404 until owner decision. Baseline Jun reject/reapply remains recorded. |
+| JOIN-05 | Organic settings packing slip → owner approval → active member. | **✓** Baseline Jun and follow-up Ryan approval completed; count rose6→7 and shared preview/app traits matched. Caps/races remain SQL tests. |
 | JOIN-06 | Same slip → Reject Jun → no pending row; Jun explicitly reapplies. | **✓** Real rejection/outbox, not a seeded result. |
-| JOIN-07 | Leave → current invite → open rejoin; actual removed Maya → current-secret 403; rotated old link → 404. | **✓** Removal does not revive shares/history permissions. |
+| JOIN-07 | Left/current invite preview → explicit rejoin; removed/current-secret preview403; stale-secret404. | **✓** Follow-up left→pending walked; removed/rotated denial showed no old preview fields. Loaded-preview→rotation→Ask failed and hid stale metadata. Baseline actual-removal preservation proof remains unchanged. |
 | CACHE-01 | B08/B11 boxes, real counts/asks, desktop previews and phone create/join entry. | **✓** Real Home/navigation; empty/error variants retain tested recovery. |
 | CACHE-02 | B10/B12 representative preview, live name/count/switch, unavailable real bot check. | **blocked** Real create requires Turnstile. No fake bot-passed state or seeded-cache creation claim. |
 | CACHE-03 | B09/B13 contents/member cats, owner/member actions, search → honest no-match result. | **✓** Real authorized cache/item reads and responsive layouts. |
@@ -118,10 +155,13 @@ races/errors; a test is not an unperformed browser step.
   create/join reachable through a menu. Reusable approval starts ON with empty
   message/note; `/requests/:id` is the focused party-only page. These are the
   stack's pending-owner-confirmation defaults, not newly approved product rules.
-- Neutral pre-join artwork discloses no cache name/roster/count/inviter. New-cache
-  color is representative until the server returns its UUID. Real data/kinds,
-  honest loading/empty/error states, private images and current bot/push setup
-  override illustrative populated samples. No fake OS clock/battery is shipped.
+- The approved authenticated current-invite exception now reveals only cache
+  name, active count and derived cat tuples, as described above; it does not
+  reveal an inviter, member names or things. Neutral loading/denial remains when
+  the preview is unvalidated/unavailable. New-cache color is representative until
+  the server returns its UUID. Real data/kinds, honest loading/empty/error states,
+  private images and current bot/push setup override illustrative samples. No fake
+  OS clock/battery is shipped.
 - Support lives only in Account and the public landing footer, never a generic
   in-app footer. The final lead review requested removal of the inherited global
   footer; native Home/cache/library/Requests frames were corrected accordingly.

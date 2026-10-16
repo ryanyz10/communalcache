@@ -5,7 +5,7 @@ import { catTraits, COATS, type CatCoat } from '../lib/cats'
 export function CoatPicker({ userId, value, onChange, disabled = false, label = 'Your cat', names = false }: {
   userId: string; value?: CatCoat | null; onChange: (coat: CatCoat) => void; disabled?: boolean; label?: string; names?: boolean
 }) {
-  const group = useId(), selected = catTraits(userId,value).coat.key
+  const group = useId(), selected = catTraits(userId,value).coat
   return <fieldset disabled={disabled} className={`cc-coat-picker${names ? ' cc-coat-picker-names' : ''}`}>
     <legend>{label}</legend>
     <div className="cc-coat-options">{COATS.map(coat => <label key={coat.key} className="cc-coat-option">

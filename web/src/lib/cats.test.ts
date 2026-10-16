@@ -11,9 +11,9 @@ it('matches unsigned FNV-1a vectors and the exported Mia cat, using ids rather t
   expect(catHash('')).toBe(2166136261)
   expect(catHash('hello')).toBe(0x4f9f2cab)
   expect(catHash('Mia')).toBe(596915366)
-  expect(catTraits('Mia')).toEqual({ coat: COATS[2], pattern: 'Solid', folded: false, tip: false, delay: 2.5 })
+  expect(catTraits('Mia')).toEqual({ coat: 'dusk', pattern: 'Solid', folded: false, tip: false, delay: 2.5 })
   expect(catHash('ryan@example.com')).toBe(0x99ea2f1a)
-  expect(catTraits('ryan@example.com')).toEqual({ coat: COATS[4], pattern: 'Tabby', folded: false, tip: false, delay: .7 })
+  expect(catTraits('ryan@example.com')).toEqual({ coat: 'ash', pattern: 'Tabby', folded: false, tip: false, delay: .7 })
   expect(catTraits('Mia')).toEqual(catTraits('Mia'))
   expect(catTraits('mia')).not.toEqual(catTraits('Mia'))
 })
@@ -22,11 +22,11 @@ it('keeps all 120 trait combinations deterministic and bounded', () => {
   const combinations = new Set<string>()
   for (let index = 0; index < 10_000; index++) {
     const t = catTraits(`user-${index}`)
-    expect(COATS).toContain(t.coat)
+    expect(COATS.map(coat => coat.key)).toContain(t.coat)
     expect(PATTERNS).toContain(t.pattern)
     expect(t.delay).toBeGreaterThanOrEqual(0)
     expect(t.delay).toBeLessThan(3)
-    combinations.add([t.coat.key, t.pattern, t.folded, t.tip].join(':'))
+    combinations.add([t.coat, t.pattern, t.folded, t.tip].join(':'))
   }
   expect(combinations.size).toBe(120)
 })
@@ -50,6 +50,16 @@ it('ports all three SVG poses, decorative semantics, exact geometry and source m
   const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
   expect(css).toContain('@media (prefers-reduced-motion: reduce) { .cc-cat * { animation: none !important; } }')
   for (const old of ['cc-walking-cat', 'cc-lid-open', 'cc-cat-pop', 'cc-drift']) expect(css).not.toContain(old)
+})
+
+it('renders the same cat from shared preview traits as from the authenticated user id and chosen coat', () => {
+  for (const coat of COATS) for (const pose of ['sit','loaf','peek'] as const) for (const motion of [true,false]) {
+    const props = { pose, motion }
+    const signedIn = renderToStaticMarkup(createElement(Cat, { userId: 'Mia', coat: coat.key, ...props }))
+    const preview = renderToStaticMarkup(createElement(Cat, { traits: catTraits('Mia',coat.key), ...props }))
+    expect(preview).toBe(signedIn)
+    expect(preview).not.toContain('Mia')
+  }
 })
 
 it('draws stable cache-colored labelled boxes without turning a cache into a person or delaying links', () => {
