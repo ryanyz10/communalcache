@@ -3,7 +3,8 @@ import { Link, Navigate, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import { askedWhen, greeting, incomingDescription, useHomeSummary, type CacheInfo, type CacheSummary } from '../lib/caches'
+import { askedWhen, cacheDetailQuery, cacheItemsQuery, greeting, incomingDescription, useHomeSummary, type CacheInfo, type CacheSummary } from '../lib/caches'
+import { openCacheWithPeek } from '../components/peekOverlay'
 import { useLibrary } from '../lib/items'
 import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
 import { OnboardingPage } from './OnboardingPage'
@@ -56,7 +57,7 @@ export function HomePage() {
       {caches.isError && <div className="cc-read-error"><p role="alert">{errorMessage(caches.error)} Previously loaded caches may be out of date.</p><button type="button" onClick={()=>void caches.refetch()}>Try caches again</button></div>}
       {!!caches.data?.length && <ul className="cc-home-boxes">{caches.data.map(cache=><li key={cache.id}>
         <MemberCats members={cache.member_preview ?? []} total={cache.active_member_count} />
-        <Link to={`/caches/${cache.id}`} className="cc-labelled-cache">
+        <Link to={`/caches/${cache.id}`} className="cc-labelled-cache" onPointerDown={()=>{ void client.prefetchQuery(cacheDetailQuery(cache.id)); void client.prefetchQuery(cacheItemsQuery(cache.id)) }} onClick={event=>openCacheWithPeek(event,cache.id,()=>navigate(`/caches/${cache.id}`))}>
           <Box id={cache.id} label={cache.name}><span className="cc-box-counts">{cache.active_member_count} {cache.active_member_count===1?'neighbor':'neighbors'} · {cache.attached_item_count} {cache.attached_item_count===1?'thing':'things'}</span></Box>
           {!!cache.pending_answer_count && <span className="cc-box-asks"><Stamp tone="warn">{cache.pending_answer_count} {cache.pending_answer_count===1?'ask':'asks'}</Stamp></span>}
         </Link>
