@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
@@ -6,6 +6,8 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
 import { invalidateRequestViews, useRequests, type ItemRequest } from '../lib/requests'
 import { RequestStatus } from '../components/RequestStatus'
+import { Stamp } from '../components/Stamp'
+import { askedWhen } from '../lib/caches'
 import { Avatar } from '../components/Avatar'
 import { OnboardingPage } from './OnboardingPage'
 import { ContactLink } from '../components/ContactLink'
@@ -72,7 +74,7 @@ export function RequestCard({ request, callerId }: { request: ItemRequest; calle
   </li>
 }
 
-export function ItemRequests({ item }: { item: Item }) {
+export function ItemRequests({ item, compact = false, askOpen = false }: { item: Item; compact?: boolean; askOpen?: boolean }) {
   const { me } = useAuth()
   const client = useQueryClient()
   const [quantity, setQuantity] = useState('1')
@@ -81,17 +83,24 @@ export function ItemRequests({ item }: { item: Item }) {
     mutationFn: () => apiFetch<ItemRequest>(`/api/caches/${item.cache_id}/items/${item.id}/requests`, { body: { quantity: item.is_consumable ? Number(quantity) : null } }),
     onSettled: () => invalidateRequestViews(client),
   })
+  useEffect(()=>{
+    if(compact && askOpen) {
+      const form=document.getElementById('item-ask-form')
+      form?.scrollIntoView({block:'center'})
+      form?.querySelector<HTMLElement>('input,button')?.focus({preventScroll:true})
+    }
+  },[compact,askOpen])
   function submit(event: FormEvent) { event.preventDefault(); ask.mutate() }
   const available = item.is_consumable ? item.available_quantity : null
-  return <section className="mt-8 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="requests-heading">
-    <div className="flex items-center justify-between gap-3"><h2 id="requests-heading" className="text-xl font-semibold">Requests</h2></div>
-    <p className="mt-2 text-sm text-slate-600">Pending requests are visible to cache members. Decisions are visible only to the requester and item owner.</p>
+  return <section className={compact?'cc-detail-requests':'mt-8 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4'} aria-labelledby="requests-heading">
+    <div className="cc-detail-requests-title"><h2 id="requests-heading" className="text-xl font-semibold">{compact?'Asks':'Requests'}</h2>
+    <p className="mt-2 text-sm text-slate-600">{compact?'Pending asks are visible to the cache. Decisions stay between the two people.':'Pending requests are visible to cache members. Decisions are visible only to the requester and item owner.'}</p></div>
     {query.isPending && <p role="status" className="mt-3">Loading requests…</p>}
     {query.isError && <div className="mt-3"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try requests again</button></div>}
     {query.isSuccess && <>
-      {available !== null && available !== undefined && <p className="mt-3">Available now: {available}</p>}
+      {available !== null && available !== undefined && (!compact || askOpen) && <p className="mt-3">Available now: {available}</p>}
       {item.available === false && <p className="mt-3 text-slate-600">Lent out{item.unavailable_note ? ` · ${item.unavailable_note}` : ''}. Existing requests can still be decided.</p>}
-      {me && me.id !== item.owner_id && <form className="mt-4 space-y-3" onSubmit={submit}>
+      {me && me.id !== item.owner_id && <form id="item-ask-form" hidden={compact && !askOpen} className="cc-inline-ask-form mt-4 space-y-3" onSubmit={submit}>
         {item.is_consumable && <div><label htmlFor="request-quantity" className="block text-sm font-medium">Quantity to request</label>
           <input id="request-quantity" type="number" inputMode="numeric" min={1} max={9999} step={1} required value={quantity} onChange={event => setQuantity(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
         </div>}
@@ -101,10 +110,12 @@ export function ItemRequests({ item }: { item: Item }) {
         {ask.isError && <p role="alert" className="text-red-700">{errorMessage(ask.error)}</p>}
         {ask.isSuccess && <p role="status" className="text-emerald-700">Request sent. Arrange the handoff in person if approved.</p>}
       </form>}
-      <ul className="cc-list mt-4 lg:border-0">{query.data.map(request => <RequestCard key={request.id} request={request} callerId={me?.id ?? ''} />)}</ul>
+      <ul className={compact?'cc-detail-ask-list':'cc-list mt-4 lg:border-0'}>{query.data.map(request => compact && request.status==='pending' && me?.id!==item.owner_id
+        ? <li key={request.id} className="cc-pending-ask-row"><Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} coat={request.requester_cat_coat} photoVersion={request.requester_photo_version} size={30} /><span><b>{request.requester_name ?? 'Member'}</b> {askedWhen(request.created_at).toLocaleLowerCase()}{request.quantity!==null?` for ${request.quantity}`:''}</span><Stamp>Pending</Stamp></li>
+        : <RequestCard key={request.id} request={request} callerId={me?.id ?? ''} />)}</ul>
       {!query.data.length && <p className="mt-4 text-slate-600">No visible requests for this item yet.</p>}
     </>}
-    <Link to="/requests" className="mt-4 inline-block underline">Your incoming and outgoing requests</Link>
+    {!compact && <Link to="/requests" className="mt-4 inline-block underline">Your incoming and outgoing requests</Link>}
   </section>
 }
 

@@ -19,6 +19,6 @@ export function SupportCard() {
 export function AppFooter() {
   const { me } = useAuth()
   const { pathname } = useLocation()
-  if (!SUPPORT_URL || !me?.display_name || pathname === '/login' || pathname === '/auth/link' || pathname === '/account' || pathname.startsWith('/join/')) return null
+  if (!SUPPORT_URL || !me?.display_name || pathname === '/login' || pathname === '/auth/link' || pathname === '/account' || /^\/(?:caches\/[^/]+\/)?items\/.+/.test(pathname) || pathname.startsWith('/join/')) return null
   return <footer className="cc-support-footer"><SupportLink /></footer>
 }

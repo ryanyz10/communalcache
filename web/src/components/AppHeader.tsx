@@ -23,6 +23,6 @@ export function AppHeader() {
         </Link>
       </div>
     </header>
-    <Tabs {...identity} mobile />
+    {!/^\/(?:caches\/[^/]+\/)?items\/.+/.test(pathname) && <Tabs {...identity} mobile />}
   </>
 }

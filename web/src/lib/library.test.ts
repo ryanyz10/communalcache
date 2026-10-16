@@ -31,10 +31,10 @@ function render(element: ReactElement, options: { route?: string; path?: string;
 
 it('renders caller library cards, names, shared stock, pending asks, private photo routes and wide grid without a cache dependency', () => {
   const markup = render(createElement(LibraryPage),{more:true})
-  for (const copy of ['Your items','+ New item','Sugar','Maple Street, Garden Club','Lent out','8 to give away','2 pending asks','Not in a cache yet','Load more items']) expect(markup).toContain(copy)
+  for (const copy of ['Your items','+ New item','Sugar','Maple Street · Garden Club','Give · 8 left','2 asks','Not in a cache yet','Load more items']) expect(markup).toContain(copy)
   expect(markup).toContain(`/items/${item.id}`)
   expect(markup).toContain(`/api/me/items/${item.id}/photo?v=version`)
-  expect(markup).toContain('cc-card-grid')
+  expect(markup).toContain('cc-library-slip')
   expect(markup).not.toContain('/api/caches/null')
   expect(markup).not.toContain('private@example.test')
 })
@@ -56,15 +56,15 @@ it('separates empty, loading and error states, and does not display another acco
 it('offers existing/new sources in one labeled native sheet, with attached items checked and disabled and other sharing hints', () => {
   const markup = render(createElement(AddItemSheet,{cacheId,cacheName:'Maple Street',dialog:createRef<HTMLDialogElement>()}))
   expect(markup.match(/<dialog\b/g)).toHaveLength(1)
-  for (const copy of ['Add to Maple Street','Your items','New item','Already here','Not in a cache yet','Add 0 to Maple Street','Creates it in your library','Create and add here']) expect(markup).toContain(copy)
+  for (const copy of ['Add to Maple Street','Your items','New item','Already here','Not shared yet','Add 0 to Maple Street','Creates it in your library','Create and add here']) expect(markup).toContain(copy)
   expect(markup).toMatch(/<input(?=[^>]*type="checkbox")(?=[^>]*disabled="")(?=[^>]*checked="")[^>]*>/)
   expect(markup).toContain('aria-label="Choose item source"')
   expect(markup).toContain('aria-pressed="true"')
   expect(markup).toContain('for="new-item-photo"')
   expect(markup).toContain('for="item-title"')
   expect(markup).toContain('Lend it')
-  expect(markup).toContain('Give some away')
-  expect(sharingHint({...item,caches:[{id:'garden',name:'Garden Club'}]},cacheId)).toBe('Also in Garden Club')
+  expect(markup).toContain('Give it away')
+  expect(sharingHint({...item,caches:[{id:'garden',name:'Garden Club'}]},cacheId)).toBe('In Garden Club')
 })
 
 it('keeps partial attachment successes and retries only failures, using idempotent owner routes with no item creation', async () => {
@@ -94,7 +94,7 @@ it('renders private owner item controls and active-cache checkboxes with explici
 it('creates library-only items without needing caches and invalidates every shared item view after edits or decisions', async () => {
   const markup = render(createElement(ItemEditorPage),{route:'/items/new',path:'/items/new'})
   expect(markup).toContain('New item')
-  expect(markup).toContain('Create item')
+  expect(markup).toContain('>Save</button>')
   expect(markup).not.toContain('Loading…')
   const client = new QueryClient(), invalidate = vi.spyOn(client,'invalidateQueries').mockResolvedValue()
   await invalidateRequestViews(client)

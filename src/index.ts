@@ -192,7 +192,7 @@ async function dispatch(request: Request, env: Env) {
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
     if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
-    if (!itemId && method === 'GET') return json(cacheId ? await cacheItems(env.DB, cacheId, profile.id) : await libraryPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
+    if (!itemId && method === 'GET') return json(cacheId ? await cacheItems(env.DB, cacheId, profile.id) : await libraryPage(env.DB, profile.id, new URL(request.url).searchParams.get('after'), new URL(request.url).searchParams.get('filter') ?? 'all'))
     if (method === 'POST') return json(await createItem(env.DB, profile.id, itemChanges(await readBody(request), true), cacheId), 201)
     if (method === 'PATCH') return json(await updateItem(env.DB, itemId!, profile.id, itemChanges(await readBody(request), false), cacheId))
     return json(await itemDetail(env.DB, itemId!, profile.id, cacheId))
