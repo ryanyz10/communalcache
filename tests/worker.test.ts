@@ -31,9 +31,9 @@ it('profiles remain nullable, names are caller-scoped, and forged identities can
   await env.DB.prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt,display_name) VALUES (?,?,?,?,?,?,?)')
     .bind('other-user','', 'other@example.test',1,new Date().toISOString(),new Date().toISOString(),'Other').run()
   const me = await (await worker.fetch(appRequest('/api/me', {cookie: caller.cookie}), env)).json()
-  expect(me).toEqual({id:caller.id,email:'caller@example.test',display_name:null,profile_photo_version:null})
+  expect(me).toEqual({id:caller.id,email:'caller@example.test',display_name:null,cat_coat:null,profile_photo_version:null})
   const patch = await worker.fetch(appRequest('/api/me', {method: 'PATCH', cookie: caller.cookie, body: {display_name: '  Neighbor  ', id: 'other-user', email: 'forged@example.test'}}), env)
-  expect(await patch.json()).toEqual({id:caller.id,email:'caller@example.test',display_name:'Neighbor',profile_photo_version:null})
+  expect(await patch.json()).toEqual({id:caller.id,email:'caller@example.test',display_name:'Neighbor',cat_coat:null,profile_photo_version:null})
   expect(await env.DB.prepare('SELECT display_name FROM user WHERE id = ?').bind('other-user').first('display_name')).toBe('Other')
   for (const display_name of ['', ' '.repeat(3), 'x'.repeat(61), null, 4]) {
     expect((await worker.fetch(appRequest('/api/me', {method:'PATCH', cookie: caller.cookie, body:{display_name}}), env)).status).toBe(400)

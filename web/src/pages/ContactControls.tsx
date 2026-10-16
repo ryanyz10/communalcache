@@ -30,13 +30,12 @@ export function ContactControls() {
   }
   function submit(event: FormEvent) { event.preventDefault(); change.mutate(false) }
   const currentPreview = value === previewValue ? preview.data?.contact : null
-  return <section className="mt-6 lg:mt-0 lg:min-w-0" aria-labelledby="contact-heading">
-    <h2 id="contact-heading" className="cc-section-title lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">How to reach me</h2>
-    <div className="cc-list"><div className="cc-row">
-      {own.data?.contact && <PlatformIcon kind={own.data.contact.kind} />}
-      <div className="min-w-0 flex-1"><p className="break-words font-semibold">{own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</p><p className="text-sm text-slate-600">Shown only after an ask is approved, while both of you are active in that cache.</p></div>
-      <button type="button" disabled={!own.isSuccess} className="min-h-11 text-sm underline" aria-haspopup="dialog" aria-controls="contact-sheet" onClick={open}>{own.data?.contact ? 'Edit contact' : 'Add contact'}</button>
-    </div></div>
+  return <section className="cc-account-contact" aria-labelledby="contact-heading">
+    <div className="cc-contact-heading"><h2 id="contact-heading">How to reach me</h2><button type="button" disabled={!own.isSuccess} className="cc-text-action cc-contact-edit-mobile" aria-label={own.data?.contact ? 'Edit contact' : 'Add contact'} aria-haspopup="dialog" aria-controls="contact-sheet" onClick={open}>{own.data?.contact ? 'Edit' : 'Add'}</button></div>
+    <p className="cc-contact-value-mobile">{own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</p>
+    <p className="cc-contact-helper-desktop">Shown only after an ask is approved, while both of you are active in that cache.</p>
+    <p className="cc-contact-helper-mobile">Shown only after an ask is approved.</p>
+    <div className="cc-contact-summary"><span>{own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</span><button type="button" disabled={!own.isSuccess} className="cc-text-action" aria-label={own.data?.contact ? 'Edit contact' : 'Add contact'} aria-haspopup="dialog" aria-controls="contact-sheet" onClick={open}>{own.data?.contact ? 'Edit' : 'Add contact'}</button></div>
     {own.isPending && <p role="status" className="mt-2">Loading contact…</p>}
     {own.isError && <div><p role="alert">{errorMessage(own.error)}</p><button type="button" className="cc-outline mt-2" onClick={()=>void own.refetch()}>Try contact again</button></div>}
     <dialog ref={dialog} id="contact-sheet" className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="contact-sheet-heading" onCancel={event=>{if(change.isPending)event.preventDefault()}} onClose={()=>{setEditing(false);setValue('');setPreviewValue('')}}>

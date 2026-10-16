@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { apiFetch } from './api'
+import type { CatCoat } from './cats'
 
 export type Item = {
   id: string
@@ -7,6 +8,7 @@ export type Item = {
   owner_id: string
   owner_name: string | null
   owner_photo_version?: string | null
+  owner_cat_coat?: CatCoat | null
   title: string
   description: string | null
   is_consumable: boolean

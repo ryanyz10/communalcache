@@ -61,7 +61,7 @@ export function RequestCard({ request, callerId }: { request: ItemRequest; calle
   return <li className="border-t border-slate-100 p-4 first:border-t-0">
     <Link to={`/caches/${request.cache_id}/items/${request.item_id}`} className="break-words font-semibold underline">{request.item_title}</Link>
     <p className="mt-1 text-sm text-slate-600">{request.cache_name} · {new Date(request.created_at).toLocaleString()}</p>
-    <div className="mt-2 flex items-center gap-2"><Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} photoVersion={request.requester_photo_version} size={24} /><Avatar userId={request.owner_id} name={request.owner_name ?? 'Member'} photoVersion={request.owner_photo_version} size={24} /><p>{request.requester_name ?? 'Member'} asked {request.owner_name ?? 'Member'}{request.quantity === null ? ' to use this' : ` for ${request.quantity}`}.</p></div>
+    <div className="mt-2 flex items-center gap-2"><Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} photoVersion={request.requester_photo_version} coat={request.requester_cat_coat} size={24} /><Avatar userId={request.owner_id} name={request.owner_name ?? 'Member'} photoVersion={request.owner_photo_version} coat={request.owner_cat_coat} size={24} /><p>{request.requester_name ?? 'Member'} asked {request.owner_name ?? 'Member'}{request.quantity === null ? ' to use this' : ` for ${request.quantity}`}.</p></div>
     <div className="mt-2"><RequestStatus status={request.status} /></div>
     {request.status === 'approved' && (callerId === request.owner_id || callerId === request.requester_id) && <>
       {request.approval_message && <p className="mt-3 whitespace-pre-wrap break-words">{request.approval_message}</p>}
