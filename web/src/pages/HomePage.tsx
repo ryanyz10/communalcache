@@ -17,6 +17,8 @@ import { ThingTile, ThingStatus } from '../components/ThingTile'
 import { LandingPage } from './LandingPage'
 import { JoinInviteSheet } from './JoinInviteSheet'
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
+import { HomeBoxesSkeleton } from '../components/PageSkeletons'
+import { SkeletonRows } from '../components/Skeleton'
 
 export function HomePage() {
   const { me } = useAuth()
@@ -53,7 +55,7 @@ export function HomePage() {
         <span className="cc-answer-avatars" aria-hidden="true">{incoming.incoming.map(ask=><Avatar key={ask.id} userId={ask.user_id} name={ask.display_name ?? 'Neighbor'} coat={ask.cat_coat} photoVersion={ask.profile_photo_version} size={34} />)}</span>
         <p><strong>{incoming.pending_answer_count} {incoming.pending_answer_count===1?'ask needs':'asks need'} your answer<span className="cc-desktop-copy">.</span></strong><span className="cc-desktop-copy"> {incoming.incoming.map(incomingDescription).join(' ')}</span></p><Link to="/requests" className="cc-banner-review">Review<span aria-hidden="true"> ›</span></Link>
       </div>}
-      {caches.isPending && <p role="status" className="cc-read-error">Loading caches…</p>}
+      {caches.isPending && <HomeBoxesSkeleton />}
       {caches.isError && <div className="cc-read-error"><p role="alert">{errorMessage(caches.error)} Previously loaded caches may be out of date.</p><button type="button" onClick={()=>void caches.refetch()}>Try caches again</button></div>}
       {!!caches.data?.length && <ul className="cc-home-boxes">{caches.data.map(cache=><li key={cache.id}>
         <MemberCats members={cache.member_preview ?? []} total={cache.active_member_count} />
@@ -66,13 +68,13 @@ export function HomePage() {
     </section>
     <div className="cc-home-slips">
       <section aria-labelledby="your-things-heading"><div className="cc-slip-title"><h2 id="your-things-heading">Your things</h2><Link to="/items">{incoming?.owned_item_count ? `See all ${incoming.owned_item_count}` : 'See all'}</Link></div>
-        {library.isPending && <p role="status">Loading your items…</p>}
+        {library.isPending && <SkeletonRows label="Loading your items…" kind="library" count={3} />}
         {library.isError && <div className="cc-read-error"><p role="alert">{errorMessage(library.error)} Previously loaded items may be out of date.</p><button type="button" onClick={()=>void library.refetch()}>Try your items again</button></div>}
         {!!things.length && <ul className="cc-packing-slip cc-home-things">{things.map(item=><li key={item.id}><Link to={`/items/${item.id}`}><ThingTile item={item} library tone="deep" /><strong>{item.title}</strong><span className="cc-thing-caches">{item.caches.map(cache=>cache.name).join(' · ') || 'Not shared yet'}</span><ThingStatus item={item} pending={item.is_consumable?0:item.pending_count} compact /></Link></li>)}</ul>}
         {library.isSuccess && !things.length && <div className="cc-packing-slip cc-empty-slip"><p>No things yet.</p><Link to="/items/new">+ New item</Link></div>}
       </section>
       <section aria-labelledby="your-asks-heading"><div className="cc-slip-title"><h2 id="your-asks-heading">Your asks</h2></div>
-        {summary.isPending && <p role="status">Loading your asks…</p>}
+        {summary.isPending && <SkeletonRows label="Loading your asks…" kind="requests" count={2} />}
         {!!incoming?.outgoing.length && <ul className="cc-packing-slip cc-home-asks">{incoming.outgoing.map(ask=><li key={ask.id}><Avatar userId={ask.user_id} name={ask.display_name ?? 'Neighbor'} coat={ask.cat_coat} photoVersion={ask.profile_photo_version} size={34} /><div><p><strong>{ask.item_title}</strong> <span>from {ask.display_name ?? 'a neighbor'}</span></p><Link to="/requests">{ask.status==='approved' ? `See how to reach ${ask.display_name ?? 'the owner'}` : askedWhen(ask.created_at)}</Link></div><Stamp tone={ask.status==='approved'?'ok':'muted'}>{ask.status==='pending'?'Waiting':ask.status==='rejected'?'Declined':'Approved'}</Stamp></li>)}</ul>}
         {incoming && !incoming.outgoing.length && <div className="cc-packing-slip cc-empty-slip"><p>No asks in your current caches.</p><Link to="/requests">See all asks</Link></div>}
       </section>

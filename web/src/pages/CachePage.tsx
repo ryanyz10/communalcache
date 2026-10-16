@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
@@ -14,9 +14,7 @@ import { MemberCats } from '../components/MemberCats'
 import { Stamp } from '../components/Stamp'
 import { ThingTile, ThingStatus } from '../components/ThingTile'
 
-function SettingsIcon() {
-  return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" aria-hidden="true"><path d="M20 7h-9M14 17H5" /><circle cx="17" cy="17" r="3" /><circle cx="7" cy="7" r="3" /></svg>
-}
+import { CacheSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheSettingsIcon as SettingsIcon } from '../components/PageSkeletons'
 
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams(), { me } = useAuth()
@@ -26,10 +24,19 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const caches = useQuery({ queryKey: ['caches'], queryFn: () => apiFetch<CacheSummary[]>('/api/caches'), enabled: !!me?.display_name })
   const items = useQuery({ ...cacheItemsQuery(cacheId), enabled: !!me?.display_name && !itemsMoving })
   const joins = useQuery({ queryKey: ['join-requests',cacheId], queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`), enabled: !!me?.display_name && query.data?.owner_id === me.id })
+  const [fromSkeleton] = useState(query.isPending || items.isPending)
+  const [showPlaceholder, setShowPlaceholder] = useState(fromSkeleton)
+  const loading = query.isPending || (!itemsMoving && items.isPending)
+  useEffect(() => {
+    if (loading || !showPlaceholder) return
+    const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 200 : 350
+    const timer = setTimeout(() => setShowPlaceholder(false), duration)
+    return () => clearTimeout(timer)
+  }, [loading, showPlaceholder])
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  if (query.isPending) return <main className="cc-page"><p role="status">Loading cache…</p></main>
-  if (query.isError) return <main className="cc-page"><Link to="/" className="cc-text-action">‹ Your caches</Link><p role="alert" className="cc-form-error">{errorMessage(query.error)}</p><button className="cc-text-action" onClick={()=>void query.refetch()}>Try again</button></main>
+  if (query.isPending) return <CacheSkeleton cacheId={cacheId} summary={caches.data?.find(cache => cache.id === cacheId)} caches={caches.data} viewerId={me.id} />
+  if (query.isError) return <CacheSkeleton cacheId={cacheId} summary={caches.data?.find(cache => cache.id === cacheId)} caches={caches.data} viewerId={me.id} error={{ message: errorMessage(query.error), retry: () => { void query.refetch(); void items.refetch() } }} />
   const cache=query.data, owner=cache.owner_id===me.id
   const total=cache.members.reduce((sum,member)=>sum+(member.attached_item_count ?? 0),0)
   const all=items.data ?? [], visible=filterContents(all,filter,search), give=all.filter(item=>item.is_consumable).length
@@ -53,21 +60,20 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
     <div className="cc-cache-phone-controls">{controls}</div>
     {status && <p role="status" className="cc-cache-status">{status}</p>}
     <div className="cc-contents-layout">
-      <section aria-labelledby="contents-heading" className="cc-contents">
-        {itemsMoving ? <p role="status">Items are being moved, back soon</p> : <>
+      <section aria-label="Contents" className="cc-contents">
+        {itemsMoving ? <p role="status">Items are being moved, back soon</p> : items.isPending ? <CacheContentsSkeleton /> : items.isError ? <><div className="cc-contents-toolbar cc-cache-state-toolbar"><h2>Contents</h2></div><CacheErrorCard message={errorMessage(items.error)} retry={() => void items.refetch()} /></> : !all.length ? <><div className="cc-contents-toolbar cc-cache-state-toolbar"><h2>Contents</h2></div><CacheEmptyCard onAdd={() => addDialog.current?.showModal()} /></> : <div className="cc-cache-swap-region">
+          {showPlaceholder && <div className="cc-cache-skeleton-exit" aria-hidden="true" inert><CacheContentsSkeleton /></div>}
           <div className="cc-contents-toolbar"><h2 id="contents-heading">Contents</h2><div className="cc-contents-filters" role="group" aria-label="Filter contents">{([['all','Everything','All',all.length],['lend','To lend','To lend',all.length-give],['give','To give','To give',give]] as const).map(([value,wide,phone,count])=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)}><span className="cc-desktop-copy">{wide}</span><span className="cc-phone-copy">{phone}</span>{items.isSuccess ? ` ${count}` : ''}</button>)}</div>
             <button type="button" className="cc-search-toggle" aria-label="Search contents" aria-expanded={searchOpen} onClick={()=>setSearchOpen(value=>!value)}>⌕</button>
             <label className="cc-contents-search" data-open={searchOpen}><span className="sr-only">Search contents</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg><input type="search" placeholder="Search contents" value={search} onChange={event=>setSearch(event.target.value)} /></label>
           </div>
-          {items.isPending && <p role="status">Loading items…</p>}
-          {items.isError && <div className="cc-read-error"><p role="alert">{errorMessage(items.error)} Previously loaded contents may be out of date.</p><button type="button" onClick={()=>void items.refetch()}>Try items again</button></div>}
-          <div className="cc-packing-slip cc-contents-slip"><div className="cc-contents-columns" aria-hidden="true"><span /><span>Thing</span><span>From</span><span>Status</span><span /></div>
-            <ul>{visible.map(item=><li key={item.id} className="cc-contents-row"><Link className="cc-content-main" to={`/caches/${cache.id}/items/${item.id}`}><ThingTile item={item} /><strong>{item.title}</strong><span className="cc-contents-owner"><Avatar userId={item.owner_id} name={item.owner_name ?? 'Neighbor'} coat={item.owner_cat_coat} photoVersion={item.owner_photo_version} size={26} />{item.owner_id===me.id?'You':item.owner_name ?? 'Neighbor'}</span><ThingStatus item={item} pending={item.owner_id===me.id?item.pending_count:0} /></Link>
+          <div className={`cc-packing-slip cc-contents-slip${fromSkeleton ? ' cc-skeleton-swap' : ''}`}><div className="cc-contents-columns" aria-hidden="true"><span /><span>Thing</span><span>From</span><span>Status</span><span /></div>
+            <ul>{visible.map((item, index)=><li key={item.id} className="cc-contents-row" style={fromSkeleton ? { animationDelay: `${Math.min(index + 1, 4) * 80}ms` } : undefined}><Link className="cc-content-main" to={`/caches/${cache.id}/items/${item.id}`}><ThingTile item={item} /><strong>{item.title}</strong><span className="cc-contents-owner"><Avatar userId={item.owner_id} name={item.owner_name ?? 'Neighbor'} coat={item.owner_cat_coat} photoVersion={item.owner_photo_version} size={26} />{item.owner_id===me.id?'You':item.owner_name ?? 'Neighbor'}</span><ThingStatus item={item} pending={item.owner_id===me.id?item.pending_count:0} /></Link>
               {item.owner_id===me.id ? !!item.pending_count && <Link className="cc-content-review" to="/requests">Review<span className="sr-only"> asks for {item.title}</span></Link> : item.available!==false && (!item.is_consumable || (item.available_quantity ?? 0)>0) && <Link className="cc-content-ask" to={`/caches/${cache.id}/items/${item.id}`}>Ask<span className="sr-only"> for {item.title}</span></Link>}
             </li>)}</ul>
           </div>
-          {items.isSuccess && !visible.length && <div className="cc-empty-slip"><p>{all.length ? 'No things match your search or filter.' : 'No items yet. Add the first thing to share.'}</p>{!all.length && <button type="button" className="cc-text-action" onClick={()=>addDialog.current?.showModal()}>+ Add item</button>}</div>}
-        </>}
+          {items.isSuccess && !visible.length && <div className="cc-empty-slip"><p>No things match your search or filter.</p></div>}
+        </div>}
       </section>
       <aside className="cc-in-the-box" aria-labelledby="cache-members-heading"><h2 id="cache-members-heading">In the box</h2>
         {owner && joins.isError && <div className="cc-read-error"><p role="alert">Join requests could not be loaded.</p><Link to={`${settings}#join-requests`}>Open settings to try again</Link></div>}

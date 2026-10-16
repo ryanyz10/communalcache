@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { ContactLink, PlatformIcon } from '../components/ContactLink'
 import { apiFetch, errorMessage } from '../lib/api'
 import { platforms, useOwnContact, type Contact, type ContactKind } from '../lib/contacts'
+import { Shimmer, LoadingStatus, LoadingLines } from '../components/Skeleton'
 
 export function ContactControls() {
   const { me } = useAuth()
@@ -32,11 +33,11 @@ export function ContactControls() {
   const currentPreview = value === previewValue ? preview.data?.contact : null
   return <section className="cc-account-contact" aria-labelledby="contact-heading">
     <div className="cc-contact-heading"><h2 id="contact-heading">How to reach me</h2><button type="button" disabled={!own.isSuccess} className="cc-text-action cc-contact-edit-mobile" aria-label={own.data?.contact ? 'Edit contact' : 'Add contact'} aria-haspopup="dialog" aria-controls="contact-sheet" onClick={open}>{own.data?.contact ? 'Edit' : 'Add'}</button></div>
-    <p className="cc-contact-value-mobile">{own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</p>
+    <p className="cc-contact-value-mobile">{own.isPending ? <Shimmer width={170} height={18} /> : own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</p>
     <p className="cc-contact-helper-desktop">Shown only after an ask is approved, while both of you are active in that cache.</p>
     <p className="cc-contact-helper-mobile">Shown only after an ask is approved.</p>
-    <div className="cc-contact-summary"><span>{own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</span><button type="button" disabled={!own.isSuccess} className="cc-text-action" aria-label={own.data?.contact ? 'Edit contact' : 'Add contact'} aria-haspopup="dialog" aria-controls="contact-sheet" onClick={open}>{own.data?.contact ? 'Edit' : 'Add contact'}</button></div>
-    {own.isPending && <p role="status" className="mt-2">Loading contact…</p>}
+    <div className="cc-contact-summary"><span>{own.isPending ? <Shimmer width={170} height={18} /> : own.data?.contact ? `${platforms[own.data.contact.kind].name} · ${own.data.contact.value}` : 'Add how to reach you'}</span><button type="button" disabled={!own.isSuccess} className="cc-text-action" aria-label={own.data?.contact ? 'Edit contact' : 'Add contact'} aria-haspopup="dialog" aria-controls="contact-sheet" onClick={open}>{own.data?.contact ? 'Edit' : 'Add contact'}</button></div>
+    {own.isPending && <LoadingStatus label="Loading contact…" />}
     {own.isError && <div><p role="alert">{errorMessage(own.error)}</p><button type="button" className="cc-outline mt-2" onClick={()=>void own.refetch()}>Try contact again</button></div>}
     <dialog ref={dialog} id="contact-sheet" className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="contact-sheet-heading" onCancel={event=>{if(change.isPending)event.preventDefault()}} onClose={()=>{setEditing(false);setValue('');setPreviewValue('')}}>
       <div className="flex items-center justify-between gap-3"><h2 id="contact-sheet-heading" className="text-xl font-semibold">How to reach me</h2><button type="button" autoFocus disabled={change.isPending} className="cc-outline min-h-11" onClick={()=>dialog.current?.close()}>Close</button></div>
@@ -47,7 +48,7 @@ export function ContactControls() {
         <input id="contact-value" className="cc-input" required maxLength={254} autoComplete="off" type="text" inputMode={kind==='email' ? 'email' : ['sms','whatsapp','signal'].includes(kind) ? 'tel' : 'text'} placeholder={platforms[kind].placeholder} value={value} disabled={change.isPending} onChange={event=>{setValue(event.target.value);change.reset()}} />
         <p className="text-sm text-slate-600">{['sms','whatsapp','signal'].includes(kind) ? '7–15 digits, with an optional leading +. Include your country code.' : kind==='email' ? 'Choose a contact address. This does not change your sign-in email.' : 'Enter a username, not a URL or @handle.'}</p>
         {currentPreview && <><ContactLink contact={currentPreview} name={me.display_name ?? 'You'} /><p className="text-sm text-slate-600">Preview: the exact button the other person sees. Test it here first.</p></>}
-        {editing && !!value.trim() && !currentPreview && (preview.isFetching || value!==previewValue) && <p role="status">Checking preview…</p>}
+        {editing && !!value.trim() && !currentPreview && (preview.isFetching || value!==previewValue) && <LoadingLines label="Checking preview…" />}
         {preview.isError && value===previewValue && <p role="alert" className="text-red-700">{errorMessage(preview.error)}</p>}
         <button type="submit" className="cc-pill min-h-11" disabled={change.isPending || !currentPreview}>{change.isPending ? 'Saving…' : 'Save contact'}</button>
       </form>
