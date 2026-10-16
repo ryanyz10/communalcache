@@ -1,151 +1,91 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Link,Navigate } from 'react-router'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
-import { apiFetch, errorMessage } from '../lib/api'
+import { apiFetch,errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
-import { invalidateRequestViews, useRequests, type ItemRequest } from '../lib/requests'
+import { relativeWhen,stockAfterApproval,useRequests,type ItemRequest } from '../lib/requests'
+import { useHomeSummary } from '../lib/caches'
+import { useOwnContact } from '../lib/contacts'
 import { RequestStatus } from '../components/RequestStatus'
 import { Stamp } from '../components/Stamp'
-import { askedWhen } from '../lib/caches'
 import { Avatar } from '../components/Avatar'
 import { OnboardingPage } from './OnboardingPage'
-import { ContactLink } from '../components/ContactLink'
-import { useOwnContact, type Contact } from '../lib/contacts'
+import { RequestDecision } from './RequestDecision'
+import { ApprovedContact } from './RequestContact'
+import { AskSheet } from './AskSheet'
+export { ApprovedContact } from './RequestContact'
 
-function RequestDecision({ request }: { request: ItemRequest }) {
-  const client = useQueryClient()
-  const dialog = useRef<HTMLDialogElement>(null)
-  const [message, setMessage] = useState('')
-  const messageTooLong = [...message.trim()].length > 500
-  const [reason, setReason] = useState('')
-  const [lentOut, setLentOut] = useState(false)
-  const [note, setNote] = useState('')
-  const noteTooLong = [...note.trim()].length > 200
-  const decision = useMutation({
-    mutationFn: (action: 'approve' | 'reject') => apiFetch<ItemRequest>(`/api/me/requests/${request.id}/${action}`, { body: action === 'reject' ? { reason } : { approval_message: message, mark_lent_out: lentOut, ...(lentOut ? { unavailable_note: note.trim() || null } : {}) } }),
-    onSuccess: () => dialog.current?.close(),
-    onSettled: () => invalidateRequestViews(client),
-  })
-  function reject(event: FormEvent) { event.preventDefault(); if (reason.trim()) decision.mutate('reject') }
-  return <div className="mt-3">
-    <button type="button" className="cc-pill" aria-haspopup="dialog" onClick={()=>{setMessage('');decision.reset();dialog.current?.showModal()}}>Approve request from {request.requester_name ?? 'Member'}</button>
-    <dialog ref={dialog} className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby={`approve-heading-${request.id}`} onCancel={event=>{if(decision.isPending)event.preventDefault()}}>
-    <h2 id={`approve-heading-${request.id}`} className="text-xl font-semibold">Approve for {request.requester_name ?? 'Member'}?</h2>
-    <label htmlFor={`approval-message-${request.id}`} className="mt-4 block text-sm font-medium">Message (optional)</label>
-    <textarea id={`approval-message-${request.id}`} value={message} placeholder={`Add a note for ${request.requester_name ?? 'Member'}`} onChange={event=>setMessage(event.target.value)} disabled={decision.isPending} className="cc-input mb-3" />
-    <p className="mb-3 text-sm text-slate-600">Up to 500 characters. Only the two of you see this message. Contact details are shared only while you're both active in this cache.</p>
-    {messageTooLong && <p role="alert" className="mb-3 text-red-700">Keep the message within 500 characters.</p>}
-    {request.quantity === null && <label className="mb-3 flex items-center gap-2"><input type="checkbox" checked={lentOut} disabled={decision.isPending} onChange={event => setLentOut(event.target.checked)} />Mark as lent out</label>}
-    {lentOut && <div className="mb-3"><label htmlFor={`approval-note-${request.id}`} className="block text-sm font-medium">Lent out note (optional)</label><input id={`approval-note-${request.id}`} value={note} disabled={decision.isPending} onChange={event => setNote(event.target.value)} className="cc-input" />{noteTooLong && <p role="alert" className="mt-1 text-sm text-red-700">Keep the note within 200 characters.</p>}</div>}
-    <div className="flex gap-2"><button type="button" disabled={decision.isPending || messageTooLong || (lentOut && noteTooLong)} onClick={() => decision.mutate('approve')} className="cc-pill">Approve</button><button type="button" disabled={decision.isPending} className="cc-outline" onClick={()=>dialog.current?.close()}>Cancel</button></div>
-    {decision.isError && <p role="alert" className="mt-2 text-red-700">{errorMessage(decision.error)}</p>}
-    </dialog>
-    <form className="mt-3 space-y-2" onSubmit={reject}>
-      <label htmlFor={`reason-${request.id}`} className="block text-sm font-medium">Reason for rejection</label>
-      <input id={`reason-${request.id}`} type="text" required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2" />
-      <button type="submit" disabled={decision.isPending || !reason.trim()} className="cc-outline">Reject request from {request.requester_name ?? 'Member'}</button>
-    </form>
-    {decision.isPending && <p role="status" className="mt-2">Saving decision…</p>}
-    {decision.isError && <p role="alert" className="mt-2 text-red-700">{errorMessage(decision.error)}</p>}
-  </div>
+function OwnerStock({request,callerId}:{request:ItemRequest;callerId:string}) {
+  const query=useQuery({queryKey:['library-item',callerId,request.item_id],queryFn:()=>apiFetch<Item>(`/api/me/items/${request.item_id}`),enabled:request.owner_id===callerId && request.status==='pending' && request.quantity!==null})
+  if(query.isPending)return <span> · checking stock…</span>
+  if(query.isError)return <span> · stock unavailable <button type="button" className="cc-stock-retry" onClick={()=>void query.refetch()}>Retry stock</button></span>
+  if(query.data.owner_id!==callerId || typeof query.data.quantity!=='number' || request.quantity===null)return null
+  const left=stockAfterApproval(query.data.quantity,request.quantity)
+  return <span> · {left>=0?`${left} left after this`:'not enough stock to approve'}</span>
 }
 
-export function ApprovedContact({ request, callerId }: { request: ItemRequest; callerId: string }) {
-  const query = useQuery({ queryKey:['request-contact',callerId,request.id], queryFn:()=>apiFetch<{contact:Contact|null}>(`/api/me/requests/${request.id}/contact`), retry:false, gcTime:0 })
-  const name = (callerId===request.owner_id ? request.requester_name : request.owner_name) ?? 'Member'
-  if (query.isPending) return <p role="status" className="mt-3">Loading contact…</p>
-  if (query.isError) return <div className="mt-3"><p className="text-sm text-slate-600">Contact is unavailable. Both people must still be active in this request's cache.</p><button className="mt-2 underline" onClick={()=>void query.refetch()}>Try contact again</button></div>
-  return query.data.contact ? <ContactLink contact={query.data.contact} name={name} /> : <p className="mt-3 text-sm text-slate-600">{name} hasn't added a way to reach them yet.</p>
-}
-
-export function RequestCard({ request, callerId }: { request: ItemRequest; callerId: string }) {
-  return <li className="border-t border-slate-100 p-4 first:border-t-0">
-    <Link to={`/caches/${request.cache_id}/items/${request.item_id}`} className="break-words font-semibold underline">{request.item_title}</Link>
-    <p className="mt-1 text-sm text-slate-600">{request.cache_name} · {new Date(request.created_at).toLocaleString()}</p>
-    <div className="mt-2 flex items-center gap-2"><Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} photoVersion={request.requester_photo_version} coat={request.requester_cat_coat} size={24} /><Avatar userId={request.owner_id} name={request.owner_name ?? 'Member'} photoVersion={request.owner_photo_version} coat={request.owner_cat_coat} size={24} /><p>{request.requester_name ?? 'Member'} asked {request.owner_name ?? 'Member'}{request.quantity === null ? ' to use this' : ` for ${request.quantity}`}.</p></div>
-    <div className="mt-2"><RequestStatus status={request.status} /></div>
-    {request.status === 'approved' && (callerId === request.owner_id || callerId === request.requester_id) && <>
-      {request.approval_message && <p className="mt-3 whitespace-pre-wrap break-words">{request.approval_message}</p>}
-      <ApprovedContact request={request} callerId={callerId} />
+export function RequestCard({request,callerId,compactAnswered=false}:{request:ItemRequest;callerId:string;compactAnswered?:boolean}) {
+  const incoming=request.owner_id===callerId,party=incoming || request.requester_id===callerId,pendingIncoming=incoming && request.status==='pending'
+  const answered=incoming && request.status!=='pending',compact=answered && compactAnswered
+  const personId=incoming?request.requester_id:request.owner_id,name=(incoming?request.requester_name:request.owner_name) ?? 'Member'
+  const version=incoming?request.requester_photo_version:request.owner_photo_version,coat=incoming?request.requester_cat_coat:request.owner_cat_coat
+  const itemLink=`/caches/${request.cache_id}/items/${request.item_id}`
+  const time=request.status==='approved' && !incoming?`approved ${request.decided_at && Date.now()-request.decided_at<86_400_000?'today':relativeWhen(request.decided_at ?? request.created_at)}`
+    :request.status==='pending' && !incoming?`asked ${relativeWhen(request.created_at)}`:relativeWhen(request.decided_at ?? request.created_at)
+  return <li className={`cc-request-card${pendingIncoming?' cc-request-card-incoming':''}${compact || (!incoming && request.status!=='approved')?' cc-request-card-compact':''}`}>
+    <div className="cc-request-person-row"><Avatar userId={personId} name={name} photoVersion={version} coat={coat} size={compact || (!incoming && request.status!=='approved')?34:40} /><div className="cc-request-copy">
+      <p>{pendingIncoming?<><b>{name}</b> {request.quantity===null?'asked to use your ':`asked for ${request.quantity} `}<Link to={itemLink}><b>{request.item_title}</b></Link></>:incoming?<><b>{name}</b> · <Link to={itemLink}>{request.item_title}</Link></>:<><Link to={itemLink}><b>{request.item_title}</b></Link> from {name}</>}</p>
+      <p className="cc-request-meta">{request.status==='rejected'?`Reason: ${request.decision_reason ?? 'Declined'}`:<>{request.cache_name} · {time}{pendingIncoming && request.quantity!==null && <OwnerStock request={request} callerId={callerId} />}</>}</p>
+    </div>{!pendingIncoming && (request.status==='approved' && party?<Link to={`/requests/${request.id}`} aria-label={`Approved ask for ${request.item_title}: view handoff details`} className="cc-approved-detail-link"><RequestStatus status={request.status} /></Link>:<RequestStatus status={request.status} />)}</div>
+    {request.status==='approved' && party && !compact && <>
+      {request.approval_message && <p className="cc-private-note">{request.approval_message}</p>}
+      <div className="cc-card-contact"><ApprovedContact request={request} callerId={callerId} /></div>
     </>}
-    {request.decision_reason && <p className="mt-2 break-words">Reason: {request.decision_reason}</p>}
-    {request.status === 'pending' && request.owner_id === callerId && <RequestDecision request={request} />}
+    {pendingIncoming && <RequestDecision request={request} />}
   </li>
 }
 
-export function ItemRequests({ item, compact = false, askOpen = false }: { item: Item; compact?: boolean; askOpen?: boolean }) {
-  const { me } = useAuth()
-  const client = useQueryClient()
-  const [quantity, setQuantity] = useState('1')
-  const query = useQuery({ queryKey: ['item-requests', item.cache_id, item.id], queryFn: () => apiFetch<ItemRequest[]>(`/api/caches/${item.cache_id}/items/${item.id}/requests`), enabled: !!me?.display_name })
-  const ask = useMutation({
-    mutationFn: () => apiFetch<ItemRequest>(`/api/caches/${item.cache_id}/items/${item.id}/requests`, { body: { quantity: item.is_consumable ? Number(quantity) : null } }),
-    onSettled: () => invalidateRequestViews(client),
-  })
-  useEffect(()=>{
-    if(compact && askOpen) {
-      const form=document.getElementById('item-ask-form')
-      form?.scrollIntoView({block:'center'})
-      form?.querySelector<HTMLElement>('input,button')?.focus({preventScroll:true})
-    }
-  },[compact,askOpen])
-  function submit(event: FormEvent) { event.preventDefault(); ask.mutate() }
-  const available = item.is_consumable ? item.available_quantity : null
-  return <section className={compact?'cc-detail-requests':'mt-8 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4'} aria-labelledby="requests-heading">
-    <div className="cc-detail-requests-title"><h2 id="requests-heading" className="text-xl font-semibold">{compact?'Asks':'Requests'}</h2>
-    <p className="mt-2 text-sm text-slate-600">{compact?'Pending asks are visible to the cache. Decisions stay between the two people.':'Pending requests are visible to cache members. Decisions are visible only to the requester and item owner.'}</p></div>
-    {query.isPending && <p role="status" className="mt-3">Loading requests…</p>}
-    {query.isError && <div className="mt-3"><p role="alert" className="text-red-700">{errorMessage(query.error)}</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try requests again</button></div>}
+export function ItemRequests({item,compact=false,askOpen=false,onAskClose,cacheName}:{item:Item;compact?:boolean;askOpen?:boolean;onAskClose?:()=>void;cacheName?:string}) {
+  const {me}=useAuth(),[localAsk,setLocalAsk]=useState(false)
+  const query=useQuery({queryKey:['item-requests',item.cache_id,item.id],queryFn:()=>apiFetch<ItemRequest[]>(`/api/caches/${item.cache_id}/items/${item.id}/requests`),enabled:!!me?.display_name})
+  return <section className={compact?'cc-detail-requests':'cc-item-requests'} aria-labelledby="requests-heading">
+    <div className="cc-detail-requests-title"><h2 id="requests-heading">Asks</h2><p>Pending asks are visible to the cache. Decisions stay between the two people.</p></div>
+    {query.isPending && <p role="status">Loading requests…</p>}
+    {query.isError && <div><p role="alert" className="cc-form-error">{errorMessage(query.error)}</p><button type="button" className="cc-text-action" disabled={query.isFetching} onClick={()=>void query.refetch()}>Try requests again</button></div>}
     {query.isSuccess && <>
-      {available !== null && available !== undefined && (!compact || askOpen) && <p className="mt-3">Available now: {available}</p>}
-      {item.available === false && <p className="mt-3 text-slate-600">Lent out{item.unavailable_note ? ` · ${item.unavailable_note}` : ''}. Existing requests can still be decided.</p>}
-      {me && me.id !== item.owner_id && <form id="item-ask-form" hidden={compact && !askOpen} className="cc-inline-ask-form mt-4 space-y-3" onSubmit={submit}>
-        {item.is_consumable && <div><label htmlFor="request-quantity" className="block text-sm font-medium">Quantity to request</label>
-          <input id="request-quantity" type="number" inputMode="numeric" min={1} max={9999} step={1} required value={quantity} onChange={event => setQuantity(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" />
-        </div>}
-        {available !== null && available !== undefined && available <= 0 && <p className="text-slate-600">No stock available now.</p>}
-        {item.is_consumable && available === undefined && <p className="text-slate-600">Refresh the item to see current availability.</p>}
-        <button type="submit" disabled={ask.isPending || item.available === false || (item.is_consumable && (available === undefined || available === null || available <= 0))} className="cc-pill">{ask.isPending ? 'Sending request…' : 'Ask to use'}</button>
-        {ask.isError && <p role="alert" className="text-red-700">{errorMessage(ask.error)}</p>}
-        {ask.isSuccess && <p role="status" className="text-emerald-700">Request sent. Arrange the handoff in person if approved.</p>}
-      </form>}
-      <ul className={compact?'cc-detail-ask-list':'cc-list mt-4 lg:border-0'}>{query.data.map(request => compact && request.status==='pending' && me?.id!==item.owner_id
-        ? <li key={request.id} className="cc-pending-ask-row"><Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} coat={request.requester_cat_coat} photoVersion={request.requester_photo_version} size={30} /><span><b>{request.requester_name ?? 'Member'}</b> {askedWhen(request.created_at).toLocaleLowerCase()}{request.quantity!==null?` for ${request.quantity}`:''}</span><Stamp>Pending</Stamp></li>
-        : <RequestCard key={request.id} request={request} callerId={me?.id ?? ''} />)}</ul>
-      {!query.data.length && <p className="mt-4 text-slate-600">No visible requests for this item yet.</p>}
+      {!compact && item.is_consumable && item.available_quantity!==undefined && <p>Available now: {item.available_quantity}</p>}
+      {!compact && item.is_consumable && (item.available_quantity===undefined || item.available_quantity===null) && <p className="cc-form-hint">Refresh the item to see current availability.</p>}
+      {!compact && item.is_consumable && typeof item.available_quantity==='number' && item.available_quantity<=0 && <p className="cc-form-hint">No stock available now.</p>}
+      {item.available===false && <p className="cc-form-hint">Lent out{item.unavailable_note?` · ${item.unavailable_note}`:''}. Existing requests can still be decided.</p>}
+      {!compact && me?.id!==item.owner_id && <button type="button" className="cc-profile-primary" aria-haspopup="dialog" onClick={()=>setLocalAsk(true)} disabled={item.available===false || (item.is_consumable && (item.available_quantity ?? 0)<=0)}>{item.is_consumable?'Ask for some':'Ask to borrow'}</button>}
+      <ul className={compact?'cc-detail-ask-list':'cc-request-slip'}>{query.data.map(request=>compact && request.status==='pending' && me?.id!==item.owner_id
+        ? <li key={request.id} className="cc-pending-ask-row"><Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} coat={request.requester_cat_coat} photoVersion={request.requester_photo_version} size={30} /><span><b>{request.requester_name ?? 'Member'}</b> asked {relativeWhen(request.created_at)}{request.quantity!==null?` for ${request.quantity}`:''}</span><Stamp>Pending</Stamp></li>
+        :<RequestCard key={request.id} request={request} callerId={me?.id ?? ''} />)}</ul>
+      {!query.data.length && <p className="cc-form-hint">No visible requests for this item yet.</p>}
     </>}
-    {!compact && <Link to="/requests" className="mt-4 inline-block underline">Your incoming and outgoing requests</Link>}
+    {(compact?askOpen:localAsk) && me?.id!==item.owner_id && <AskSheet item={item} cacheName={cacheName} onClose={()=>{setLocalAsk(false);onAskClose?.()}} />}
+    {!compact && <Link to="/requests" className="cc-text-action">Your incoming and outgoing requests</Link>}
   </section>
 }
 
 export function RequestsPage() {
-  const { me } = useAuth()
-  const query = useRequests(!!me?.display_name)
-  const ownContact = useOwnContact(me?.id ?? '')
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
-  const requests = query.data?.pages.flatMap(page => page.requests) ?? []
-  const unavailable = query.data?.pages.flatMap(page => page.unavailable_cache_ids) ?? []
-  return <main className="cc-page">
-    <h1 className="text-2xl font-semibold tracking-tight lg:text-[28px] lg:font-bold">Requests</h1>
-    {ownContact.isSuccess && !ownContact.data.contact && <aside className="mt-4 rounded-lg border border-slate-200 p-4"><h2 className="font-semibold">Add how to reach you</h2><p className="mt-1 text-sm text-slate-600">The other person sees it after approval, while you're both active in that cache.</p><Link to="/account" className="mt-2 inline-block underline">Add contact</Link></aside>}
-    {query.isPending && <p role="status" className="mt-4">Loading requests…</p>}
-    {query.isError && <div className="mt-4"><p role="alert" className="text-red-700">{errorMessage(query.error)} Some requests may be unavailable.</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try requests again</button></div>}
-    {!!unavailable.length && <div className="mt-4"><p role="alert" className="text-amber-800">Requests from {unavailable.length} cache(s) could not be loaded. These lists are incomplete.</p><button className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try unavailable caches again</button></div>}
-    {query.data && <>
-      <div className="cc-requests-layout contents lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
-      {([
-        { heading: 'Needs your answer', rows: requests.filter(request => request.owner_id === me.id && request.status === 'pending'), empty: 'No requests need your answer in the loaded results.' },
-        { heading: 'Answered for your things', rows: requests.filter(request => request.owner_id === me.id && request.status !== 'pending'), empty: 'No answered requests for your things in the loaded results.' },
-        { heading: 'Your requests', rows: requests.filter(request => request.requester_id === me.id), empty: 'None of your requests are visible in the loaded results.' },
-      ]).map(({ heading, rows, empty }) => <section key={heading} className={`mt-6 lg:mt-6 lg:min-w-0 lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4 ${heading === 'Your requests' ? 'lg:col-start-2 lg:row-span-2 lg:row-start-1' : 'lg:col-start-1'}`} aria-label={heading}>
-        <h2 className="cc-section-title lg:mb-0 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">{heading}</h2>
-        <ul className="cc-list lg:mt-4 lg:border-0">{rows.map(request => <RequestCard key={request.id} request={request} callerId={me.id} />)}</ul>
-        {!rows.length && <p className="mt-3 text-slate-600">{empty}{unavailable.length || query.isError || query.hasNextPage ? ' This list may be incomplete.' : ''}</p>}
-      </section>)}
-      </div>
-      {query.hasNextPage && <button className="mt-6 rounded-md border border-slate-300 px-4 py-2 disabled:opacity-60" disabled={query.isFetching} onClick={() => void query.fetchNextPage()}>{query.isFetchingNextPage ? 'Loading more…' : 'Load more requests'}</button>}
-    </>}
+  const {me}=useAuth(),query=useRequests(!!me?.display_name),summary=useHomeSummary(!!me?.display_name),ownContact=useOwnContact(me?.id ?? '')
+  if(!me)return <Navigate to="/login" replace />
+  if(!me.display_name)return <OnboardingPage />
+  const requests=query.data?.pages.flatMap(page=>page.requests) ?? [],unavailable=query.data?.pages.flatMap(page=>page.unavailable_cache_ids) ?? []
+  const incoming=requests.filter(row=>row.owner_id===me.id && row.status==='pending'),answered=requests.filter(row=>row.owner_id===me.id && row.status!=='pending'),outgoing=requests.filter(row=>row.requester_id===me.id)
+  function group(heading:string,rows:ItemRequest[],empty:string) {
+    return <section className="cc-request-group" aria-label={heading}><div className="cc-request-group-heading"><h2>{heading}</h2>{heading==='Needs your answer' && !summary.isError && !!summary.data?.pending_answer_count && <span>{summary.data.pending_answer_count}</span>}</div><ul className="cc-request-slip">{rows.map(request=><RequestCard key={request.id} request={request} callerId={me!.id} compactAnswered={heading==='Answered for your things'} />)}</ul>
+      {!rows.length && <p className="cc-form-hint">{empty}{unavailable.length || query.isError || query.hasNextPage?' This list may be incomplete.':''}</p>}
+    </section>
+  }
+  return <main className="organic-requests"><h1>Requests</h1>
+    {ownContact.isSuccess && !ownContact.data.contact && <aside className="cc-contact-nudge"><h2>Add how to reach you</h2><p>The other person sees it after approval, while you're both active in that cache.</p><Link to="/account">Add contact</Link></aside>}
+    {query.isPending && <p role="status">Loading requests…</p>}
+    {query.isError && <div className="cc-read-error"><p role="alert">{errorMessage(query.error)} Some requests may be unavailable.</p><button type="button" disabled={query.isFetching} onClick={()=>void query.refetch()}>Try requests again</button></div>}
+    {!!unavailable.length && <div className="cc-read-error"><p role="alert">Requests from {unavailable.length} cache(s) could not be loaded. These lists are incomplete.</p><button type="button" disabled={query.isFetching} onClick={()=>void query.refetch()}>Try unavailable caches again</button></div>}
+    {query.data && <><div className="cc-request-columns"><div className="cc-request-owned">{group('Needs your answer',incoming,'No asks need your answer in the loaded results.')}{group('Answered for your things',answered,'No answered asks for your things in the loaded results.')}</div>{group('Your asks',outgoing,'None of your asks are visible in the loaded results.')}</div>
+      {query.hasNextPage && <button type="button" className="cc-profile-secondary cc-request-more" disabled={query.isFetching} onClick={()=>void query.fetchNextPage()}>{query.isFetchingNextPage?'Loading more…':'Load more requests'}</button>}</>}
   </main>
 }

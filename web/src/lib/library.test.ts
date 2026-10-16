@@ -98,7 +98,7 @@ it('creates library-only items without needing caches and invalidates every shar
   expect(markup).not.toContain('Loading…')
   const client = new QueryClient(), invalidate = vi.spyOn(client,'invalidateQueries').mockResolvedValue()
   await invalidateRequestViews(client)
-  expect(invalidate.mock.calls.map(call=>call[0]?.queryKey?.[0])).toEqual(['item-requests','requests','item','items','library','library-item','home-summary','caches','cache'])
+  expect(invalidate.mock.calls.map(call=>call[0]?.queryKey?.[0])).toEqual(['item-requests','requests','item','items','library','library-item','home-summary','caches','cache','request-detail','request-contact'])
   const fetchMock = vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json(item))
   await uploadPhoto(null,item.id,new Blob(['JPEG'],{type:'image/jpeg'}))
   expect(fetchMock).toHaveBeenCalledWith(`/api/me/items/${item.id}/photo`,expect.objectContaining({method:'POST',credentials:'same-origin'}))
