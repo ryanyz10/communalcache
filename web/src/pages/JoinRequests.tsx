@@ -11,6 +11,7 @@ export function JoinRequests({ cacheId }: { cacheId: string }) {
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ['join-requests', cacheId] })
       await queryClient.invalidateQueries({ queryKey: ['cache', cacheId] })
+      await queryClient.invalidateQueries({ queryKey: ['caches'] })
     },
   })
   return <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="join-requests-heading" id="join-requests">

@@ -201,6 +201,21 @@ const server = createServer(async (request, response) => {
       if (!photo || !avatar(ownerId)) { json({error:'not_found'},404); return }
       response.writeHead(200,{'Content-Type':photo.type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}); response.end(photo.bytes); return
     }
+    if (path === '/api/me/summary') {
+      if (!authenticated) { json({error:'unauthorized'},401); return }
+      const incoming=[...requests.values()].filter(row=>row.owner_id===me.id && row.status==='pending')
+      const outgoing=[...requests.values()].filter(row=>row.requester_id===me.id)
+      const preview=(row,incoming)=>{
+        const user_id=incoming?row.requester_id:row.owner_id
+        return {id:row.id,cache_id:row.cache_id,item_id:row.item_id,item_title:row.item_title,
+          user_id,display_name:incoming?row.requester_name:row.owner_name,cat_coat:coat(user_id),profile_photo_version:avatar(user_id),
+          created_at:row.created_at,...(incoming?{quantity:row.quantity}:{status:row.status})}
+      }
+      const newest=(a,b)=>b.created_at-a.created_at || b.id.localeCompare(a.id)
+      json({owned_item_count:[...items.values()].filter(item=>item.owner_id===me.id).length,pending_answer_count:incoming.length,
+        incoming:incoming.sort(newest).slice(0,2).map(row=>preview(row,true)),outgoing:outgoing.sort(newest).slice(0,3).map(row=>preview(row,false))})
+      return
+    }
     if (path === '/api/requests') {
       if (!authenticated) { json({error:'unauthorized'},401); return }
       json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id).map(requestAvatars),unavailable_cache_ids:[],next_cursor:null})
@@ -257,7 +272,14 @@ const server = createServer(async (request, response) => {
     if (path === '/api/caches' || path.startsWith('/api/caches/')) {
       if (!authenticated || !me) { json({error:'unauthorized'},401); return }
       if (path === '/api/caches' && request.method === 'GET') {
-        json([...caches.values()].map(cache=>({id:cache.id,name:cache.name})))
+        json([...caches.values()].map(cache=>{
+          const members=cache.members??[{user_id:me.id,display_name:me.display_name}]
+          const ordered=[...members].sort((a,b)=>Number(b.user_id===me.id)-Number(a.user_id===me.id))
+          return {id:cache.id,name:cache.name,owner_id:cache.owner_id,requires_approval:cache.requires_approval,
+            active_member_count:members.length,attached_item_count:[...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cache.id)).length,
+            pending_answer_count:[...requests.values()].filter(row=>row.cache_id===cache.id && row.owner_id===me.id && row.status==='pending').length,
+            member_preview:ordered.slice(0,3).map(member=>({...member,cat_coat:coat(member.user_id),profile_photo_version:avatar(member.user_id)}))}
+        }))
         return
       }
       if (path === '/api/caches' && request.method === 'POST') {
@@ -332,7 +354,7 @@ const server = createServer(async (request, response) => {
       if (itemRoute) {
         const cacheId=itemRoute[1], itemId=itemRoute[2]
         if (!caches.has(cacheId)) { json({error:'not_found'},404); return }
-        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...itemAvatar(item),cache_id:cacheId}))); return }
+        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...itemAvatar(item),cache_id:cacheId,pending_count:[...requests.values()].filter(row=>row.item_id===item.id && row.cache_id===cacheId && row.status==='pending').length}))); return }
         if (!itemId && request.method === 'POST') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
@@ -369,7 +391,7 @@ const server = createServer(async (request, response) => {
         if (body.name !== undefined) cache.name=body.name.trim()
         if (body.requires_approval !== undefined) cache.requires_approval=body.requires_approval
       }
-      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id),cat_coat:coat(member.user_id)}))})
+      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id),cat_coat:coat(member.user_id),attached_item_count:[...items.values()].filter(item=>item.owner_id===member.user_id && (item.cache_ids??[item.cache_id]).includes(cache.id)).length}))})
       return
     }
     json({error:'not_found'},404)

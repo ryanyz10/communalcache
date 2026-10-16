@@ -36,10 +36,11 @@ it('creates canonical config/owner atomically and appears in Home immediately wi
   const cache = await created()
   expect(cache.secret).toMatch(/^[A-Za-z0-9_-]{43}$/)
   expect(atob(cache.secret.replaceAll('-', '+').replaceAll('_', '/') + '=')).toHaveLength(32)
-  expect((await listMyCaches(env.DB, cache.owner)).results).toEqual([{ id: cache.id, name: 'Tools' }])
-  expect((await cacheDetail(env.DB, cache.id, cache.owner)).members).toEqual([{user_id:cache.owner,display_name:'Owner',cat_coat:null,profile_photo_version:null}])
+  const home = [expect.objectContaining({ id: cache.id, name: 'Tools', active_member_count: 1, attached_item_count: 0, pending_answer_count: 0 })]
+  expect((await listMyCaches(env.DB, cache.owner)).results).toEqual(home)
+  expect((await cacheDetail(env.DB, cache.id, cache.owner)).members).toEqual([{user_id:cache.owner,display_name:'Owner',cat_coat:null,profile_photo_version:null,attached_item_count:0}])
   await worker.scheduled(createScheduledController(), env)
-  expect((await listMyCaches(env.DB, cache.owner)).results).toEqual([{ id: cache.id, name: 'Tools' }])
+  expect((await listMyCaches(env.DB, cache.owner)).results).toEqual(home)
 })
 
 it('enforces owner/status/boolean/FK constraints and rolls creation back on dependent failure', async () => {

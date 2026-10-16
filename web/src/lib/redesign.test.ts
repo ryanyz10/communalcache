@@ -27,6 +27,7 @@ function render(element: ReactElement, options: { caller?: string; path?: string
   client.setQueryData(['items', id], [])
   const pages = options.pages ?? [{ requests: [row], unavailable_cache_ids: [], next_cursor: null }]
   client.setQueryData(['requests'], { pages, pageParams: pages.map(() => null) })
+  client.setQueryData(['home-summary'], {owned_item_count:0,pending_answer_count:pages.flatMap(page=>page.requests).filter(row=>row.owner_id==='owner' && row.status==='pending').length,incoming:[],outgoing:[]})
   const routed = createElement(Routes, null, createElement(Route, { path: options.route ?? '/', element }))
   const result = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [options.path ?? '/'] }, routed) })))
   client.clear()
@@ -43,24 +44,24 @@ it('counts only pending incoming requests for the profile badge', () => {
   expect(pendingIncomingCount(rows, 'outsider')).toBe(0)
 })
 
-it('renders accessible header destinations, avatar and a first-page-only badge, hidden at zero', () => {
+it('renders accessible header destinations, avatar and the exact summary badge, hidden at zero', () => {
   const pages: RequestsPageData[] = [{ requests: [row], unavailable_cache_ids: [], next_cursor: 'next' }, { requests: [{ ...row, id: 'later' }], unavailable_cache_ids: [], next_cursor: null }]
   const markup = render(createElement(AppHeader), { pages })
   expect(markup).toContain('aria-label="Home"')
   expect(markup).toContain('href="/account"')
   expect(markup).toContain('aria-label="Account"')
-  expect(markup).toContain('Requests, 1 pending incoming on the first page')
-  expect(markup).not.toContain('2 pending incoming')
+  expect(markup).toContain('Requests, 2 asks need your answer')
+  expect(markup).not.toContain('first page')
   expect(markup).not.toContain('private@example.test')
   const empty = render(createElement(AppHeader), { pages: [{ requests: [], unavailable_cache_ids: [], next_cursor: null }] })
-  expect(empty).not.toContain('pending incoming on the first page')
+  expect(empty).not.toContain('asks need your answer')
   expect(render(createElement(AppHeader), { route: '/login', path: '/login' })).toBe('')
 })
 
-it('restores the pending request badge with the direct-D1 aggregate page', () => {
+it('uses the direct-D1 exact answer summary for the badge', () => {
   const markup = render(createElement(AppHeader))
-  expect(markup).toContain('pending incoming on the first page')
-  expect(markup).toContain('Requests, 1 pending incoming on the first page')
+  expect(markup).toContain('Requests, 1 ask needs your answer')
+  expect(markup).not.toContain('first page')
 })
 
 it('renders caches and a library link on home without a request preview, account controls or invented counts', () => {
@@ -74,7 +75,7 @@ it('renders caches and a library link on home without a request preview, account
   expect(markup).not.toContain('You asked Sam for Ladder')
   expect(markup).not.toContain('preview-heading')
   expect(markup).not.toContain('minmax(0,1fr)_340px')
-  for (const absent of ['Sign out', 'Push notifications', 'members ·', 'want to join', 'Refresh']) expect(markup).not.toContain(absent)
+  for (const absent of ['Sign out', 'Push notifications', 'want to join', 'Refresh']) expect(markup).not.toContain(absent)
   expect(markup).toContain('aria-labelledby="new-cache-heading"')
   expect(markup).toContain('for="cache-name"')
 })
@@ -82,7 +83,7 @@ it('renders caches and a library link on home without a request preview, account
 it('keeps the cache focused on shared things, with only owners seeing the join banner', () => {
   const options = { route: '/caches/:cacheId', path: `/caches/${id}` }
   const owner = render(createElement(CachePage), options)
-  expect(owner).toContain('2 members')
+  expect(owner).toContain('2 neighbors')
   expect(owner).toContain('1 person')
   expect(owner).toContain('Review')
   expect(owner).toContain('aria-label="Cache settings"')
