@@ -2,13 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../lib/api'
 import { contactAction,contactDisplayValue,contactOpenLabel,type Contact } from '../lib/contacts'
 import type { ItemRequest } from '../lib/requests'
+import { LoadingLines } from '../components/Skeleton'
 
 export function ApprovedContact({request,callerId,focused=false}:{request:ItemRequest;callerId:string;focused?:boolean}) {
   const party=callerId===request.owner_id || callerId===request.requester_id
   const query=useQuery({queryKey:['request-contact',callerId,request.id],queryFn:()=>apiFetch<{contact:Contact|null}>(`/api/me/requests/${request.id}/contact`),enabled:party && request.status==='approved',retry:false,gcTime:0})
   const name=(callerId===request.owner_id?request.requester_name:request.owner_name) ?? 'Member'
   if(!party || request.status!=='approved')return null
-  if(query.isPending || query.isFetching)return <p role="status" className="cc-form-hint">Loading contact…</p>
+  if(query.isPending || query.isFetching)return <LoadingLines label="Loading contact…" className={focused?'cc-focused-contact':'cc-inline-contact'} />
   if(query.isError)return <div className="cc-contact-unavailable"><p>Contact is unavailable. Both people must still be active in this request's cache.</p><button type="button" className="cc-text-action" onClick={()=>void query.refetch()}>Try contact again</button></div>
   const contact=query.data.contact
   if(!contact)return <p className="cc-form-hint">{name} hasn't added a way to reach them yet.</p>

@@ -14,11 +14,13 @@ import { OnboardingPage } from './OnboardingPage'
 import { RequestDecision } from './RequestDecision'
 import { ApprovedContact } from './RequestContact'
 import { AskSheet } from './AskSheet'
+import { RequestsSkeleton } from '../components/PageSkeletons'
+import { SkeletonRows, Shimmer, LoadingStatus } from '../components/Skeleton'
 export { ApprovedContact } from './RequestContact'
 
 function OwnerStock({request,callerId}:{request:ItemRequest;callerId:string}) {
   const query=useQuery({queryKey:['library-item',callerId,request.item_id],queryFn:()=>apiFetch<Item>(`/api/me/items/${request.item_id}`),enabled:request.owner_id===callerId && request.status==='pending' && request.quantity!==null})
-  if(query.isPending)return <span> · checking stock…</span>
+  if(query.isPending)return <span className="cc-skeleton-inline"><LoadingStatus label="Checking stock…" /><Shimmer width={90} height={12} /></span>
   if(query.isError)return <span> · stock unavailable <button type="button" className="cc-stock-retry" onClick={()=>void query.refetch()}>Retry stock</button></span>
   if(query.data.owner_id!==callerId || typeof query.data.quantity!=='number' || request.quantity===null)return null
   const left=stockAfterApproval(query.data.quantity,request.quantity)
@@ -51,7 +53,7 @@ export function ItemRequests({item,compact=false,askOpen=false,onAskClose,cacheN
   const query=useQuery({queryKey:['item-requests',item.cache_id,item.id],queryFn:()=>apiFetch<ItemRequest[]>(`/api/caches/${item.cache_id}/items/${item.id}/requests`),enabled:!!me?.display_name})
   return <section className={compact?'cc-detail-requests':'cc-item-requests'} aria-labelledby="requests-heading">
     <div className="cc-detail-requests-title"><h2 id="requests-heading">Asks</h2><p>Pending asks are visible to the cache. Decisions stay between the two people.</p></div>
-    {query.isPending && <p role="status">Loading requests…</p>}
+    {query.isPending && <SkeletonRows label="Loading requests…" kind="requests" count={2} />}
     {query.isError && <div><p role="alert" className="cc-form-error">{errorMessage(query.error)}</p><button type="button" className="cc-text-action" disabled={query.isFetching} onClick={()=>void query.refetch()}>Try requests again</button></div>}
     {query.isSuccess && <>
       {!compact && item.is_consumable && item.available_quantity!==undefined && <p>Available now: {item.available_quantity}</p>}
@@ -82,10 +84,10 @@ export function RequestsPage() {
   }
   return <main className="organic-requests"><h1>Requests</h1>
     {ownContact.isSuccess && !ownContact.data.contact && <aside className="cc-contact-nudge"><h2>Add how to reach you</h2><p>The other person sees it after approval, while you're both active in that cache.</p><Link to="/account">Add contact</Link></aside>}
-    {query.isPending && <p role="status">Loading requests…</p>}
+    {query.isPending && <RequestsSkeleton embedded pendingAnswerCount={summary.isError ? undefined : summary.data?.pending_answer_count} />}
     {query.isError && <div className="cc-read-error"><p role="alert">{errorMessage(query.error)} Some requests may be unavailable.</p><button type="button" disabled={query.isFetching} onClick={()=>void query.refetch()}>Try requests again</button></div>}
     {!!unavailable.length && <div className="cc-read-error"><p role="alert">Requests from {unavailable.length} cache(s) could not be loaded. These lists are incomplete.</p><button type="button" disabled={query.isFetching} onClick={()=>void query.refetch()}>Try unavailable caches again</button></div>}
     {query.data && <><div className="cc-request-columns"><div className="cc-request-owned">{group('Needs your answer',incoming,'No asks need your answer in the loaded results.')}{group('Answered for your things',answered,'No answered asks for your things in the loaded results.')}</div>{group('Your asks',outgoing,'None of your asks are visible in the loaded results.')}</div>
-      {query.hasNextPage && <button type="button" className="cc-profile-secondary cc-request-more" disabled={query.isFetching} onClick={()=>void query.fetchNextPage()}>{query.isFetchingNextPage?'Loading more…':'Load more requests'}</button>}</>}
+      {query.hasNextPage && <button type="button" className="cc-profile-secondary cc-request-more" disabled={query.isFetching} onClick={()=>void query.fetchNextPage()}>{query.isFetchingNextPage?<><LoadingStatus label="Loading more requests…" /><Shimmer width={140} height={18} /></>:'Load more requests'}</button>}</>}
   </main>
 }

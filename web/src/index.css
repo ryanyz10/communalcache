@@ -41,6 +41,76 @@
   }
 }
 
+/* Shared loading bars use the handoff's chip/shine ramp, not opacity pulses. */
+:root { --cc-shine: #f3e7d4; }
+@media (prefers-color-scheme: dark) { :root { --cc-shine: #5a5348; } }
+.cc-shimmer { display: block; flex: none; max-width: 100%; border-radius: 999px; background: linear-gradient(90deg,var(--cc-chip) 0%,var(--cc-shine) 50%,var(--cc-chip) 100%); background-size: 200% 100%; animation: cc-shimmer 1.6s linear infinite; }
+@keyframes cc-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.cc-cache-swap-region { position: relative; }
+.cc-cache-skeleton-exit { position: absolute; z-index: 1; top: 0; left: 0; width: 100%; pointer-events: none; animation: cc-placeholder-exit 350ms ease-out both; }
+.cc-skeleton-swap > ul > li { animation: cc-cache-row-enter 400ms ease-out both; }
+@keyframes cc-placeholder-exit { to { opacity: 0; } }
+@keyframes cc-cache-row-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes cc-skeleton-swap { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cc-shimmer { animation: none; background: var(--cc-chip); } .cc-cache-skeleton-exit { animation-duration: 200ms; } .cc-skeleton-swap > ul > li { animation: cc-skeleton-swap 200ms ease-out both; animation-delay: 0ms !important; } }
+.cc-neutral-loading { min-height: 100dvh; }
+.cc-skeleton-inline { display: inline-flex; align-items: center; vertical-align: middle; }
+.cc-skeleton-cache-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.cc-skeleton-plain .cc-skeleton-tile { width: 26px !important; height: 26px !important; border-radius: 9px; }
+.cc-skeleton-lines { display: flex; flex-direction: column; gap: 9px; padding-block: 12px; }
+.cc-skeleton-rows { padding: 2px 16px; }
+.cc-skeleton-row { display: flex; align-items: center; gap: 12px; height: 64px; border-bottom: 1px solid var(--cc-line); }
+.cc-skeleton-row:last-child { border-bottom: 0; }
+.cc-skeleton-row-copy { display: flex; flex: 1; flex-direction: column; min-width: 0; gap: 9px; }
+.cc-skeleton-row .cc-skeleton-tile { border-radius: 14px; }
+.cc-skeleton-members .cc-skeleton-row { height: 44px; }
+.cc-skeleton-members .cc-skeleton-tile, .cc-skeleton-requests .cc-skeleton-tile { border-radius: 50%; }
+.cc-skeleton-requests .cc-skeleton-row { height: 100px; }
+.cc-skeleton-desktop-title, .cc-skeleton-desktop-from, .cc-skeleton-desktop-status { display: none; }
+.cc-skeleton-table .cc-skeleton-rows { padding: 0; background: none; border-radius: 0; }
+.cc-cache-slow { display: flex; align-items: center; gap: 8px; height: 33px; margin: 0; color: var(--cc-sub); font: 400 12px/1.4 var(--font-body); animation: cc-skeleton-swap 200ms ease-out; }
+.cc-cache-slow > span { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--cc-accent); }
+.cc-cache-state-toolbar { height: 33px; margin-bottom: 10px; }
+.cc-cache-state-card { min-height: 260px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 10px; padding: 26px 24px; border-radius: 26px; background: var(--cc-card); text-align: left; }
+.cc-cache-state-card h2 { margin: 0; font: 400 24px/1.15 var(--font-heading); }
+.cc-cache-state-card p { max-width: 34ch; margin: 0; color: var(--cc-sub); font: 400 14px/1.5 var(--font-body); }
+.cc-cache-state-card button { min-height: 44px; margin-top: 6px; }
+.cc-cache-empty-card { border: 2px dashed var(--cc-edge); background: transparent; }
+.cc-skeleton-settings-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--cc-card); }
+.cc-skeleton-filter-chips { display: flex; gap: 8px; }
+.cc-skeleton-cache-contents .cc-contents-toolbar { height: 33px; margin-bottom: 10px; }
+.cc-skeleton-cache-contents .cc-skeleton-rows { margin-top: 0; }
+.cc-skeleton-home-box { background: var(--cc-card); gap: 8px; }
+.cc-skeleton-boxes > .sr-only { position: absolute; }
+.cc-skeleton-folder { display: block; padding: 12px 22px 14px; border-radius: 20px 20px 0 0; background: var(--cc-chip); font: 400 16px var(--font-heading); }
+.cc-page-skeleton .cc-library-slip { padding: 0; }
+.cc-page-skeleton .cc-library-hero .cc-shimmer { margin-top: 4px; }
+.cc-page-skeleton .cc-skeleton-item-photo { width: 100%; border-radius: 32px; }
+.cc-page-skeleton .cc-skeleton-field { border-radius: 28px; }
+.cc-page-skeleton .cc-cache-label > .cc-shimmer { margin-top: 10px; }
+.cc-page-skeleton .cc-profile-label-header .cc-shimmer { margin-left: 12px; }
+.cc-page-skeleton .cc-profile-field .cc-shimmer { margin-top: 4px; }
+@media (min-width: 1024px) {
+  .cc-skeleton-rows { padding: 2px 22px; }
+  .cc-skeleton-contents .cc-skeleton-row { display: grid; grid-template-columns: 44px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1.1fr) 100px; gap: 16px; }
+  .cc-skeleton-contents .cc-skeleton-row-copy, .cc-skeleton-contents .cc-skeleton-row-end { display: none; }
+  .cc-skeleton-desktop-title, .cc-skeleton-desktop-status { display: block; }
+  .cc-skeleton-desktop-from { display: flex; align-items: center; min-width: 0; gap: 8px; }
+  .cc-skeleton-desktop-from > .cc-shimmer:last-child { max-width: calc(100% - 34px); }
+  .cc-cache-state-toolbar { height: 40px; margin-bottom: 14px; }
+  .cc-cache-state-card { min-height: 304px; border-radius: 28px; }
+  .cc-skeleton-cache-contents .cc-contents-toolbar { height: 40px; margin-bottom: 14px; }
+  .cc-skeleton-filter-chips { gap: 6px; margin-left: 8px; }
+  .cc-skeleton-filter-chips > :nth-child(1) { width: 104px !important; }
+  .cc-skeleton-filter-chips > :nth-child(2) { width: 86px !important; }
+  .cc-skeleton-filter-chips > :nth-child(3) { width: 80px !important; }
+  .cc-page-skeleton .cc-skeleton-item-photo { height: 440px !important; border-radius: 40px; }
+  .cc-page-skeleton .cc-organic-item-copy > .cc-shimmer:first-child { height: 58px !important; }
+  .cc-page-skeleton .cc-profile-label-header > .cc-shimmer { height: 26px !important; }
+  .cc-page-skeleton .cc-profile-photo-row > .cc-shimmer { width: 64px !important; height: 64px !important; }
+  .cc-page-skeleton .cc-approved-name-tile { height: 230px !important; }
+}
+
 /* Keep unfinished screens on the same readable roles until their own redesign PR. */
 @theme inline {
   --color-white: var(--cc-card);

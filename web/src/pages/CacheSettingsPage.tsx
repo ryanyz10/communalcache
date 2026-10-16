@@ -9,6 +9,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { Avatar } from '../components/Avatar'
+import { CacheSettingsSkeleton } from '../components/PageSkeletons'
 
 function OwnerSettings({ cache }: { cache: CacheDetail }) {
   const client = useQueryClient()
@@ -99,7 +100,7 @@ export function CacheSettingsPage() {
   })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
-  if (query.isPending) return <main className="cc-page"><p role="status">Loading cache settings…</p></main>
+  if (query.isPending) return <CacheSettingsSkeleton cacheId={cacheId} />
   if (query.isError) return <main className="cc-page"><Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link><p role="alert" className="mt-4 text-red-700">{errorMessage(query.error)}</p><button className="mt-4 underline" onClick={() => void query.refetch()}>Try again</button></main>
   const cache = query.data, owner = cache.owner_id === me.id
   const invite = new URL(`/join/${cache.invite_token}`, location.origin).href

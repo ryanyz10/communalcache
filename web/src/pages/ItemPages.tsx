@@ -16,11 +16,13 @@ import { ThingTile } from '../components/ThingTile'
 import { boxColor } from '../components/Box'
 import { ItemForm } from './ItemForm'
 import { ShownIn } from './ShownIn'
+import { ItemSkeleton, ItemEditorSkeleton } from '../components/PageSkeletons'
+import { SkeletonRows } from '../components/Skeleton'
 
 export function ItemList({cacheId,onAdd}:{cacheId:string;onAdd?:()=>void}) {
   const query=useQuery({queryKey:['items',cacheId],queryFn:()=>apiFetch<Item[]>(`/api/caches/${cacheId}/items`)})
   return <section aria-labelledby="items-heading"><h2 id="items-heading">Shared things</h2>
-    {query.isPending && <p role="status">Loading items…</p>}
+    {query.isPending && <SkeletonRows label="Loading items…" />}
     {query.isError && <div><p role="alert">{errorMessage(query.error)}</p><button onClick={()=>void query.refetch()}>Try items again</button></div>}
     {query.isSuccess && !query.data.length && <p>Nothing shared yet. Add the first item for your neighbors.</p>}
     <ul className="cc-packing-slip">{query.data?.map(item=><li key={item.id}><Link to={`/caches/${cacheId}/items/${item.id}`}><ThingTile item={item} /><h3>{item.title}</h3><Avatar userId={item.owner_id} name={item.owner_name ?? 'Member'} photoVersion={item.owner_photo_version} coat={item.owner_cat_coat} size={24} /><span>{item.owner_name ?? 'Member'} · {item.is_consumable?`${item.quantity} in stock`:'Reusable'}</span></Link></li>)}</ul>
@@ -67,7 +69,7 @@ export function ItemPage() {
   const back=cacheId?`/caches/${cacheId}`:'/items',cacheName=cache.data?.name ?? 'Cache'
   if(!me) return <Navigate to="/login" replace />
   if(!me.display_name) return <OnboardingPage />
-  if(query.isPending) return <main className="cc-page"><p role="status">Loading item…</p></main>
+  if(query.isPending) return <ItemSkeleton cacheId={cacheId} />
   if(query.isError) return <main className="cc-page"><Link to={back}>‹ {cacheId?'Back to cache':'Your items'}</Link><p role="alert" className="cc-form-error">{errorMessage(query.error)}</p><button className="cc-text-action" onClick={()=>void query.refetch()}>Try again</button></main>
   const item=query.data,owner=item.owner_id===me.id
   const available=item.available!==false && (!item.is_consumable || (item.available_quantity ?? 0)>0)
@@ -98,8 +100,9 @@ export function ItemEditorPage({editing=false}:{editing?:boolean}) {
   if(!me.display_name) return <OnboardingPage />
   if(editing && item.isSuccess && item.data.owner_id!==me.id) return <Navigate to={back} replace />
   const error=(cacheId?cache.error:null) ?? (editing?item.error:null),pending=(!!cacheId && cache.isPending) || (editing && item.isPending)
+  if(pending && !error) return <ItemEditorSkeleton editing={editing} />
   return <main className="organic-item-editor">
-    {pending && <p role="status">Loading…</p>}{error && <div><p role="alert" className="cc-form-error">{errorMessage(error)}</p><button className="cc-text-action" onClick={()=>{if(cacheId)void cache.refetch();if(editing)void item.refetch()}}>Try again</button><Link to={back}>Cancel</Link></div>}
+    {error && <div><p role="alert" className="cc-form-error">{errorMessage(error)}</p><button className="cc-text-action" onClick={()=>{if(cacheId)void cache.refetch();if(editing)void item.refetch()}}>Try again</button><Link to={back}>Cancel</Link></div>}
     {!pending && !error && <ItemForm key={editing?itemId:`new:${cacheId ?? 'library'}`} cacheId={cacheId ?? null} item={editing?item.data:undefined} onSaved={saved=>navigate(cacheId?`/caches/${cacheId}/items/${saved.id}`:`/items/${saved.id}`)} onCancel={()=>navigate(editing?cacheId?`/caches/${cacheId}/items/${itemId}`:`/items/${itemId}`:back)} />}
   </main>
 }
