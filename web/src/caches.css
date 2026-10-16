@@ -273,7 +273,6 @@
   .cc-member-list strong { font: 600 15px/normal var(--font-body); min-width: 0; overflow-wrap: anywhere; }
   .cc-member-list li > span:last-child { margin-left: auto; flex: none; color: var(--cc-sub); font: 400 13px var(--font-body); }
   .cc-owner-label { padding: 3px 9px; border-radius: 999px; background: var(--cc-chip); font: 700 11px var(--font-body); }
-  .cc-cache-settings-link { color: var(--cc-accent-text); font: 600 14px var(--font-body); min-height: 44px; }
   .cc-cache-settings-page section { padding: 22px 24px; }
   .cc-cache-settings-page .cc-list { padding: 0; }
 }
