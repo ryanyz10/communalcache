@@ -21,7 +21,9 @@ export function notificationContent(row: OutboxRow, appBaseUrl: string) {
   const subject = titles[row.kind]
   if (!subject || data.event !== row.kind || typeof data.recipient_id !== 'string' || !data.recipient_id || typeof data.cache_id !== 'string' || !uuid.test(data.cache_id) || typeof data.cache_name !== 'string') throw new Error('Invalid notification payload')
   const itemId = typeof data.item_id === 'string' && uuid.test(data.item_id) ? data.item_id : null
-  const path = row.kind === 'request_rejected' && data.item_detached === true ? '/requests'
+  const requestId = typeof data.request_id === 'string' && uuid.test(data.request_id) ? data.request_id : null
+  const path = row.kind === 'request_approved' && requestId ? `/requests/${requestId}`
+    : row.kind === 'request_rejected' && data.item_detached === true ? '/requests'
     : ['join_rejected', 'member_removed'].includes(row.kind) ? '/' : itemId && row.kind !== 'item_deleted' ? `/caches/${data.cache_id}/items/${itemId}` : `/caches/${data.cache_id}`
   const base = new URL(appBaseUrl)
   if (base.origin !== appBaseUrl || (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(base.hostname)))) throw new Error('Invalid app origin')

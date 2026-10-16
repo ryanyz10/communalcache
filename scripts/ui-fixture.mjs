@@ -174,11 +174,12 @@ const server = createServer(async (request, response) => {
       if (path === '/api/me/contact') contacts.set(me.id,contact)
       json({contact}); return
     }
-    const ownRequest = path.match(/^\/api\/me\/requests\/([^/]+)\/(approve|reject|contact)$/)
+    const ownRequest = path.match(/^\/api\/me\/requests\/([^/]+)(?:\/(approve|reject|contact))?$/)
     if (ownRequest) {
       if (!authenticated) { json({error:'unauthorized'},401); return }
       const row=requests.get(ownRequest[1]), action=ownRequest[2]
       if (!row || (row.owner_id!==me.id && row.requester_id!==me.id)) { json({error:'not_found'},404); return }
+      if (!action) {if(request.method!=='GET'){json({error:'method_not_allowed'},405);return} json(requestAvatars(row));return}
       if (action==='contact') { if(row.status!=='approved') {json({error:'not_found'},404);return} json({contact:contacts.get(row.owner_id===me.id?row.requester_id:row.owner_id)??null}); return }
       if (row.owner_id!==me.id) { json({error:'not_found'},404); return }
       if (row.status!=='pending') { json({error:'request_not_pending'},409); return }

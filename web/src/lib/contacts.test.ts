@@ -15,7 +15,7 @@ const request: ItemRequest = {id:'ask',cache_id:'tools',cache_name:'Tools',item_
 const contact: Contact = {kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'}
 afterEach(()=>{vi.restoreAllMocks()})
 function render(element: ReactElement, caller = 'requester', options: {own?:Contact|null;other?:Contact|null;denied?:boolean} = {}) {
-  const client = new QueryClient({defaultOptions:{queries:{retry:false,retryOnMount:false}}})
+  const client = new QueryClient({defaultOptions:{queries:{retry:false,retryOnMount:false,staleTime:Infinity}}})
   client.setQueryData(['me'],{id:caller,display_name:'Neighbor',email:'private-auth@example.test'})
   client.setQueryData(['own-contact',caller],{contact:options.own ?? null})
   client.setQueryData(['request-contact',caller,request.id],{contact:options.other === undefined ? contact : options.other})
@@ -72,13 +72,13 @@ it('shows missing-contact and nudge states, but never renders cached contact dat
   expect(render(createElement(RequestsPage),'requester',{own:contact})).not.toContain('Add how to reach you')
 })
 
-it('starts optional approval textarea empty with a 500-character hint, separate from required rejection reason', () => {
+it('starts optional approval textarea empty with a 500-character hint and a separate decline flow', () => {
   const markup = render(createElement(RequestCard,{request:{...request,status:'pending',approval_message:null},callerId:'owner'}),'owner')
   expect(markup).toContain('Message (optional)')
   expect(markup).toContain('Up to 500 characters')
   expect(markup).toMatch(/<textarea[^>]*><\/textarea>/)
-  expect(markup).toContain('Reason for rejection')
-  expect(markup).toContain('required=""')
+  expect(markup).toContain('Decline with a reason')
+  expect(markup).toContain('aria-label="Decline request from Requester"')
   expect(markup).not.toContain('By the gate')
   expect(markup).not.toContain('private-auth@example.test')
 })

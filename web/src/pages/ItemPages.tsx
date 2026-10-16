@@ -79,8 +79,8 @@ export function ItemPage() {
           <div className="cc-item-context"><dt>In</dt><dd>{cacheId?cacheName:item.caches?.length?item.caches.map(row=>row.name).join(' · '):'Your private library'}</dd></div>
           {item.description && <div className="cc-item-note"><dt>Note</dt><dd>{item.description}</dd></div>}
         </dl>
-        {!owner && cacheId && <div className="cc-detail-ask"><p>If {item.owner_name ?? 'the owner'} says yes, you'll both see how to reach each other.</p><button type="button" disabled={!available} aria-expanded={askOpen} aria-controls="item-ask-form" onClick={()=>setAskOpen(true)}><span className="cc-desktop-copy">{item.is_consumable?'Ask for some':'Ask to borrow'}</span><span className="cc-phone-copy">Ask {item.owner_name ?? 'the owner'} {item.is_consumable?'for some':'to borrow it'}</span></button></div>}
-        {cacheId && <ItemRequests item={item} compact askOpen={askOpen} />}
+        {!owner && cacheId && <div className="cc-detail-ask"><p>If {item.owner_name ?? 'the owner'} says yes, you'll both see how to reach each other.</p><button type="button" disabled={!available} aria-expanded={askOpen} aria-haspopup="dialog" aria-controls="item-ask-sheet" onClick={()=>setAskOpen(true)}><span className="cc-desktop-copy">{item.is_consumable?'Ask for some':'Ask to borrow'}</span><span className="cc-phone-copy">Ask {item.owner_name ?? 'the owner'} {item.is_consumable?'for some':'to borrow it'}</span></button></div>}
+        {cacheId && <ItemRequests item={item} compact askOpen={askOpen} onAskClose={()=>setAskOpen(false)} cacheName={cache.data?.name} />}
         {owner && <div className="cc-owner-item-controls"><div className="cc-inline-actions"><Link to={cacheId?`/caches/${cacheId}/items/${itemId}/edit`:`/items/${itemId}/edit`} className="cc-profile-primary">Edit item</Link><DeleteItem item={item} /></div>
           <ItemAvailability key={`${item.id}:${item.available}:${item.unavailable_note ?? ''}`} item={item} /><div id="sharing"><ShownIn item={item} /></div><PhotoUpload item={item} />{!cacheId && <Link to="/requests" className="cc-profile-secondary">View asks in Requests</Link>}
         </div>}
