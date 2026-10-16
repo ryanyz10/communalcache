@@ -1,10 +1,8 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router'
-import { BoxMark, PixelHorizon } from '../components/PixelArt'
+import { BoxMark } from '../components/Box'
 import { landingCopy as copy } from '../lib/landingCopy'
 import { SupportLink } from '../components/Support'
-
-const boxes = ['Street','Friends','Club','Neighbors','Building','Garden','Community'].map(name=>({id:name,name}))
 
 export function LandingPage() {
   // Keep index.html's single title instead of hoisting a duplicate.
@@ -29,8 +27,6 @@ export function LandingPage() {
             <Link to="/login?invite=1" className="cc-landing-secondary">{copy.invite}</Link>
           </div>
         </section>
-        <div className="lg:hidden"><PixelHorizon kind="boxes" entries={boxes.slice(0,4)} /></div>
-        <div className="hidden lg:block"><PixelHorizon kind="boxes" entries={boxes} /></div>
         <div className="cc-landing-content">
           <section className="cc-landing-how" aria-labelledby="landing-how-heading">
             <h2 id="landing-how-heading">{copy.howHeading}</h2>
