@@ -16,7 +16,7 @@ const item:LibraryItem={id:'tent',cache_id:id,owner_id:'me',owner_name:'Ryan',ti
 const members=[{user_id:'me',display_name:'Ryan',cat_coat:'grey',attached_item_count:1},{user_id:'dev',display_name:'Dev',cat_coat:'oat',attached_item_count:0}]
 const cache={id,name:'Maple St. Neighbors',owner_id:'me',requires_approval:true,active_member_count:6,attached_item_count:24,pending_answer_count:29,member_preview:members,members,invite_token:id+'.'+'A'.repeat(43)}
 const preview={id:'ask',cache_id:id,item_id:item.id,item_title:item.title,user_id:'dev',display_name:'Dev',cat_coat:'oat' as const,profile_photo_version:null,created_at:1,quantity:null}
-function render(home:boolean) {
+function render(home:boolean,empty=false) {
   vi.stubGlobal('location',{origin:'http://localhost:8797'})
   vi.stubGlobal('sessionStorage',{getItem:()=>null})
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
@@ -25,8 +25,8 @@ function render(home:boolean) {
   client.setQueryData(['cache',id],cache)
   client.setQueryData(['items',id],[item])
   client.setQueryData(['join-requests',id],[])
-  client.setQueryData(['library','me'],{pages:[{items:[item],next_cursor:'next'}],pageParams:[null]})
-  client.setQueryData(['home-summary'],{owned_item_count:87,pending_answer_count:29,incoming:[preview],outgoing:[{...preview,status:'approved'}]})
+  client.setQueryData(['library','me'],{pages:[{items:empty?[]:[item],next_cursor:empty?null:'next'}],pageParams:[null]})
+  client.setQueryData(['home-summary'],empty?{owned_item_count:0,pending_answer_count:0,incoming:[],outgoing:[]}:{owned_item_count:87,pending_answer_count:29,incoming:[preview],outgoing:[{...preview,status:'approved'}]})
   client.setQueryData(['requests'],{pages:[{requests:[],next_cursor:null}],pageParams:[null]})
   const children=createElement(MemoryRouter,{initialEntries:[home?'/':`/caches/${id}`]},createElement(AppHeader),createElement(Routes,null,createElement(Route,{path:home?'/':'/caches/:cacheId',element:createElement(home?HomePage:CachePage)})))
   const html=renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children})))
@@ -59,6 +59,14 @@ it('uses time, true totals and ID-derived color rather than first-page counts or
   for(const text of ['See all 87','29 asks need your answer','6 neighbors · 24 things','Dev wants to borrow your 4-person tent.','See how to reach Dev','APPROVED']) expect(html.toLowerCase()).toContain(text.toLowerCase())
   expect(html).toContain('cc-thing-tile-deep')
   expect(html).not.toMatch(/first page|private@example|mailto:|sms:|data-opening/)
+})
+it('shows only the empty slips when you have no things or asks',()=>{
+  const html=render(true,true)
+  expect(html).toContain('No things yet.')
+  expect(html).toContain('No asks in your current caches.')
+  expect(html).not.toContain('cc-home-things')
+  expect(html).not.toContain('cc-home-asks')
+  expect(html).toContain('>See all</a>')
 })
 it('retains native dialogs, labelled create fields, real bot-dependent submit and private preview defaults',()=>{
   const html=render(true)
