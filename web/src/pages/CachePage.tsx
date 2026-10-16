@@ -51,7 +51,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
       {itemsMoving ? <p role="status" className="mt-6">Items are being moved, back soon</p> : <><ItemList cacheId={cache.id} onAdd={() => addDialog.current?.showModal()} /><AddItemSheet cacheId={cache.id} cacheName={cache.name} dialog={addDialog} /></>}
       <aside className="cc-cache-members hidden lg:mt-6 lg:block lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="cache-members-heading">
         <h2 id="cache-members-heading" className="font-semibold">Members · {cache.members.length}</h2>
-        <ul className="mt-3 space-y-3">{cache.members.map(member=><li key={member.user_id} className="flex items-center gap-2 text-sm"><Avatar userId={member.user_id} name={member.display_name ?? 'Member'} photoVersion={member.profile_photo_version} size={28} /><span className="min-w-0 break-words">{member.display_name ?? 'Member'}</span></li>)}</ul>
+        <ul className="mt-3 space-y-3">{cache.members.map(member=><li key={member.user_id} className="flex items-center gap-2 text-sm"><Avatar userId={member.user_id} name={member.display_name ?? 'Member'} photoVersion={member.profile_photo_version} coat={member.cat_coat} size={28} /><span className="min-w-0 break-words">{member.display_name ?? 'Member'}</span></li>)}</ul>
         <Link to={`/caches/${cache.id}/settings`} className="mt-4 inline-block text-sm underline">Cache settings</Link>
       </aside>
     </div></div>

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./profile.css";
 
 @font-face { font-family: Caprasimo; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/caprasimo-latin-ext.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF; }
 @font-face { font-family: Caprasimo; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/caprasimo-latin.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
@@ -78,14 +79,6 @@ dialog::backdrop { background: var(--cc-scrim); }
   .cc-switch::after { content: ''; @apply absolute top-[3px] left-[3px] h-[22px] w-[22px] rounded-full; background: var(--cc-card); }
   .cc-switch:checked::after { transform: translateX(20px); background: var(--cc-on-accent); }
   .cc-sheet { @apply w-full max-w-md bg-white px-5 pt-3 pb-6 text-slate-900; border-radius: 36px 36px 0 0; }
-  .cc-auth { @apply mx-auto flex min-h-[max(640px,100dvh)] w-full max-w-md flex-col px-5 pt-10 pb-7; }
-  .cc-auth-heading { @apply mt-5 text-[28px] leading-[34px]; }
-  .cc-auth-card { @apply border border-slate-200 bg-white p-5; border-radius: var(--radius-lg); }
-  .cc-auth-primary, .cc-auth-secondary { @apply flex min-h-[52px] w-full items-center justify-center rounded-full px-4 py-3 text-center disabled:opacity-45; font-family: var(--font-heading); }
-  .cc-auth-primary { background: var(--cc-fg); color: var(--cc-bg); }
-  .cc-auth-secondary { border: 1.5px solid var(--cc-edge); background: var(--cc-card); color: var(--cc-fg); }
-  .cc-auth-text { @apply flex min-h-11 items-center justify-center px-2 py-2 text-center text-[15px] text-blue-800 disabled:opacity-45; }
-  .cc-auth-input { @apply mt-1.5 min-h-11 w-full rounded-full px-3.5 py-3; border: 1.5px solid var(--cc-edge); background: var(--cc-field); }
 }
 
 .cc-app-shell { min-height: 100dvh; }
@@ -139,7 +132,7 @@ dialog::backdrop { background: var(--cc-scrim); }
 .cc-home-mark { display: flex; align-items: center; justify-content: center; }
 .cc-hero { margin: -20px -16px 0; padding: 20px 16px 0; }
 .cc-content, .cc-hero-content { display: contents; }
-.cc-auth-brand, .cc-landing-sky { background: var(--cc-bg); color: var(--cc-fg); }
+.cc-landing-sky { background: var(--cc-bg); color: var(--cc-fg); }
 .cc-landing-header, .cc-landing-hero, .cc-landing-how, .cc-landing-community, .cc-landing-footer { max-width: 1120px; margin: 0 auto; padding: 20px; }
 .cc-landing { min-height: 100dvh; }
 .cc-landing-hero h1 { max-width: 20ch; font-size: 44px; line-height: .98; }
@@ -186,9 +179,6 @@ dialog::backdrop { background: var(--cc-scrim); }
   .cc-item-media .cc-item-photo { display: block; width: 100%; height: auto; max-height: min(65vh,720px); aspect-ratio: 4/3; border-radius: 28px; background: var(--cc-chip); }
   .cc-requests-layout { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,26rem),1fr)); align-items: start; gap: var(--cc-space); }
   .cc-sheet { margin: auto; border-radius: 32px; }
-  .cc-auth { width: 100%; max-width: none; padding: var(--cc-space) var(--cc-gutter); }
-  .cc-auth-pane { display: block; width: 100%; margin-inline: auto; }
-  .cc-auth-form { display: flex; flex-direction: column; width: 100%; max-width: 28rem; margin-inline: auto; }
 }
 @container (min-width: 68rem) {
   .cc-cache-layout { grid-template-columns: minmax(0,1fr) clamp(240px,18vw,320px); }
@@ -210,8 +200,4 @@ dialog::backdrop { background: var(--cc-scrim); }
   .cc-item-layout { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: var(--cc-space); }
   .cc-item-media { margin-top: 0; }
   .cc-account-layout { gap: var(--cc-space); }
-  .cc-auth { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(360px,1fr); padding: 0; }
-  .cc-auth-story { max-width: 72ch; margin: auto; padding: 48px 40px; }
-  .cc-auth-story h2 { font-size: 64px; line-height: 1.05; }
-  .cc-auth-pane { display: flex; min-height: 100dvh; align-items: center; justify-content: center; padding: 40px; background: var(--cc-card); }
 }

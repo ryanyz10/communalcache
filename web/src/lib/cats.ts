@@ -1,3 +1,6 @@
+import type { CatCoat } from '../../../shared/cat-coats'
+export type { CatCoat } from '../../../shared/cat-coats'
+
 export const COATS = [
   { key: 'ginger', name: 'Ginger', fill: '#d67f48', eye: '#201e1d' },
   { key: 'grey', name: 'Grey', fill: '#82796a', eye: '#201e1d' },
@@ -17,10 +20,10 @@ export function catHash(id: string) {
   return hash >>> 0
 }
 
-export function catTraits(id: string) {
+export function catTraits(id: string, coat?: CatCoat | null) {
   const hash = catHash(id)
   return {
-    coat: COATS[hash % 6], pattern: PATTERNS[(hash >>> 3) % 5],
+    coat: COATS.find(value => value.key === coat) ?? COATS[hash % 6], pattern: PATTERNS[(hash >>> 3) % 5],
     folded: ((hash >>> 7) % 5) === 0, tip: ((hash >>> 10) % 3) === 0,
     delay: ((hash >>> 13) % 30) / 10,
   }

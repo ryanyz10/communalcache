@@ -110,7 +110,7 @@ it('limits member settings to members and invite, preserving owner-only destruct
 it('shows only the caller email in Account and retains labeled profile/push actions', async () => {
   const markup = render(createElement(AccountPage))
   expect(markup).toContain('private@example.test')
-  expect(markup).toContain('what neighbors see')
+  expect(markup).toContain('What neighbors see')
   expect(markup).toContain('Edit<span class="sr-only"> display name')
   expect(markup).toContain('role="switch"')
   expect(markup).toContain('aria-label="Push notifications"')

@@ -51,7 +51,9 @@ it('keeps login and name onboarding on the invite page, then offers a join actio
   expect(signedOut.indexOf('Invite saved on this browser')).toBeLessThan(signedOut.indexOf('<form'))
   expect(signedOut).not.toContain(secret)
   expect(renderJoin({ ...me, display_name: null })).toContain('What should neighbors call you?')
-  expect(renderJoin(me)).toContain('Join cache')
+  expect(renderJoin(me)).toContain('Ask to join')
+  expect(renderJoin(me)).toContain('Your invitation')
+  expect(renderJoin(me)).not.toContain('AN INVITE FROM')
   expect(renderJoin(me, 'bad-token')).toContain('Invalid invite link')
 })
 
