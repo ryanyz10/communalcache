@@ -76,6 +76,7 @@ it('renders folder navigation, one contents list, scoped member counts and acces
   const html=render(false)
   for(const text of ['aria-label="Your caches"','aria-label="Filter contents"','aria-pressed="true"','Search contents','In the box','1 thing','0 things','Cache settings']) expect(html).toContain(text)
   expect(html.match(/class="cc-contents-row"/g)).toHaveLength(1)
+  expect(html).not.toContain('>Cache settings</a>')
   expect(html).toContain('cc-thing-tile-pale')
   expect(html).toContain('/caches/'+id+'/items/tent')
   expect(html).not.toContain('private@example.com')
