@@ -705,6 +705,14 @@ export async function decideRequest(db: D1Database, requestId: string, userId: s
   return {request:(await requestPhotos(db,userId,result.results as D1Request[]))[0],notificationId:token}
 }
 
+export async function requestDetail(db: D1Database, requestId: string, userId: string) {
+  const row = await db.prepare(`${requestRead} WHERE r.id=? AND (i.owner_id=? OR r.requester_id=?)`)
+    .bind(requestId,userId,userId).first<D1Request>()
+  if (!row) throw new HttpError(404,'not_found')
+  // Party history is not cache/item/photo/contact permission.
+  return (await requestPhotos(db,userId,[row]))[0]
+}
+
 export async function requestsPage(db: D1Database, userId: string, after: string | null) {
   let time: number | null = null, id: string | null = null
   if (after !== null) {
