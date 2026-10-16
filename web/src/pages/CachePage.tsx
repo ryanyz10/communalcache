@@ -74,7 +74,6 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
         {owner && joins.isError && <div className="cc-read-error"><p role="alert">Join requests could not be loaded.</p><Link to={`${settings}#join-requests`}>Open settings to try again</Link></div>}
         {owner && !!joins.data?.length && <div className="cc-join-banner"><span>{joins.data.length} {joins.data.length===1?'person wants':'people want'} to join</span><Link to={`${settings}#join-requests`}>Review</Link></div>}
         <ul className="cc-packing-slip cc-member-list">{cache.members.map(member=><li key={member.user_id}><Avatar userId={member.user_id} name={member.display_name ?? 'Neighbor'} coat={member.cat_coat} photoVersion={member.profile_photo_version} size={32} /><strong>{member.user_id===me.id?'You':member.display_name ?? 'Neighbor'}</strong>{member.user_id===cache.owner_id && <span className="cc-owner-label">Owner</span>}<span>{member.attached_item_count} {member.attached_item_count===1?'thing':'things'}</span></li>)}</ul>
-        <Link to={settings} className="cc-cache-settings-link">Cache settings</Link>
       </aside>
     </div>
     {!itemsMoving && <AddItemSheet cacheId={cache.id} cacheName={cache.name} dialog={addDialog} />}
