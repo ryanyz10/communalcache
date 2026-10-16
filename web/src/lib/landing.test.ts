@@ -62,7 +62,7 @@ it('keeps title copy centralized and hoists the root description without duplica
 
 it('waits for session resolution and keeps session errors from becoming a landing-page flash', ()=>{
   const pending=render('/',null,'pending')
-  expect(pending).toContain('Starting…');expect(pending).toContain('role="status"')
+  expect(pending).toContain('cc-neutral-loading');expect(pending).toContain('class="sr-only">Loading…');expect(pending).toContain('role="status"')
   for(const markup of [pending,render('/',null,'error')]) {
     expect(markup).not.toContain(landingCopy.hero)
     expect(markup).not.toContain(landingCopy.getStarted)

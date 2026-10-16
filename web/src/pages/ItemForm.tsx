@@ -7,6 +7,7 @@ import type { CacheSummary } from '../lib/caches'
 import { boxColor } from '../components/Box'
 import { PHOTO_READ_ERROR,resizePhoto } from '../lib/photos'
 import { invalidateRequestViews } from '../lib/requests'
+import { LoadingStatus, Shimmer } from '../components/Skeleton'
 
 export function ItemForm({ cacheId,item,onSaved,onCancel,onBusy,embedded=false }: {cacheId:string|null;item?:Item;onSaved:(item:Item)=>void;onCancel:()=>void;onBusy?:(busy:boolean)=>void;embedded?:boolean}) {
   const client=useQueryClient(),{me}=useAuth()
@@ -39,7 +40,7 @@ export function ItemForm({ cacheId,item,onSaved,onCancel,onBusy,embedded=false }
       <div className="cc-item-title-field"><label htmlFor="item-title">What is it?</label><input autoFocus={!!item} id="item-title" type="text" required maxLength={240} value={title} onChange={event=>setTitle([...event.target.value].slice(0,120).join(''))} className="cc-profile-input" /></div>
       {consumable && <div className="cc-stock-stepper"><label htmlFor="item-quantity">How many to give?</label><button type="button" aria-label="Decrease stock quantity" disabled={Number(quantity)<=0} onClick={()=>setQuantity(String(Math.max(0,Number(quantity)-1)))}>−</button><input id="item-quantity" aria-describedby="quantity-help" type="number" inputMode="numeric" required min={0} max={9999} step={1} value={quantity} style={{width:`${Math.max(1,quantity.length)}ch`}} onChange={event=>setQuantity(event.target.value)} /><button type="button" aria-label="Increase stock quantity" disabled={Number(quantity)>=9999} onClick={()=>setQuantity(String(Math.min(9999,Number(quantity)+1)))}>+</button><span id="quantity-help" className="sr-only">Stock quantity 0–9999. One stock count across all caches; pending requests must stay covered.</span></div>}
       {!item && <fieldset className="cc-put-it-in"><legend>Put it in</legend>
-        {caches.isPending && <p role="status" className="cc-form-hint">Loading caches…</p>}
+        {caches.isPending && <div className="cc-skeleton-cache-options"><LoadingStatus label="Loading caches…" /><Shimmer width={130} height={38} /><Shimmer width={110} height={38} /></div>}
         {caches.isError && <div className="cc-read-error"><p role="alert">{errorMessage(caches.error)}</p><button type="button" onClick={()=>void caches.refetch()}>Try caches again</button></div>}
         <div>{caches.data && [...caches.data].sort((a,b)=>Number(selected.includes(b.id))-Number(selected.includes(a.id))).map(cache=><label key={cache.id} style={selected.includes(cache.id)?{background:boxColor(cache.id),color:'#201e1d'}:undefined}><input type="checkbox" checked={selected.includes(cache.id)} disabled={cache.id===cacheId || locked} onChange={event=>setSelected(current=>event.target.checked?[...current,cache.id]:current.filter(id=>id!==cache.id))} /><span aria-hidden="true" style={{background:boxColor(cache.id)}}>{selected.includes(cache.id)?'✓':''}</span>{cache.name}{cache.id===cacheId && <span className="sr-only">, shared here in the same create operation</span>}</label>)}</div>
         {caches.isSuccess && !caches.data.length && <p className="cc-form-hint">No caches yet. Your item stays private in your library.</p>}

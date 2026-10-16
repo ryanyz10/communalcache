@@ -29,6 +29,11 @@ export function askedWhen(createdAt: number, now = Date.now()) {
   const days = Math.floor((now-createdAt)/86_400_000)
   return days < 1 ? 'Asked today' : days === 1 ? 'Asked yesterday' : `Asked ${days} days ago`
 }
+export function startSlowNotice(reveal: () => void) {
+  const timer = setTimeout(reveal, 6000)
+  return () => clearTimeout(timer)
+}
+
 export function greeting(hour: number) { return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening' }
 export function incomingDescription(ask: HomeSummary['incoming'][number]) {
   const name=ask.display_name ?? 'A neighbor'

@@ -4,6 +4,7 @@ import { apiFetch,errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
 import { invalidateRequestViews,type ItemRequest } from '../lib/requests'
 import { Cat } from '../components/Cat'
+import { LoadingLines } from '../components/Skeleton'
 
 export function AskSheet({item,cacheName='This cache',onClose}:{item:Item;cacheName?:string;onClose:()=>void}) {
   const dialog=useRef<HTMLDialogElement>(null),cancel=useRef<HTMLButtonElement>(null),client=useQueryClient()
@@ -25,7 +26,7 @@ export function AskSheet({item,cacheName='This cache',onClose}:{item:Item;cacheN
     {ask.isSuccess ? <div className="cc-action-sheet-body"><div className="cc-sheet-heading"><h2 id="ask-sheet-heading">Ask sent</h2><p>{item.title} · {cacheName}</p></div><p role="status">Request sent. Arrange the handoff in person if approved.</p><button type="button" autoFocus className="cc-profile-primary" onClick={()=>dialog.current?.close()}>Done</button></div> : <form className="cc-action-sheet-body" onSubmit={submit}>
       <div className="cc-sheet-heading"><h2 id="ask-sheet-heading">{stock.is_consumable?`Ask ${name} for some?`:`Ask ${name} to borrow it?`}</h2><p>{cacheName}{stock.is_consumable && typeof max==='number' && !current.isError?` · ${max} to give right now`:''}</p></div>
       {stock.is_consumable && <div className="cc-ask-stepper"><label htmlFor="request-quantity">How many?</label><button type="button" aria-label="Decrease ask quantity" disabled={ask.isPending || Number(quantity)<=1} onClick={()=>setQuantity(String(Math.max(1,Number(quantity)-1)))}>−</button><input id="request-quantity" type="number" inputMode="numeric" min={1} max={typeof max==='number'?Math.min(9999,max):0} step={1} required value={quantity} disabled={ask.isPending || !available || current.isError} onChange={event=>setQuantity(event.target.value)} style={{width:`${Math.max(1,quantity.length)}ch`}} /><button type="button" aria-label="Increase ask quantity" disabled={ask.isPending || typeof max!=='number' || Number(quantity)>=Math.min(9999,max)} onClick={()=>setQuantity(String(Math.min(max ?? 0,Number(quantity)+1)))}>+</button></div>}
-      {current.isFetching && <p role="status" className="cc-form-hint">Checking current availability…</p>}
+      {current.isFetching && <LoadingLines label="Checking current availability…" />}
       {current.isError && <div><p role="alert" className="cc-form-error">{errorMessage(current.error)}</p><button type="button" className="cc-text-action" onClick={()=>void current.refetch()}>Refresh availability</button></div>}
       {!current.isError && stock.available===false && <p className="cc-form-hint">This item is marked as lent out. Existing requests are unchanged.</p>}
       {!current.isError && stock.is_consumable && (max===undefined || max===null) && <p className="cc-form-hint">Refresh the item to see current availability.</p>}

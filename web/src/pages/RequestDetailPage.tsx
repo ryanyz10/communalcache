@@ -10,6 +10,7 @@ import { thingTone } from '../components/ThingTile'
 import { OnboardingPage } from './OnboardingPage'
 import { ApprovedContact } from './RequestContact'
 import { RequestCard } from './RequestsPage'
+import { RequestDetailSkeleton } from '../components/PageSkeletons'
 
 export function RequestDetailPage() {
   const {requestId=''}=useParams(),{me}=useAuth()
@@ -17,7 +18,7 @@ export function RequestDetailPage() {
   if(!me)return <Navigate to="/login" replace />
   if(!me.display_name)return <OnboardingPage />
   return <main className="organic-request-detail"><nav className="cc-request-back"><Link to="/requests"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>Requests</Link></nav>
-    {query.isPending && <p role="status" className="cc-request-detail-state">Loading ask…</p>}
+    {query.isPending && <RequestDetailSkeleton embedded />}
     {query.isError && <div className="cc-request-detail-state"><p role="alert" className="cc-form-error">{errorMessage(query.error)}</p><button type="button" className="cc-text-action" onClick={()=>void query.refetch()}>Try ask again</button></div>}
     {query.isSuccess && (query.data.status==='approved' ? <>
       <div className="cc-approved-item"><span className="cc-approved-cats" aria-hidden="true"><span><Cat userId={query.data.owner_id} coat={query.data.owner_cat_coat} pose="sit" /></span><span><Cat userId={query.data.requester_id} coat={query.data.requester_cat_coat} pose="sit" /></span></span>

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { HomePage } from './pages/HomePage'
@@ -14,12 +14,19 @@ import { RequestDetailPage } from './pages/RequestDetailPage'
 import { AccountPage } from './pages/AccountPage'
 import { CacheSettingsPage } from './pages/CacheSettingsPage'
 import { AppHeader } from './components/AppHeader'
+import { RouteSkeleton } from './components/PageSkeletons'
+import { LoadingStatus } from './components/Skeleton'
+import { hasSessionHint } from './lib/sessionHint'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
 export function Ready({ children }: { children: ReactNode }) {
   const { ready, error } = useAuth()
-  if (!ready) return <main className="mx-auto max-w-md px-4 py-12"><p role="status" className="text-slate-600">Starting…</p></main>
+  const { pathname } = useLocation()
+  if (!ready) {
+    if (!hasSessionHint() || pathname === '/login' || pathname === '/auth/link' || pathname.startsWith('/join/')) return <main className="cc-neutral-loading" aria-busy="true"><LoadingStatus label="Loading…" /></main>
+    return <div className="cc-app-shell"><AppHeader loading /><RouteSkeleton pathname={pathname} /></div>
+  }
   if (error) return <main className="mx-auto max-w-md px-4 py-12"><p role="alert" className="text-red-700">{error}</p><button onClick={() => location.reload()} className="mt-4 underline">Try again</button></main>
   return children
 }

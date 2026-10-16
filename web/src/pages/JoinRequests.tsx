@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { JoinRequest } from '../lib/joining'
 import { Avatar } from '../components/Avatar'
+import { SkeletonRows } from '../components/Skeleton'
 
 export function JoinRequests({ cacheId }: { cacheId: string }) {
   const queryClient = useQueryClient()
@@ -16,7 +17,7 @@ export function JoinRequests({ cacheId }: { cacheId: string }) {
   })
   return <section className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4" aria-labelledby="join-requests-heading" id="join-requests">
     <h2 id="join-requests-heading" className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case">Join requests</h2>
-    {query.isPending && <p role="status" className="mt-3">Loading join requests…</p>}
+    {query.isPending && <SkeletonRows label="Loading join requests…" kind="members" count={2} />}
     {query.isError && <div className="mt-3"><p role="alert" className="text-red-700">{errorMessage(query.error)} Previously loaded join requests may be out of date.</p><button type="button" className="mt-2 text-sm underline" disabled={query.isFetching} onClick={() => void query.refetch()}>Try join requests again</button></div>}
     {query.isSuccess && query.data.length === 0 && <p className="mt-3 text-slate-600">No pending join requests.</p>}
     {decide.isPending && <p role="status" className="mt-3">Saving join decision…</p>}

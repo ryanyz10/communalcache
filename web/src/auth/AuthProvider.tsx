@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch, errorMessage, type Me } from '../lib/api'
 import { disablePush } from '../lib/push'
 import { clearJoinToken } from '../lib/pendingJoin'
+import { setSessionHint } from '../lib/sessionHint'
 
 type AuthState = {
   ready: boolean
@@ -19,9 +20,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const query = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      try { return await apiFetch<Me>('/api/me') }
+      try {
+        const me = await apiFetch<Me>('/api/me')
+        setSessionHint(!!me?.id)
+        return me
+      }
       catch (error) {
-        if (error instanceof ApiError && error.status === 401) return null
+        if (error instanceof ApiError && error.status === 401) { setSessionHint(false); return null }
         throw error
       }
     },
@@ -30,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     await disablePush()
     await apiFetch('/api/auth/sign-out', { body: {} })
+    setSessionHint(false)
     clearJoinToken()
     queryClient.setQueryData(['me'], null)
     queryClient.removeQueries({ predicate: query => query.queryKey[0] !== 'me' })
