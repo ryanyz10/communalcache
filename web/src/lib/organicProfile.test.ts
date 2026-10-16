@@ -19,7 +19,7 @@ afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 it('uses the shared six-coat contract and overrides only coat, retaining hashed personality traits', () => {
   expect(COATS.map(coat => coat.key)).toEqual(CAT_COATS)
   const base = catTraits('Mia'), chosen = catTraits('Mia','toffee')
-  expect(chosen.coat.key).toBe('toffee')
+  expect(chosen.coat).toBe('toffee')
   expect({ ...chosen,coat:base.coat }).toEqual(base)
   expect(catTraits('Mia',null)).toEqual(base)
   const avatar = renderToStaticMarkup(createElement(Avatar,{userId:'Mia',name:'A different name',coat:'ginger'}))
@@ -37,7 +37,7 @@ it('offers six named native radios with a single selected coat and supports disa
   expect(renderToStaticMarkup(createElement(CoatPicker,{userId:'Mia',value:null,onChange:()=>{},disabled:true}))).toContain('<fieldset disabled=""')
 })
 
-it('keeps the pre-join composition neutral and makes no preview/cache request even when private cache data is cached', () => {
+it('keeps unvalidated invite loading neutral and never uses cached private cache metadata as preview data', () => {
   const client = new QueryClient({defaultOptions:{queries:{retry:false}}}), fetch = vi.spyOn(globalThis,'fetch')
   const token = `11111111-1111-4111-8111-111111111111.${'A'.repeat(43)}`
   client.setQueryData(['me'],{id:'Mia',display_name:'Mia',email:'private@example.test',cat_coat:'grey'})

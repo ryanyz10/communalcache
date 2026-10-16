@@ -5,7 +5,7 @@ import { Avatar } from '../components/Avatar'
 import { apiFetch, errorMessage } from '../lib/api'
 import { PHOTO_READ_ERROR, resizePhoto, uploadProfilePhoto } from '../lib/photos'
 import { refreshProfileViews } from '../lib/profile'
-import { catTraits } from '../lib/cats'
+import { catTraits, COATS } from '../lib/cats'
 import { CoatControls } from './CoatControls'
 
 export function ProfilePhotoControls() {
@@ -24,11 +24,12 @@ export function ProfilePhotoControls() {
     },
   })
   if (!me) return null
+  const coatName = COATS.find(coat => coat.key === catTraits(me.id,me.cat_coat).coat)!.name
   function submit(event: FormEvent) { event.preventDefault(); if (file) change.mutate('upload') }
   return <>
     <div className="cc-profile-photo-row">
       <Avatar userId={me.id} name={me.display_name ?? 'You'} photoVersion={me.profile_photo_version} coat={me.cat_coat} size={64} />
-      <div className="cc-profile-photo-copy"><strong className="cc-profile-photo-title-desktop">Profile photo</strong><strong className="cc-profile-photo-title-mobile">{me.profile_photo_version ? 'Profile photo' : `${catTraits(me.id,me.cat_coat).coat.name} cat`}</strong><p className="cc-profile-photo-hint-desktop">Your cat shows until you add a photo.</p><p className="cc-profile-photo-hint-mobile">Change cat or add a photo</p></div>
+      <div className="cc-profile-photo-copy"><strong className="cc-profile-photo-title-desktop">Profile photo</strong><strong className="cc-profile-photo-title-mobile">{me.profile_photo_version ? 'Profile photo' : `${coatName} cat`}</strong><p className="cc-profile-photo-hint-desktop">Your cat shows until you add a photo.</p><p className="cc-profile-photo-hint-mobile">Change cat or add a photo</p></div>
       <button type="button" className="cc-profile-photo-trigger cc-profile-secondary" aria-label="Change photo" aria-haspopup="dialog" aria-controls="profile-photo-sheet" onClick={()=>{change.reset();dialog.current?.showModal()}}><span className="cc-profile-photo-title-desktop">{me.profile_photo_version ? 'Change photo' : 'Upload photo'}</span><span className="cc-profile-photo-title-mobile" aria-hidden="true">›</span></button>
     </div>
     <dialog ref={dialog} id="profile-photo-sheet" className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="profile-photo-heading" onCancel={event=>{if(change.isPending || coatBusy)event.preventDefault()}} onClose={()=>{setFile(null);if(input.current)input.current.value=''}}>

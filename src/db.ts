@@ -3,6 +3,7 @@ import type { ItemChanges } from './items'
 import type { DecisionInput } from './requests'
 import { contactInput, type Contact } from './contacts'
 import type { CatCoat } from '../shared/cat-coats'
+import { catTraits, type CatTraits } from '../shared/cats'
 
 export function consumeWriteLimit(db: D1Database, userId: string, route: string, windowStart: number, limit: number) {
   // The guarded UPSERT is one atomic D1 statement, including concurrent Worker attempts.
@@ -262,6 +263,31 @@ function newJoinSecret() {
 function decodedSecret(secret: string) {
   if (!/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(secret)) return null
   return Uint8Array.from(atob(secret.replaceAll('-', '+').replaceAll('_', '/') + '='), char => char.charCodeAt(0))
+}
+
+export type InvitePreview = { name: string; active_member_count: number; members: CatTraits[] }
+
+export async function invitePreview(db: D1Database, cacheId: string, userId: string, secret: string): Promise<InvitePreview> {
+  if (!decodedSecret(secret)) throw new HttpError(404,'not_found')
+  // The current secret, removed denial and all preview fields share one D1 snapshot.
+  const row = await db.prepare(`SELECT caller.status='removed' AS removed,
+    CASE WHEN caller.status='removed' THEN NULL ELSE c.name END AS name,
+    CASE WHEN caller.status='removed' THEN 0 ELSE
+      (SELECT COUNT(*) FROM memberships WHERE cache_id=c.id AND status='active') END AS active_member_count,
+    CASE WHEN caller.status='removed' THEN '[]' ELSE
+      (SELECT json_group_array(json_object('user_id',member.user_id,'cat_coat',member.cat_coat)) FROM (
+        SELECT m.user_id,u.cat_coat FROM memberships m JOIN user u ON u.id=m.user_id
+        WHERE m.cache_id=c.id AND m.status='active' ORDER BY m.created_at,m.user_id LIMIT 5
+      ) member) END AS members_json
+    FROM caches c JOIN user viewer ON viewer.id=?
+    JOIN memberships owner ON owner.cache_id=c.id AND owner.role='owner' AND owner.status='active'
+    LEFT JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=viewer.id
+    WHERE c.id=? AND c.join_secret=?`).bind(userId,cacheId,secret)
+    .first<{removed:number|null;name:string|null;active_member_count:number;members_json:string}>()
+  if (!row) throw new HttpError(404,'not_found')
+  if (row.removed) throw new HttpError(403,'member_removed')
+  const members = JSON.parse(row.members_json) as {user_id:string;cat_coat:CatCoat|null}[]
+  return {name:row.name!,active_member_count:row.active_member_count,members:members.map(member=>catTraits(member.user_id,member.cat_coat))}
 }
 
 const cacheRead = `SELECT c.id,c.name,c.join_secret,c.requires_approval,owner.user_id AS owner_id

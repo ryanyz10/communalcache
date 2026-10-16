@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { JoinPage } from '../pages/JoinPage'
 import { ApiError, apiFetch, errorMessage, type Me } from './api'
-import { joinFromToken } from './joining'
+import { joinFromToken, previewFromToken, type InvitePreview } from './joining'
+import { catTraits } from './cats'
 import { destinationAfterLogin, peekJoinToken, stashJoinToken } from './pendingJoin'
 
 const id = '11111111-1111-4111-8111-111111111111'
@@ -15,7 +16,7 @@ const token = `${id}.${secret}`
 const mutation = vi.hoisted(() => ({ state: {} as Record<string, unknown> }))
 vi.mock('@tanstack/react-query', async importOriginal => {
   const actual = await importOriginal<typeof import('@tanstack/react-query')>()
-  return { ...actual, useMutation: () => ({ isSuccess: false, isError: false, isPending: false, mutate: vi.fn(), ...mutation.state }) }
+  return { ...actual, useMutation: () => ({ isSuccess: false, isError: false, isPending: false, mutate: vi.fn(), variables: token, ...mutation.state }) }
 })
 
 beforeEach(() => {
@@ -31,9 +32,12 @@ beforeEach(() => {
 })
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-function renderJoin(me: Me | null, invite = token) {
+function renderJoin(me: Me | null, invite = token, preview?: InvitePreview, error?: ApiError) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['me'], me)
+  const key = ['invite-preview',me?.id,invite]
+  if (preview || error) client.setQueryData(key,preview ?? null)
+  if (error) client.getQueryCache().find({queryKey:key})!.setState({status:'error',error})
   const page = createElement(Routes, null, createElement(Route, { path: '/join/:token', element: createElement(JoinPage) }))
   const tree = createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [`/join/${invite}`] }, page) }))
   const markup = renderToStaticMarkup(tree)
@@ -55,6 +59,44 @@ it('keeps login and name onboarding on the invite page, then offers a join actio
   expect(renderJoin(me)).toContain('Your invitation')
   expect(renderJoin(me)).not.toContain('AN INVITE FROM')
   expect(renderJoin(me, 'bad-token')).toContain('Invalid invite link')
+})
+
+it('shows only the current preview name/count/cats and hides previously loaded metadata on denial', () => {
+  const preview = {name:'Maple St. Neighbors',active_member_count:6,members:[catTraits('private-member-id','ginger')]}
+  const markup = renderJoin(me,token,preview)
+  expect(markup).toContain('class="cc-invite-eyebrow">An invite to Maple St. Neighbors</p>')
+  expect(markup).toContain('<h1>There&#x27;s room in the box for you.</h1>')
+  expect(markup).toContain('Hi, Neighbor. If this cache requires approval')
+  expect(markup.match(/6 neighbors/g)).toHaveLength(2)
+  expect(markup).toContain('cc-invite-members')
+  expect(markup).toContain('YOU')
+  expect(markup).toContain('+5')
+  expect(markup).not.toMatch(/private-member-id|AN INVITE FROM|THINGS|own@example/)
+  const denied = renderJoin(me,token,preview,new ApiError(404,'not_found'))
+  expect(denied).not.toContain('Maple St. Neighbors')
+  expect(denied).not.toContain('cc-invite-members')
+  expect(denied).toContain('Try invitation again')
+  expect(denied).toMatch(/<button(?=[^>]*disabled="")[^>]*>Ask to join<\/button>/)
+  expect(renderJoin(null,token,preview)).not.toContain('Maple St. Neighbors')
+  expect(renderJoin({...me,display_name:null},token,preview)).not.toContain('Maple St. Neighbors')
+})
+
+it('keeps preview reads out of URLs, leaves invite intent intact and sends no join mutation', async () => {
+  stashJoinToken(token)
+  const preview = {name:'Tools',active_member_count:1,members:[catTraits('owner')]}
+  const fetch = vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json(preview))
+  expect(await previewFromToken(token)).toEqual(preview)
+  expect(fetch).toHaveBeenCalledOnce()
+  expect(fetch).toHaveBeenCalledWith(`/api/caches/${id}/invite/preview`,expect.objectContaining({method:'GET',credentials:'same-origin',headers:{Accept:'application/json','X-Invite-Secret':secret},body:undefined}))
+  expect(String(fetch.mock.calls[0][0])).not.toContain(secret)
+  expect(peekJoinToken()).toBe(token)
+})
+
+it('does not reuse an old explicit join result for a different invite token', () => {
+  mutation.state = {isSuccess:true,variables:`${id}.${'B'.repeat(43)}`,data:{cache_id:id,name:'Old cache',status:'active'}}
+  const markup = renderJoin(me)
+  expect(markup).not.toContain('Welcome to Old cache')
+  expect(markup).toContain('Loading invitation')
 })
 
 it('renders active and pending results without leaking the invite or email', () => {
