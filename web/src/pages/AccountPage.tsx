@@ -11,6 +11,7 @@ import { ProfilePhotoControls } from './ProfilePhotoControls'
 import { CoatControls } from './CoatControls'
 import { ContactControls } from './ContactControls'
 import { SupportCard } from '../components/Support'
+import { PeekControls } from './PeekControls'
 
 export function AccountPage() {
   const { me, signOut } = useAuth(), client = useQueryClient()
@@ -52,6 +53,7 @@ export function AccountPage() {
         <ContactControls key={me.id} />
         <div className="cc-account-options">
           <PushControls userId={me.id} />
+          <PeekControls />
           <section className="cc-account-session" aria-label="Session"><p>Signed in on this browser</p><button type="button" disabled={pending} className="cc-profile-secondary" onClick={() => void logout()}>{pending ? 'Signing out…' : 'Sign out'}</button><span className="cc-session-mobile-hint">This browser</span>{error && <p role="alert" className="cc-form-error">{error}</p>}</section>
           <SupportCard />
         </div>

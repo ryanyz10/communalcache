@@ -3,8 +3,7 @@ import { Link, Navigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import { filterContents, type CacheDetail, type CacheSummary, type ContentsFilter } from '../lib/caches'
-import type { Item } from '../lib/items'
+import { cacheDetailQuery, cacheItemsQuery, filterContents, type CacheSummary, type ContentsFilter } from '../lib/caches'
 import type { JoinRequest } from '../lib/joining'
 import { shareInvite } from '../lib/invites'
 import { OnboardingPage } from './OnboardingPage'
@@ -23,9 +22,9 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams(), { me } = useAuth()
   const [status,setStatus] = useState(''), [filter,setFilter] = useState<ContentsFilter>('all'), [search,setSearch] = useState(''), [searchOpen,setSearchOpen] = useState(false)
   const addDialog = useRef<HTMLDialogElement>(null)
-  const query = useQuery({ queryKey: ['cache',cacheId], queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`), enabled: !!me?.display_name })
+  const query = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me?.display_name })
   const caches = useQuery({ queryKey: ['caches'], queryFn: () => apiFetch<CacheSummary[]>('/api/caches'), enabled: !!me?.display_name })
-  const items = useQuery({ queryKey: ['items',cacheId], queryFn: () => apiFetch<(Item & {pending_count:number})[]>(`/api/caches/${cacheId}/items`), enabled: !!me?.display_name && !itemsMoving })
+  const items = useQuery({ ...cacheItemsQuery(cacheId), enabled: !!me?.display_name && !itemsMoving })
   const joins = useQuery({ queryKey: ['join-requests',cacheId], queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`), enabled: !!me?.display_name && query.data?.owner_id === me.id })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
