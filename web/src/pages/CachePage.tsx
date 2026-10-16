@@ -10,7 +10,6 @@ import { OnboardingPage } from './OnboardingPage'
 import { ItemList } from './ItemPages'
 import { AddItemSheet } from './AddItemSheet'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
-import { PixelHorizon } from '../components/PixelArt'
 import { Avatar } from '../components/Avatar'
 
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
@@ -43,7 +42,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
         {!itemsMoving && <button type="button" onClick={() => addDialog.current?.showModal()} className="hidden lg:inline-flex lg:items-center lg:rounded-full lg:bg-slate-900 lg:px-3.5 lg:py-1.5 lg:text-sm lg:font-medium lg:text-white">+ Add item</button>}
       </div>
     </div></div>
-    <PixelHorizon kind="houses" entries={cache.members.map(member=>({id:member.user_id,name:member.display_name ?? 'Member'}))} /></div>
+    </div>
     <div className="cc-content">
     {status && <p role="status" className="mt-3 text-sm">{status}</p>}
     {cache.owner_id === me.id && joins.isError && <p role="alert" className="mt-4 text-sm text-red-700">Join requests could not be loaded. <Link to={`/caches/${cache.id}/settings`} className="underline">Open settings to try again.</Link></p>}
