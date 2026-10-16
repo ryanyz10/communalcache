@@ -23,7 +23,7 @@ export function ShownIn({ item }: { item: Item }) {
     onSettled: () => invalidateRequestViews(client),
   })
   const error = detail.error ?? caches.error
-  return <section className="mt-8" aria-labelledby="shown-in-heading">
+  return <section className="cc-owner-sharing" aria-labelledby="shown-in-heading">
     <h2 id="shown-in-heading" className="text-xl font-semibold">Shown in</h2>
     <p className="mt-1 text-sm text-slate-600">Choose which caches can see this item. Stock and availability are shared everywhere.</p>
     {(detail.isPending || caches.isPending) && <p role="status" className="mt-3">Loading sharing…</p>}
@@ -42,7 +42,7 @@ export function ShownIn({ item }: { item: Item }) {
     {change.isPending && <p role="status" className="mt-2">Updating sharing…</p>}
     {change.isError && <p role="alert" className="mt-2 text-red-700">{errorMessage(change.error)} Could not confirm sharing. Refresh or try the checkbox again.</p>}
     {change.isSuccess && <p role="status" className="mt-2 text-emerald-700">Sharing saved.</p>}
-    <dialog ref={dialog} onCancel={event => { if (change.isPending) event.preventDefault() }} className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900" aria-labelledby="detach-item-heading">
+    <dialog ref={dialog} onCancel={event => { if (change.isPending) event.preventDefault() }} className="cc-item-confirm" aria-labelledby="detach-item-heading">
       <h2 id="detach-item-heading" className="break-words text-xl font-semibold">Stop sharing in {target?.name}?</h2>
       <ul className="mt-3 list-disc space-y-2 pl-5"><li>The item is removed from this cache only.</li><li>Pending asks in this cache get declined and requesters are notified.</li><li>Your library item, photos, stock and other caches are kept.</li></ul>
       {change.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(change.error)} You can retry here.</p>}

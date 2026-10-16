@@ -232,7 +232,13 @@ const server = createServer(async (request, response) => {
       if (!match) { json({error:'not_found'},404); return }
       const itemId=match[1]
       if (!itemId && request.method==='GET') {
-        json({items:[...items.values()].filter(item=>item.owner_id===me.id).map(libraryInfo),next_cursor:null}); return
+        const filter=url.searchParams.get('filter')??'all'
+        if(!['all','lend','give','unshared'].includes(filter)){json({error:'invalid_filter'},400);return}
+        const owned=[...items.values()].filter(item=>item.owner_id===me.id).map(libraryInfo)
+        const totals={total_count:owned.length,lend_count:owned.filter(item=>!item.is_consumable).length,
+          give_count:owned.filter(item=>item.is_consumable).length,unshared_count:owned.filter(item=>!item.caches.length).length,
+          shared_cache_count:new Set(owned.flatMap(item=>item.caches.map(cache=>cache.id))).size}
+        json({items:owned.filter(item=>filter==='all'||(filter==='lend'&&!item.is_consumable)||(filter==='give'&&item.is_consumable)||(filter==='unshared'&&!item.caches.length)),next_cursor:null,totals});return
       }
       if (!itemId && request.method==='POST') {
         if (!body.title?.trim()) { json({error:'invalid_title'},400); return }
