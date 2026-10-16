@@ -66,6 +66,7 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_name') return 'Use a cache name between 1 and 60 characters.'
   if (error.code === 'member_removed') return 'You were removed from this cache and cannot rejoin with an invite.'
   if (error.code === 'join_not_pending') return 'This join request has already been decided. The list has been refreshed.'
+  if (error.code === 'invalid_filter') return 'Choose All, To lend, To give or Not shared yet.'
   if (error.code === 'invalid_title') return 'Use an item title between 1 and 120 characters.'
   if (error.code === 'invalid_description') return 'Keep the description within 2000 characters.'
   if (error.code === 'invalid_quantity') return 'Use a whole stock quantity from 0 to 9999 for consumables; reusable items have no quantity.'
