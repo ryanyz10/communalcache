@@ -116,7 +116,8 @@ deletion. Draft status is a review warning, not a technical deployment gate.**
    Key. GH_TOKEN is automatic read-only Actions token for resolution/head checks,
    not another provisioned secret. Retire unnecessary DO capabilities after PR 7.
 3. Runtime secrets separately approved per Worker/environment: BETTER_AUTH_SECRET,
-   RESEND_API_KEY, VAPID_PRIVATE_KEY. Staging auth/VAPID secrets are independent,
+   RESEND_API_KEY, VAPID_PRIVATE_KEY, TURNSTILE_SECRET and GOOGLE_CLIENT_SECRET.
+   Staging auth/VAPID secrets are independent,
    never production copies. Interactive prompts only, no values on argv/in git/logs.
    Bootstrap can create a Worker, so approval/setup precedes first deploy.
 4. Verify exact Worker/D1 identities and URLs, private R2/Queue configuration,
@@ -341,6 +342,67 @@ signin@send.communalcache.com on verified send.communalcache.com; domain ownersh
 alone is not verification. Auth success does not prove notification delivery.
 No legacy Supabase Auth/SMTP/provider settings change with this target.
 
+### Google sign-in (owner-managed credentials; live smoke pending)
+
+Google is configured only when both GOOGLE_CLIENT_ID (public Worker var) and
+GOOGLE_CLIENT_SECRET (Worker secret) are present. `/api/config` exposes only a
+`google_sign_in` boolean; the button is hidden and provider omitted when either
+value is missing. The owner supplied the public client ID committed in default,
+staging and production vars and reports the staging secret already provisioned.
+Production secret setup remains separately approved; do not print/read secret
+values, put them on argv, or copy them into tests. `.dev.vars.example` has a blank
+local secret slot, not a working credential. This PR runs no provider/account or
+remote Cloudflare operation.
+
+Registered redirects (exact paths/origins):
+
+- https://communalcache.com/api/auth/callback/google
+- https://communalcache-staging.ryanyz10-be6.workers.dev/api/auth/callback/google
+- http://localhost:8787/api/auth/callback/google
+
+For local Google smoke use localhost:8787, not the unregistered Vite :5173 callback.
+Automated tests use only public fixtures and a mocked Google token endpoint.
+
+Pinned 1.7.7 review: trustedProviders alone bypasses provider-email verification.
+`user.validateUserInfo` additionally requires the fresh Google email_verified claim
+and mapped emailVerified to be strictly true on create, implicit link and returning
+sign-in. Linking is enabled only for trusted Google and a locally verified matching
+email; unverified local accounts are not implicitly linked. Provider name/picture
+are discarded, app display_name stays NULL and existing profile onboarding applies.
+Google's account subject, provider ID, app user ID, scopes and timestamps persist
+in the existing account schema. Account create/update hooks null accessToken,
+refreshToken, idToken and token expiry columns before D1 writes; account cookies
+are disabled. Token material is used transiently for the exchange, not persisted.
+No schema migration is needed. Raw library/provider error logging is disabled.
+
+Only Origin-checked `POST /api/auth/sign-in/social` (Google code redirect only) and
+`GET /api/auth/callback/google` are exposed. Callback URLs share the magic-link
+exact-origin validator. Better Auth retains D1 state/PKCE, matching signed state
+cookies and exact trustedOrigins; HTTPS uses host-only HttpOnly/Secure/SameSite=Lax
+cookies. Local HTTP cookies omit Secure. State is not an invite grant: admission
+still needs profile completion and the explicit Join action. Google does not add
+Turnstile: the approved bot-check scope remains email sends and cache creation.
+Auth responses remain no-store; callback redirects also use no-referrer.
+
+After approved merge and successful staging deploy, the owner can try:
+
+1. Open https://communalcache-staging.ryanyz10-be6.workers.dev/login in a fresh
+   browser session. `/api/config` should show google_sign_in=true, never credentials.
+2. Choose **Continue with Google**, then choose a Google account with a verified
+   email. Confirm return to staging, choose a display name/coat in existing
+   onboarding and confirm the account has no imported Google name/photo.
+3. Sign out. Sign in by email link/code using that same email; confirm the same
+   library/caches. Repeat Google sign-in with an existing verified email account
+   and confirm its chosen name/photo/items remain, rather than a duplicate user.
+4. Open a real staging invite while signed out, choose Google and confirm return
+   to that invite. Complete onboarding if needed; no membership is created until
+   the separate **Join**/**Ask to join** action.
+5. Cancel at Google. Confirm a friendly sign-in error and usable email fallback;
+   an invite remains saved. Check phone/desktop and both OS color schemes.
+6. Record revision, environment and browser/provider results. Local mocks and the
+   owner-reported secret do not prove real OAuth acceptance. Production setup,
+   final parity/security/release approval and Apple remain separate.
+
 ### Turnstile (owner-managed setup; live smoke pending)
 
 The public sitekey `0x4AAAAAAFX8jA_m3iHxQbuL` is owner-approved for both staging
@@ -387,9 +449,10 @@ push/production CPU require separately approved proof.
 ### Public values and secret handling
 
 Public: APP_BASE_URL, BETTER_AUTH_URL, VAPID_PUBLIC_KEY, EMAIL_FROM,
-TURNSTILE_SITE_KEY and environment-local TURNSTILE_HOSTNAMES; /api/config
-exposes only intended public fields. Secrets: BETTER_AUTH_SECRET, RESEND_API_KEY,
-VAPID_PRIVATE_KEY, TURNSTILE_SECRET, explicitly passed as Worker bindings. No target DATABASE_URL,
+TURNSTILE_SITE_KEY, GOOGLE_CLIENT_ID and environment-local TURNSTILE_HOSTNAMES;
+/api/config exposes only intended public fields (Google availability, not credentials).
+Secrets: BETTER_AUTH_SECRET, RESEND_API_KEY, VAPID_PRIVATE_KEY, TURNSTILE_SECRET
+and GOOGLE_CLIENT_SECRET, explicitly passed as Worker bindings. No target DATABASE_URL,
 Supabase credential, browser R2 credential or provider anon key. Never put secret
 values on argv, in git, screenshots or logs. Approved operator secret updates use
 interactive Wrangler prompts and explicit named environment, not guessed login.
