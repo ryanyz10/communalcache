@@ -14,7 +14,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { RequestDecision } from './RequestDecision'
 import { ApprovedContact } from './RequestContact'
 import { AskSheet } from './AskSheet'
-import { RequestsSkeleton } from '../components/PageSkeletons'
+import { RequestsSkeleton } from '../components/skeletons/RequestSkeletons'
 import { SkeletonRows, Shimmer, LoadingStatus } from '../components/Skeleton'
 export { ApprovedContact } from './RequestContact'
 

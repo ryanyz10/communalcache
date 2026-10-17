@@ -10,7 +10,7 @@ import { thingTone } from '../components/ThingTile'
 import { OnboardingPage } from './OnboardingPage'
 import { ApprovedContact } from './RequestContact'
 import { RequestCard } from './RequestsPage'
-import { RequestDetailSkeleton } from '../components/PageSkeletons'
+import { RequestDetailSkeleton } from '../components/skeletons/RequestSkeletons'
 
 export function RequestDetailPage() {
   const {requestId=''}=useParams(),{me}=useAuth()
