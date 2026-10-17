@@ -17,12 +17,13 @@ const profilePhotos = new Map()
 const contacts = new Map()
 const requests = new Map()
 const magicLinks = new Map()
+const adminPlans = new Map()
 let lastMagicLink = ''
 let vite
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost'), path = url.pathname
   if (path === '/__fixture/compare') {
-    const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin','landing'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
+    const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin','landing','admin'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
     // Iframes have real independent viewport widths, including the desktop breakpoint.
     const requestedWidth=Number(url.searchParams.get('width'))
     const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
@@ -47,7 +48,7 @@ const server = createServer(async (request, response) => {
     requests.set(row.id,row)
     contacts.set(owner,{kind:'messenger',value:'ryan.zhou',link:'https://m.me/ryan.zhou'})
     contacts.set(member,{kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'})
-    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login',landing:'/'}
+    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login',landing:'/',admin:'/admin'}
     response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'||screen==='landing'?'':owner}; HttpOnly; SameSite=Lax; Path=/`)
     response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}`});response.end();return
   }
@@ -108,6 +109,32 @@ const server = createServer(async (request, response) => {
     const sessionId = request.headers.cookie?.match(/(?:^|;\s*)ui_fixture=([^;]+)/)?.[1]
     let me = [...users.values()].find(user=>user.id===sessionId) ?? null
     const authenticated = !!me
+    // Admin presentation fixture only: JWT/session/SQL guards are proved in real-D1 tests.
+    if (process.env.UI_FIXTURE_ADMIN === '1' && path.startsWith('/api/admin/')) {
+      if (!authenticated) { json({error:'not_found'},404); return }
+      const plans=[{plan:'free'},{plan:'plus'}]
+      const planRoute=path.match(/^\/api\/admin\/(caches|users)\/([^/]+)\/plan$/)
+      if (planRoute && request.method==='PATCH') {
+        if (!plans.some(row=>row.plan===body.plan)) { json({error:'invalid_plan'},400); return }
+        adminPlans.set(`${planRoute[1]}:${planRoute[2]}`,body.plan)
+        json({id:planRoute[2],plan:body.plan}); return
+      }
+      if (path==='/api/admin/overview') { json({users:users.size,caches:caches.size,items:items.size,pending_requests:0,outbox_pending:2,outbox_failed:1,outbox_oldest_age_ms:90000,plans}); return }
+      if (path==='/api/admin/caches') {
+        json({rows:[...caches.values()].map(cache=>({id:cache.id,name:cache.name,owner_id:cache.owner_id,
+          owner_name:[...users.values()].find(user=>user.id===cache.owner_id)?.display_name??null,
+          plan:adminPlans.get(`caches:${cache.id}`)??'free',member_count:cache.members?.length??1,
+          member_limit:adminPlans.get(`caches:${cache.id}`)==='plus'?100:30,item_count:[...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cache.id)).length})),next_cursor:null}); return
+      }
+      if (path==='/api/admin/users') {
+        json({rows:[...users.values()].map(user=>({id:user.id,display_name:user.display_name,plan:adminPlans.get(`users:${user.id}`)??'free',
+          owned_caches:[...caches.values()].filter(cache=>cache.owner_id===user.id).length,owned_cache_limit:adminPlans.get(`users:${user.id}`)==='plus'?3:1,
+          owned_items:[...items.values()].filter(item=>item.owner_id===user.id).length,owned_item_limit:100,pending_outgoing:0,pending_limit:20,
+          memberships:3,membership_limit:20,new_caches_24h:1,new_cache_limit:2,profile_photos:0,profile_photo_limit:1})),next_cursor:null}); return
+      }
+      if (path==='/api/admin/failed-outbox') { json({rows:[{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',kind:'request_created',created_at:1792213200000,failed_at:1792213500000,attempts:6,error_class:null}],next_cursor:null}); return }
+      json({error:'not_found'},404); return
+    }
     // The mock shares all fixture caches; real visibility is proved by D1 tests.
     const avatar = id => id===me?.id || caches.size>0 ? [...users.values()].find(user=>user.id===id)?.profile_photo_version ?? null : null
     const coat = id => [...users.values()].find(user=>user.id===id)?.cat_coat ?? null

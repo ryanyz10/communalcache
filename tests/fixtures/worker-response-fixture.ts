@@ -132,3 +132,11 @@ export const workerResponseFixture: { headers: unknown[]; templates: [number, nu
   ],
   cells: encodedCells.flatMap(group => Array.from(atob(group), char => char.charCodeAt(0))),
 }
+
+// New admin cells only; every original response template/cell above stays frozen.
+export const adminResponseFixture = {
+  status: 404,
+  headers: workerResponseFixture.headers[0],
+  bodyHash: 'd2dfdc9511fbeaa0701d1f8730f4989313b062ca1b61a2bd8bed8f4f5d654b5d',
+  cells: 588,
+}

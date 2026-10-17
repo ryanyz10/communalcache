@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
 import worker from '../src/index'
-import { workerResponseFixture } from './fixtures/worker-response-fixture'
+import { adminResponseFixture, workerResponseFixture } from './fixtures/worker-response-fixture'
 
 const base = 'https://communalcache.com'
 const now = Date.parse('2026-10-01T12:00:00.000Z')
@@ -204,3 +204,22 @@ it('matches the frozen parent response fixture across routes, methods and caller
     }
   } finally { vi.useRealTimers() }
 }, 180_000)
+
+it('adds only new admin route cells, hidden for every existing caller/method without configured admin grants', async () => {
+  const paths = ['/admin', '/api/admin/overview', '/api/admin/caches', '/api/admin/users', '/api/admin/failed-outbox', `/api/admin/caches/${cache}/plan`, `/api/admin/users/${owner}/plan`]
+  let cells = 0
+  for (const caller of callers) for (const path of paths) for (const method of ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']) {
+    const headers = new Headers()
+    if (caller.id) headers.set('Cookie', `untrusted-session=${caller.id}`)
+    if (caller.origin !== null) headers.set('Origin', caller.origin ?? base)
+    if (writes.has(method)) headers.set('Content-Type', 'application/json')
+    const response = await worker.fetch(new Request(base + path, { method, headers, body: writes.has(method) ? '{"plan":"plus"}' : undefined }), env)
+    const body = await response.json()
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(body))))
+    expect(response.status, `${caller.name}: ${method} ${path}`).toBe(adminResponseFixture.status)
+    expect({ cacheControl: response.headers.get('Cache-Control'), contentType: response.headers.get('Content-Type'), setCookie: response.headers.has('Set-Cookie'), location: response.headers.get('Location'), referrerPolicy: response.headers.get('Referrer-Policy'), nosniff: response.headers.get('X-Content-Type-Options') }).toEqual(adminResponseFixture.headers)
+    expect([...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')).toBe(adminResponseFixture.bodyHash)
+    cells++
+  }
+  expect(cells).toBe(adminResponseFixture.cells)
+})
