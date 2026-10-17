@@ -19,6 +19,36 @@ export const landingCopy = {
   contents: "Contents: your neighbors' things",
   handleWithCare: 'Handle with care',
   sampleItem: 'ladder',
+  faq: {
+    heading: 'Questions, unpacked',
+    intro: 'Tap a box to open it.',
+    items: [
+      {
+        question: 'What’s a cache?',
+        answer: 'A cache is a shared box for one group of people: your street, a club, a group of friends. Everyone in it can see what the others are happy to lend or give away.',
+      },
+      {
+        question: 'Who can see my things?',
+        answer: 'Items you share are visible to active members of those caches, not public listings. There’s no handoff-address field; please don’t put addresses in descriptions or photos.',
+      },
+      {
+        question: 'How do I join one?',
+        answer: 'Someone in the cache sends you an invite link. Some caches let you straight in. Others ask the owner to approve new members first.',
+      },
+      {
+        question: 'What happens when someone asks for my thing?',
+        answer: 'Review asks in Requests and choose to approve or decline, with notifications to help you keep up. If you approve, you can see each other’s chosen contact details if provided, while you’re both active in that cache. You arrange any handoff in person.',
+      },
+      {
+        question: 'What if something breaks or doesn’t come back?',
+        answer: 'Communal Cache doesn’t handle payments, deposits or insurance. Sharing works on trust between people who know each other, so only share what you’re comfortable lending.',
+      },
+      {
+        question: 'Does it cost anything?',
+        answer: 'No, it’s free. If it helps your neighborhood, you can chip in for hosting.',
+      },
+    ],
+  },
   bottomHeading: "There's room in the box.",
   shelf: [
     { key: 'street', label: 'Street', cats: [{ id: 'street-ada', pose: 'sit', width: 30 }, { id: 'street-otto', pose: 'loaf', width: 58 }] },
