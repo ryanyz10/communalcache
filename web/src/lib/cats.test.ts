@@ -48,7 +48,7 @@ it('ports all three SVG poses, decorative semantics, exact geometry and source m
   expect(loaf).toContain('cc-sway 3.6s 2.5s')
   expect(loaf).toContain('cc-z 4s')
   const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
-  expect(css).toContain('@media (prefers-reduced-motion: reduce) { .cc-cat * { animation: none !important; } }')
+  expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.cc-cat \*\s*\{\s*animation: none !important;\s*\}\s*\}/)
   for (const old of ['cc-walking-cat', 'cc-lid-open', 'cc-cat-pop', 'cc-drift']) expect(css).not.toContain(old)
 })
 
