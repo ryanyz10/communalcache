@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
 import { apiFetch } from './api'
 import type { CatCoat } from './cats'
 import { uploadPhoto } from './photos'
@@ -27,17 +27,34 @@ export type LibraryFilter = 'all' | 'lend' | 'give' | 'unshared'
 export type LibraryTotals = {total_count:number;lend_count:number;give_count:number;unshared_count:number;shared_cache_count:number}
 export type LibraryPageData = { items: LibraryItem[]; next_cursor: string | null; totals: LibraryTotals }
 
-export function useLibrary(userId: string | undefined, filter: LibraryFilter = 'all') {
-  return useInfiniteQuery({
-    queryKey: filter==='all' ? ['library',userId] : ['library',userId,filter], initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => {
-      const search=new URLSearchParams()
-      if(pageParam) search.set('after',pageParam)
-      if(filter!=='all') search.set('filter',filter)
-      return apiFetch<LibraryPageData>(`/api/me/items${search.size?`?${search}`:''}`)
+export function libraryQuery(userId: string | undefined) {
+  return infiniteQueryOptions({
+    queryKey: ['library', userId], initialPageParam: null as string | null,
+    queryFn: async ({ pageParam, signal }) => {
+      const first = await apiFetch<LibraryPageData>(`/api/me/items${pageParam ? `?after=${encodeURIComponent(pageParam)}` : ''}`, { signal })
+      signal.throwIfAborted()
+      const result = { ...first, items: [...first.items] }
+      // ponytail: eager loading stops at 20 API pages; larger libraries need larger pages or server filters.
+      const pageLimit = pageParam ? 1 : 20
+      for (let page = 1; result.next_cursor && page < pageLimit; page++) {
+        const next = await apiFetch<LibraryPageData>(`/api/me/items?after=${encodeURIComponent(result.next_cursor)}`, { signal })
+        signal.throwIfAborted()
+        result.items.push(...next.items)
+        result.next_cursor = next.next_cursor
+      }
+      return result
     },
     getNextPageParam: page => page.next_cursor ?? undefined, enabled: !!userId,
   })
+}
+
+export function useLibrary(userId: string | undefined) {
+  return useInfiniteQuery(libraryQuery(userId))
+}
+
+export function filterLibraryItems(items: LibraryItem[], filter: LibraryFilter) {
+  return items.filter(item => filter === 'all' || (filter === 'lend' && !item.is_consumable)
+    || (filter === 'give' && item.is_consumable) || (filter === 'unshared' && !item.caches.length))
 }
 
 export function sharingHint(item: LibraryItem, cacheId?: string) {
