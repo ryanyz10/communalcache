@@ -13,7 +13,7 @@ afterEach(() => vi.restoreAllMocks())
 function render(mode: 'ready' | 'loading' | 'denied' | 'signed-out' = 'ready') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['me'], mode === 'signed-out' ? null : { id, display_name: 'Admin name', email: 'admin-private@example.test' })
-  if (mode !== 'loading') client.setQueryData(['admin', id, 'overview'], { users: 2, caches: 1, items: 3, pending_requests: 4, outbox_pending: 5, outbox_failed: 1, outbox_oldest_age_ms: 90_000, plans: [{ plan: 'free' }, { plan: 'plus' }] })
+  if (mode !== 'loading') client.setQueryData(['admin', id, 'overview'], { users: 2, caches: 1, items: 3, pending_requests: 4, outbox_pending: 5, outbox_failed: 1, outbox_oldest_age_ms: 90_000, cleanup_pending: 7, cleanup_oldest_age_ms: 120_000, plans: [{ plan: 'free' }, { plan: 'plus' }] })
   if (mode === 'denied') client.getQueryCache().find({ queryKey: ['admin', id, 'overview'] })!.setState({ status: 'error', error: new Error('not found') })
   client.setQueryData(['admin', id, 'caches', null], { rows: [{ id, name: 'Tools', owner_id: id, owner_name: 'Owner name', plan: 'free', member_count: 12, member_limit: 30, item_count: 3 }], next_cursor: id })
   client.setQueryData(['admin', id, 'users', null], { rows: [{ id, display_name: 'Neighbor name', plan: 'free', owned_caches: 1, owned_cache_limit: 1, owned_items: 3, owned_item_limit: 100, pending_outgoing: 4, pending_limit: 20, memberships: 2, membership_limit: 20, new_caches_24h: 1, new_cache_limit: 2, profile_photos: 0, profile_photo_limit: 1 }], next_cursor: null })
@@ -25,7 +25,7 @@ function render(mode: 'ready' | 'loading' | 'denied' | 'signed-out' = 'ready') {
 
 it('renders cozy operational tables, policy-derived plan choices and safe metadata without email or payloads', () => {
   const html = render()
-  for (const text of ['Admin', 'Caches', 'Users', 'Failed outbox', 'Owner name', 'Neighbor name', id, '12 / 30', '3 / 100', '4 / 20', 'Not recorded', 'Plan for', 'First caches page', 'Next caches page']) expect(html).toContain(text)
+  for (const text of ['Admin', 'Caches', 'Users', 'Failed outbox', 'Owner name', 'Neighbor name', id, '12 / 30', '3 / 100', '4 / 20', 'Not recorded', 'Photo cleanup:', '2 min', 'Plan for', 'First caches page', 'Next caches page']) expect(html).toContain(text)
   expect(html).toContain('<option value="free" selected="">free</option>')
   expect(html).toContain('<option value="plus">plus</option>')
   expect(html).toContain('scope="col"')

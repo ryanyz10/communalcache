@@ -14,14 +14,17 @@ export async function adminOverview(db: D1Database, actor: AdminActor) {
       (SELECT COUNT(*) FROM requests WHERE status='pending') AS pending_requests,
       (SELECT COUNT(*) FROM outbox WHERE sent_at IS NULL AND failed_at IS NULL) AS outbox_pending,
       (SELECT MIN(created_at) FROM outbox WHERE sent_at IS NULL AND failed_at IS NULL) AS oldest_outbox_at,
-      (SELECT COUNT(*) FROM outbox WHERE failed_at IS NOT NULL) AS outbox_failed
+      (SELECT COUNT(*) FROM outbox WHERE failed_at IS NOT NULL) AS outbox_failed,
+      (SELECT COUNT(*) FROM r2_cleanup) AS cleanup_pending,
+      (SELECT MIN(created_at) FROM r2_cleanup) AS oldest_cleanup_at
       WHERE ${currentAdminSession}`).bind(actor.userId, actor.sessionToken, stamp),
     db.prepare(`SELECT plan,owned_caches,new_caches_per_day,member_caches,cache_members,owned_items,open_requests,photos_per_item,profile_photos
       FROM plan_limits WHERE ${currentAdminSession} ORDER BY plan`).bind(actor.userId, actor.sessionToken, stamp),
   ])
-  const row = counts.results[0] as { users: number; caches: number; items: number; pending_requests: number; outbox_pending: number; oldest_outbox_at: number | null; outbox_failed: number } | undefined
+  const row = counts.results[0] as { users: number; caches: number; items: number; pending_requests: number; outbox_pending: number; oldest_outbox_at: number | null; outbox_failed: number; cleanup_pending: number; oldest_cleanup_at: number | null } | undefined
   if (!row) throw new HttpError(404, 'not_found')
-  return { ...row, outbox_oldest_age_ms: row.oldest_outbox_at === null ? null : Math.max(0, now - row.oldest_outbox_at), plans: plans.results }
+  return { ...row, outbox_oldest_age_ms: row.oldest_outbox_at === null ? null : Math.max(0, now - row.oldest_outbox_at),
+    cleanup_oldest_age_ms: row.oldest_cleanup_at === null ? null : Math.max(0, now - row.oldest_cleanup_at), plans: plans.results }
 }
 
 export async function adminCaches(db: D1Database, actor: AdminActor, after: string | null) {

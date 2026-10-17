@@ -1,12 +1,14 @@
 // Durable private-R2 cleanup claims and fair bounded pagination.
 export type CleanupRow = { id: string; owner_id: string; item_id: string | null; scope: 'item' | 'profile'; kind: 'exact' | 'prefix'; target: string; created_at: number }
 
+export const cleanupPageSize = 10
+
 export function cleanupCursor(db: D1Database) {
   return db.prepare('SELECT cleanup_id FROM r2_cleanup_cursor WHERE singleton=1').first<string | null>('cleanup_id')
 }
 
 export function cleanupPage(db: D1Database, after: string | null) {
-  return db.prepare('SELECT id FROM r2_cleanup WHERE (? IS NULL OR id>?) ORDER BY id LIMIT 2').bind(after, after).all<{ id: string }>()
+  return db.prepare(`SELECT id FROM r2_cleanup WHERE (? IS NULL OR id>?) ORDER BY id LIMIT ${cleanupPageSize}`).bind(after, after).all<{ id: string }>()
 }
 
 export async function claimCleanup(db: D1Database, id: string, token: string, now: number) {

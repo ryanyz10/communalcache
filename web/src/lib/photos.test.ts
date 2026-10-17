@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { PHOTO_READ_ERROR, resizePhoto, uploadPhoto } from './photos'
+import { PHOTO_READ_ERROR, resizePhoto, uploadPhoto, uploadProfilePhoto } from './photos'
 import { ApiError, errorMessage } from './api'
 
 const file = new File(['fixture'], 'photo.png', { type: 'image/png' })
@@ -52,6 +52,16 @@ it('uploads raw JPEG with same-origin cookies and no bearer, JSON encoding or st
   expect(fetchMock).toHaveBeenCalledWith('/api/caches/cache/items/item/photo', {
     method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'Content-Type': 'image/jpeg' }, body: photo,
   })
+})
+
+it('shows the same clear shared-upload budget error for item and profile photos', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ error: 'rate_limited', limit: 'photo_upload' }, { status: 429, headers: { 'Retry-After': '3600' } }))
+  for (const upload of [() => uploadPhoto('cache', 'item', new Blob()), () => uploadProfilePhoto(new Blob())]) {
+    let failure: unknown
+    try { await upload() } catch (error) { failure = error }
+    expect(failure).toMatchObject({ status: 429, code: 'rate_limited', limit: 'photo_upload' })
+    expect(errorMessage(failure)).toBe('Too many photo uploads, try again later.')
+  }
 })
 
 it('surfaces photo type, size and lost-authorization errors from the API', async () => {

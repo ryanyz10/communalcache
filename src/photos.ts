@@ -1,5 +1,6 @@
 import { finishItemPhoto, finishProfilePhoto, getProfile, itemDetail, profilePhotoKey, readItem, removeProfilePhoto } from './db'
 import { HttpError, json } from './http'
+import { requireWriteLimit } from './rate-limit'
 
 export async function serveItemPhoto(request: Request, env: Env, itemId: string, userId: string, cacheId: string | null = null) {
   const authorizedItem = await readItem(env.DB, itemId, userId, cacheId, request.method === 'POST')
@@ -14,6 +15,7 @@ export async function serveItemPhoto(request: Request, env: Env, itemId: string,
       'X-Content-Type-Options': 'nosniff',
     } })
   }
+  await requireWriteLimit(env.DB, userId, 'photo_upload')
   const key = `${userId}/${itemId}/${crypto.randomUUID()}`
   const { bytes, contentType } = await readPhoto(request)
   let attached = false
@@ -45,6 +47,7 @@ export async function serveProfilePhoto(request: Request, env: Env, ownerId: str
     await removeProfilePhoto(env.DB, readerId)
     return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   }
+  await requireWriteLimit(env.DB, readerId, 'photo_upload')
   const { bytes, contentType } = await readPhoto(request)
   const key = `users/${readerId}/${crypto.randomUUID()}`
   let attached = false

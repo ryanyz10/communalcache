@@ -48,15 +48,16 @@ it('atomically admits the exact fixed-window budget across concurrent calls and 
   expect(await env.DB.prepare('SELECT window_start,count FROM write_limits WHERE user_id=?').bind(id).first()).toEqual({ window_start: 660_000, count: 1 })
 })
 
-it('isolates users and route families and reuses only four counter rows rather than accumulating windows', async () => {
+it('isolates users and route families and reuses five counter rows rather than accumulating windows', async () => {
   const first = await user(), second = await user()
   for (const route of Object.keys(writeLimits) as WriteRoute[]) {
-    for (let count = 0; count < writeLimits[route]; count++) await requireWriteLimit(env.DB, first, route, 600_000)
-    await expect(requireWriteLimit(env.DB, first, route, 600_000)).rejects.toMatchObject({ status: 429 })
-    await requireWriteLimit(env.DB, second, route, 600_000)
-    for (let minute = 11; minute < 15; minute++) await requireWriteLimit(env.DB, first, route, minute * 60_000)
+    const windowMs = route === 'photo_upload' ? 3_600_000 : 60_000
+    for (let count = 0; count < writeLimits[route]; count++) await requireWriteLimit(env.DB, first, route, 10 * windowMs)
+    await expect(requireWriteLimit(env.DB, first, route, 10 * windowMs)).rejects.toMatchObject({ status: 429 })
+    await requireWriteLimit(env.DB, second, route, 10 * windowMs)
+    for (let window = 11; window < 15; window++) await requireWriteLimit(env.DB, first, route, window * windowMs)
   }
-  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM write_limits WHERE user_id=?').bind(first).first('n')).toBe(4)
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM write_limits WHERE user_id=?').bind(first).first('n')).toBe(5)
 })
 
 it('limits Worker join writes across arbitrary cache IDs with Retry-After and no mutation', async () => {
