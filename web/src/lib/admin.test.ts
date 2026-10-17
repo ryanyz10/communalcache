@@ -62,5 +62,5 @@ it('keeps admin SQL explicit and never selects authentication/contact fields or 
   const config = JSON.parse(readFileSync(new URL('../../../wrangler.jsonc', import.meta.url), 'utf8'))
   expect(config.assets.run_worker_first).toEqual(expect.arrayContaining(['/admin', '/admin/*']))
   expect(config.vars.ADMIN_USER_IDS).toBeUndefined()
-  expect(config.env.production.vars.ADMIN_USER_IDS).toBe('')
+  expect(config.env.production.vars.ADMIN_USER_IDS).toBe('4f037f1f-5e2a-4241-876e-abdb938bfeb7')
 })

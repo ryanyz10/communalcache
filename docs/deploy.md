@@ -442,7 +442,7 @@ Public configuration (not secrets):
 | --- | --- | --- | --- |
 | local/default | unset | unset | unset — disabled |
 | staging | https://cool-hill-c184.cloudflareaccess.com | 2b600fcaf92b0e490eaf51becb083fae422aeeb97df2e6ddcdc0c86952477ade | 1afaa0f3-6c78-430f-ad4c-60e86c976bc6 |
-| production | https://cool-hill-c184.cloudflareaccess.com | 2f87c35679b9acffa9f9ca447ced84fa2a498fcd90626b86fd7a6b01a76afbea | empty — disabled until owner app signup |
+| production | https://cool-hill-c184.cloudflareaccess.com | 2f87c35679b9acffa9f9ca447ced84fa2a498fcd90626b86fd7a6b01a76afbea | 4f037f1f-5e2a-4241-876e-abdb938bfeb7 |
 
 Owner-supplied Access setup covers all of the staging Worker and production
 `admin*` / `api/admin*` paths. These facts are configuration inputs, not independent
@@ -489,7 +489,7 @@ To enable production later, the owner first signs up normally on production,
 completes onboarding and obtains **their own app user ID** from authenticated
 `GET /api/me`. Approve only that UUID (no email matching and no staging-ID copy).
 Update `env.production.vars.ADMIN_USER_IDS` in a reviewed code/config change and
-perform the separately approved production deployment. Leave it empty until then;
+perform the separately approved production deployment. The owner's production ID is now set;
 no bootstrap admin endpoint or automatic enrollment exists. Policy/allowlist
 changes, production rollout and final parity/security/release approvals remain
 separate.
