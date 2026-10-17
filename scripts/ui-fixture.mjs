@@ -100,7 +100,7 @@ const server = createServer(async (request, response) => {
     catch { json({error: 'invalid_json'}, 400); return }
     if (path === '/api/config') {
       const origin=`http://${request.headers.host}`
-      json({app_base_url:origin,better_auth_url:origin,vapid_public_key:'',turnstile_site_key:'fixture-site-key'})
+      json({app_base_url:origin,better_auth_url:origin,vapid_public_key:'',turnstile_site_key:'fixture-site-key',google_sign_in:process.env.UI_FIXTURE_GOOGLE==='1'})
       return
     }
     const botAction=request.method!=='POST'?null:path==='/api/caches'?'create_cache':['/api/auth/sign-in/magic-link','/api/auth/email-otp/send-verification-otp'].includes(path)?'signin':null

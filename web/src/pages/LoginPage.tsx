@@ -9,9 +9,12 @@ import { CodeInput } from '../components/CodeInput'
 import { landingCopy } from '../lib/landingCopy'
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 import { LegalLinks } from '../components/LegalLinks'
+import { GoogleSignInButton } from '../components/GoogleSignInButton'
+import { googleSignInError, googleSignInUrl } from '../lib/googleSignIn'
 
 export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: string; inviteHint?: boolean }) {
   const { refresh } = useAuth()
+  const [search] = useSearchParams()
   const emailInput = useRef<HTMLInputElement>(null)
   const botCheck = useRef<TurnstileHandle>(null)
   const [botToken, setBotToken] = useState('')
@@ -19,7 +22,18 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
   const [code, setCode] = useState('')
   const [pending, setPending] = useState(false)
   const [sentMode, setSentMode] = useState<'link' | 'code' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(search.has('error') ? googleSignInError : null)
+
+  async function continueWithGoogle() {
+    setPending(true)
+    setError(null)
+    try {
+      window.location.assign(await googleSignInUrl(inviteToken))
+    } catch {
+      setError(googleSignInError)
+      setPending(false)
+    }
+  }
 
   async function sendEmail(mode: 'link' | 'code') {
     if (!emailInput.current?.reportValidity()) return
@@ -86,9 +100,10 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
     </header>
     {inviteHint && !inviteToken && <aside className="cc-saved-invite" role="note">{landingCopy.inviteNote}</aside>}
     {inviteToken && <aside className="cc-saved-invite" aria-label="Saved invite">
-      <strong>Invite saved on this browser</strong><p>Your sign-in link will bring you back here. A saved invite lasts up to 1 hour.</p>
+      <strong>Invite saved on this browser</strong><p>After signing in, you’ll come back here. A saved invite lasts up to 1 hour.</p>
     </aside>}
     <form className="cc-login-form" onSubmit={submit}>
+      {!sentMode && <GoogleSignInButton disabled={pending} onClick={() => void continueWithGoogle()} />}
       <div className={sentMode ? 'sr-only' : 'cc-email-field'} aria-hidden={sentMode ? true : undefined}>
         <label htmlFor="email">Email</label>
         <input

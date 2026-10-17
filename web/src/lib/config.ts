@@ -3,6 +3,7 @@ export type AppConfig = {
   vapid_public_key: string
   app_base_url: string
   turnstile_site_key: string
+  google_sign_in?: boolean
 }
 
 let cached: AppConfig | null = null

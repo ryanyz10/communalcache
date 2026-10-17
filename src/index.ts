@@ -1,4 +1,4 @@
-import { createAuth, type DeliveryResult } from './auth'
+import { createAuth, googleConfigured, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
 import {
   attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest,
@@ -23,6 +23,8 @@ const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
   '/api/auth/sign-in/email-otp': 'POST',
   '/api/auth/sign-in/magic-link': 'POST',
+  '/api/auth/sign-in/social': 'POST',
+  '/api/auth/callback/google': 'GET',
   '/api/auth/magic-link/verify': 'POST',
   '/api/auth/get-session': 'GET',
   '/api/auth/sign-out': 'POST',
@@ -52,6 +54,7 @@ async function dispatch(request: Request, env: Env) {
   if (path.startsWith('/api/auth/')) {
     if (!authMethods[path]) throw new HttpError(404, 'not_found')
     if (method !== authMethods[path]) throw new HttpError(405, 'method_not_allowed')
+    if ((path === '/api/auth/sign-in/social' || path === '/api/auth/callback/google') && !googleConfigured(env)) throw new HttpError(404, 'not_found')
     if (method === 'POST') {
       const body = await readBody(request)
       if (path.endsWith('/send-verification-otp') && body.type !== 'sign-in') throw new HttpError(400, 'invalid_type')
@@ -66,9 +69,10 @@ async function dispatch(request: Request, env: Env) {
         // only our Origin-checked POST is public, and no token enters an incoming URL.
         request = new Request(verificationUrl, { method: 'GET', headers: request.headers })
       } else {
-        const input = path === '/api/auth/sign-in/magic-link'
-          ? { email: body.email, ...magicCallbacks(body, env.APP_BASE_URL) }
-          : body
+        if (path === '/api/auth/sign-in/social' && (body.provider !== 'google' || body.idToken !== undefined)) throw new HttpError(400, 'invalid_provider')
+        let input = body
+        if (path === '/api/auth/sign-in/magic-link') input = { email: body.email, ...magicCallbacks(body, env.APP_BASE_URL) }
+        if (path === '/api/auth/sign-in/social') input = { provider: 'google', disableRedirect: true, ...magicCallbacks(body, env.APP_BASE_URL) }
         request = new Request(request, { body: JSON.stringify(input) })
       }
     }
@@ -83,6 +87,7 @@ async function dispatch(request: Request, env: Env) {
     }
     const headers = new Headers(response.headers)
     headers.set('Cache-Control', 'no-store')
+    if (path === '/api/auth/callback/google') headers.set('Referrer-Policy', 'no-referrer')
     // Unexpected auth failures may have empty bodies; keep API errors JSON.
     if (response.status >= 500) {
       await response.body?.cancel()
@@ -109,6 +114,7 @@ async function dispatch(request: Request, env: Env) {
       better_auth_url: env.BETTER_AUTH_URL,
       vapid_public_key: env.VAPID_PUBLIC_KEY,
       turnstile_site_key: env.TURNSTILE_SITE_KEY,
+      google_sign_in: googleConfigured(env),
     })
   }
 

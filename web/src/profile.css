@@ -252,6 +252,53 @@
   padding: 12px 24px 0;
 }
 
+/* Google's neutral button keeps its own brand colors in both app palettes. */
+.cc-google-signin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #747775;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f1f1f;
+  font: 500 14px/20px Arial, sans-serif;
+}
+
+.cc-google-signin svg {
+  flex: none;
+}
+
+.cc-google-signin:hover:not(:disabled) {
+  background: #f2f2f2;
+}
+
+.cc-google-signin:focus-visible {
+  outline: 2px solid var(--cc-accent);
+  outline-offset: 3px;
+}
+
+.cc-google-signin:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.cc-signin-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--cc-sub);
+  font: 400 13px/20px var(--font-body);
+}
+
+.cc-signin-divider::before, .cc-signin-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--cc-line);
+}
+
 .cc-email-field label {
   position: absolute;
   width: 1px;
