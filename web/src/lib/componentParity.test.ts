@@ -44,7 +44,7 @@ function render(component: ComponentType<Record<string, unknown>>, props: Record
   return html
 }
 
-it('retains exact markup for shared exports, including unused decorative icons and every status/navigation branch', () => {
+it('retains shared markup apart from the tested contrast hook, including every status/navigation branch', () => {
   const item = { id: 'item', cache_id: 'cache', title: '4-person tent', is_consumable: false, quantity: null, available: true, photo_version: null }
   const examples: [string, string, Record<string, unknown>, string?][] = [
     ['AuthScreen', 'AuthScreen', { children: 'Content' }], ['AuthScreen', 'AuthScreen', { children: 'Content', illustration: 'Art', className: 'route' }],
@@ -76,7 +76,9 @@ it('retains exact markup for shared exports, including unused decorative icons a
   const fingerprint = createHash('sha256')
   for (const [file, name, props, path] of examples) {
     if (!exports.has(file)) exports.set(file, load(file, process.env.COMPONENT_PARITY_PARENT === '1'))
-    fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + render(exports.get(file)![name], props, path) + '\0')
+    // Contrast metadata is tested separately; keep all other parent markup pinned.
+    const html = render(exports.get(file)![name], props, path).replace(/ data-cat-backdrop="(?:ginger|grey|dusk|oat|ash|toffee)"/g, '')
+    fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
   // Pin parent output so shallow CI checkouts do not need historical Git objects.
   expect(fingerprint.digest('hex')).toBe('d1f5384429667e5e44fdc878246ee7bcf4a2d81c1bcfc824c2ada2bd7528e7a2')
