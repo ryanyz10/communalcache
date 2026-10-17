@@ -94,13 +94,16 @@ export function LibraryPage() {
               {actionLabel}<span className="sr-only"> {item.title}</span>
             </Link>
           </li>
-        })}</ul>
+        })}
+          {(libraryQuery.isSuccess || libraryQuery.hasNextPage) && !items.length && <li className="cc-list-empty">
+            {libraryQuery.hasNextPage ? <p role="status">Showing matches from {loadedItems.length} loaded items. Load more to include the rest.</p> : <>
+              <p>{totals?.total_count ? 'No items match this filter.' : 'No items yet. Add something you can lend or give away.'}</p>
+              <Link to="/items/new" className="cc-text-action">+ New item</Link>
+            </>}
+          </li>}
+        </ul>
       </div>
-      {libraryQuery.isSuccess && !items.length && !libraryQuery.hasNextPage && <div className="cc-empty-slip">
-        <p>{totals?.total_count ? 'No items match this filter.' : 'No items yet. Add something you can lend or give away.'}</p>
-        <Link to="/items/new" className="cc-text-action">+ New item</Link>
-      </div>}
-      {libraryQuery.hasNextPage && <p role="status" className="cc-form-hint">Showing matches from {loadedItems.length} loaded items. Load more to include the rest.</p>}
+      {libraryQuery.hasNextPage && !!items.length && <p role="status" className="cc-form-hint">Showing matches from {loadedItems.length} loaded items. Load more to include the rest.</p>}
       {libraryQuery.hasNextPage && <button type="button" disabled={libraryQuery.isFetchingNextPage} onClick={() => void libraryQuery.fetchNextPage()} className="cc-profile-secondary cc-library-more">
         {libraryQuery.isFetchingNextPage ? <><LoadingStatus label="Loading more items…" /><Shimmer width={110} height={18} /></> : 'Load more items'}
       </button>}

@@ -60,12 +60,12 @@ it('uses time, true totals and ID-derived color rather than first-page counts or
   expect(html).toContain('cc-thing-tile-deep')
   expect(html).not.toMatch(/first page|private@example|mailto:|sms:|data-opening/)
 })
-it('shows only the empty slips when you have no things or asks',()=>{
+it('shows empty rows inside the existing slips when you have no things or asks',()=>{
   const html=render(true,true)
   expect(html).toContain('No things yet.')
   expect(html).toContain('No asks in your current caches.')
-  expect(html).not.toContain('cc-home-things')
-  expect(html).not.toContain('cc-home-asks')
+  expect(html).toContain('<ul class="cc-packing-slip cc-home-things"><li class="cc-list-empty"><p>No things yet.</p>')
+  expect(html).toContain('<ul class="cc-packing-slip cc-home-asks"><li class="cc-list-empty"><p>No asks in your current caches.</p>')
   expect(html).toContain('>See all</a>')
 })
 it('retains native dialogs, labelled create fields, real bot-dependent submit and private preview defaults',()=>{

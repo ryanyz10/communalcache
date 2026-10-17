@@ -112,7 +112,9 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   } else if (!cacheItems.length) {
     contents = <>
       <div className="cc-contents-toolbar cc-cache-state-toolbar"><h2>Contents</h2></div>
-      <CacheEmptyCard onAdd={() => addItemDialog.current?.showModal()} />
+      <div className="cc-packing-slip cc-contents-slip"><ul><li className="cc-list-empty">
+        <CacheEmptyCard onAdd={() => addItemDialog.current?.showModal()} />
+      </li></ul></div>
     </>
   } else {
     const filterOptions = [
@@ -197,11 +199,9 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
               </Link>}
             </li>
           })}
+          {itemsQuery.isSuccess && !filteredItems.length && <li className="cc-list-empty">No things match your search or filter.</li>}
         </ul>
       </div>
-      {itemsQuery.isSuccess && !filteredItems.length && <div className="cc-empty-slip">
-        <p>No things match your search or filter.</p>
-      </div>}
     </div>
   }
 
@@ -258,6 +258,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
           <Link to={`${settingsPath}#join-requests`}>Review</Link>
         </div>}
         <ul className="cc-packing-slip cc-member-list">
+          {!cache.members.length && <li className="cc-list-empty">No members yet.</li>}
           {cache.members.map(member => <li key={member.user_id}>
             <Avatar
               userId={member.user_id}
