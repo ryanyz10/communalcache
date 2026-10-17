@@ -54,6 +54,14 @@ it('separates empty, loading and error states, and does not display another acco
   expect(other).not.toContain('Bring a jar')
 })
 
+it('keeps ceiling-limited continuation honest instead of claiming an empty filtered library', () => {
+  const markup = render(createElement(LibraryPage), { state: 'empty', more: true })
+  expect(markup).toContain('Showing matches from 0 loaded items. Load more to include the rest.')
+  expect(markup).toContain('Load more items')
+  expect(markup).not.toContain('No items yet')
+  expect(markup).not.toContain('No items match this filter.')
+})
+
 it('does not reuse another account or cache-context detail through denial, refetch and account switch', async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(['item', cacheId, item.id], { ...item, title: 'Cache-only data' })
