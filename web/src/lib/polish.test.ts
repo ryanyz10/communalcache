@@ -7,7 +7,7 @@ import { AuthProvider } from '../auth/AuthProvider'
 import { CachePage } from '../pages/CachePage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { HomePage } from '../pages/HomePage'
-import { ItemEditorPage, ItemList, ItemPage } from '../pages/ItemPages'
+import { ItemEditorPage, ItemPage } from '../pages/ItemPages'
 import { JoinRequests } from '../pages/JoinRequests'
 import { LoginForm } from '../pages/LoginPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
@@ -45,11 +45,13 @@ it('shows distinct empty and failed states for home, items and join queues, with
   expect(homeError).toContain('Previously loaded caches may be out of date')
   expect(homeError).toContain('Try caches again')
   expect(homeError).not.toContain('No caches yet')
-  expect(render(createElement(ItemList, { cacheId: id }))).toContain('Nothing shared yet')
-  const itemsError = render(createElement(ItemList, { cacheId: id }), { errors: [['items', id]] })
+  const cacheRoute = { route: '/caches/:cacheId', path: `/caches/${id}` }
+  expect(render(createElement(CachePage), cacheRoute)).toContain('Nothing in here yet')
+  const itemsError = render(createElement(CachePage), { ...cacheRoute, errors: [['items', id]] })
   expect(itemsError).toContain('role="alert"')
-  expect(itemsError).toContain('Try items again')
-  expect(itemsError).not.toContain('Nothing shared yet')
+  expect(itemsError).toContain('Try again')
+  expect(itemsError).toContain('Could not complete that request. Please try again.')
+  expect(itemsError).not.toContain('Nothing in here yet')
   expect(render(createElement(JoinRequests, { cacheId: id }))).toContain('No pending join requests')
   const joinError = render(createElement(JoinRequests, { cacheId: id }), { errors: [['join-requests', id]] })
   expect(joinError).toContain('Previously loaded join requests may be out of date')

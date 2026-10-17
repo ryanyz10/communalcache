@@ -23,7 +23,7 @@ export function SignInBox() {
   </div>
 }
 
-export function BoxEyes() {
+function BoxEyes() {
   return <svg viewBox="0 0 60 20" aria-hidden="true" focusable="false" className="cc-box-eyes">
     <ellipse cx="20" cy="10" rx="4.5" ry="5.5" fill="#f6a06b" /><ellipse cx="40" cy="10" rx="4.5" ry="5.5" fill="#f6a06b" />
     <ellipse cx="20" cy="10" rx="1.3" ry="4" fill="#201e1d" /><ellipse cx="40" cy="10" rx="1.3" ry="4" fill="#201e1d" />

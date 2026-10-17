@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
-import { ItemEditorPage, ItemList, ItemPage } from '../pages/ItemPages'
+import { ItemEditorPage, ItemPage } from '../pages/ItemPages'
+import { CachePage } from '../pages/CachePage'
 import { apiFetch, ApiError, errorMessage } from './api'
 import type { Item } from './items'
 
@@ -17,38 +18,46 @@ function render(page: 'list' | 'detail' | 'add' | 'edit', options: { owner?: boo
   const selected = options.item ?? item
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } })
   client.setQueryData(['me'], { id: options.owner === false ? 'member' : 'owner', display_name: 'Neighbor', email: 'private@example.test' })
-  client.setQueryData(['cache', cacheId], { id: cacheId, name: 'Tools' })
+  client.setQueryData(['cache', cacheId], { id: cacheId, name: 'Tools', owner_id: 'owner', requires_approval: false, invite_token: `${cacheId}.${'A'.repeat(43)}`, members: [{ user_id: 'owner', display_name: 'Neighbor', attached_item_count: 1 }, { user_id: 'member', display_name: 'Member', attached_item_count: 0 }] })
+  client.setQueryData(['join-requests', cacheId], [])
   client.setQueryData(['item', cacheId, item.id], selected)
   if (options.list === 'error') client.getQueryCache().build(client, { queryKey: ['items', cacheId] }).setState({ status: 'error', error: new ApiError(503, 'internal_error') })
   else if (options.list !== 'loading') client.setQueryData(['items', cacheId], options.list === 'empty' ? [] : [selected])
-  const path = page === 'add' ? '/caches/:cacheId/items/new' : '/caches/:cacheId/items/:itemId'
-  const entry = page === 'add' ? `/caches/${cacheId}/items/new` : `/caches/${cacheId}/items/${item.id}`
-  const element = page === 'list' ? createElement(ItemList, { cacheId }) : page === 'detail' ? createElement(ItemPage) : createElement(ItemEditorPage, { editing: page === 'edit' })
+  const path = page === 'list' ? '/caches/:cacheId' : page === 'add' ? '/caches/:cacheId/items/new' : '/caches/:cacheId/items/:itemId'
+  const entry = page === 'list' ? `/caches/${cacheId}` : page === 'add' ? `/caches/${cacheId}/items/new` : `/caches/${cacheId}/items/${item.id}`
+  const element = page === 'list' ? createElement(CachePage) : page === 'detail' ? createElement(ItemPage) : createElement(ItemEditorPage, { editing: page === 'edit' })
   const routes = createElement(Routes, null, createElement(Route, { path, element }))
   const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [entry] }, routes) })))
   client.clear()
   return markup
 }
 
-it('lists shared things with zero stock, reusable labels, owner names and cache-scoped links', () => {
-  const list = render('list')
-  expect(list).toContain('Shared things')
+it('lists routed cache contents with zero stock, kind filters, owner names and cache-scoped links', () => {
+  const list = render('list', { owner: false })
+  expect(list).toContain('Contents')
   expect(list).toContain('Sugar')
   expect(list).toContain('Neighbor')
-  expect(list).toContain('0 in stock')
+  expect(list).toContain('0 to give')
+  expect(render('list', { item: { ...item, quantity: 8, available_quantity: 5 } })).toContain('5 to give')
   expect(list).toContain(`/caches/${cacheId}/items/${item.id}`)
   expect(list).toContain('>+ Add item</button>')
   expect(list).not.toContain('private@example.test')
-  expect(render('list', { item: { ...item, is_consumable: false, quantity: null } })).toContain('Reusable')
+  const reusable = render('list', { item: { ...item, is_consumable: false, quantity: null } })
+  expect(reusable).toContain('To lend')
+  expect(reusable).toContain('Available')
 })
 
 it('distinguishes empty, unavailable and loading item lists', () => {
-  expect(render('list', { list: 'empty' })).toContain('Nothing shared yet')
+  expect(render('list', { list: 'empty' })).toContain('Nothing in here yet')
   const error = render('list', { list: 'error' })
   expect(error).toContain('role="alert"')
-  expect(error).toContain('Try items again')
-  expect(error).not.toContain('Nothing shared yet')
-  expect(render('list', { list: 'loading' })).toContain('Loading items')
+  expect(error).toContain('Try again')
+  expect(error).toContain('Couldn&#x27;t open this box')
+  expect(error).not.toContain('Nothing in here yet')
+  const loading = render('list', { list: 'loading' })
+  expect(loading).toContain('role="status" class="sr-only">Loading items…')
+  expect(loading).toContain('cc-skeleton-cache-contents')
+  expect(loading).not.toContain('Nothing in here yet')
 })
 
 it('shows item details to members but edit, upload and confirmed delete controls only to the item owner', () => {
