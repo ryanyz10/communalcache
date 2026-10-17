@@ -126,7 +126,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
     '../lib/api': { apiFetch, errorMessage }, '../lib/items': items, '../lib/caches': { cacheDetailQuery },
     '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadPhoto }, '../lib/requests': { invalidateRequestViews },
     './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null, PhotoUpload: Null },
-    './RequestsPage': { ItemRequests: Null }, './ItemForm': { ItemForm: Null }, './ShownIn': { ShownIn: Null },
+    './RequestsPage': { ItemRequests: Null }, './ItemRequests': { ItemRequests: Null }, './ItemForm': { ItemForm: Null }, './ShownIn': { ShownIn: Null },
     '../components/Avatar': { Avatar: Null }, '../components/Cat': { Cat: Null },
     '../components/Stamp': { Stamp: ({ children }: { children: ReactNode }) => createElement('span', null, children) },
     '../components/Box': { boxColor: () => '#f6a06b' }, '../components/ThingTile': { thingTone: () => 'clay' },
