@@ -128,11 +128,17 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
     './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null, PhotoUpload: Null },
     './RequestsPage': { ItemRequests: Null }, './ItemRequests': { ItemRequests: Null }, './ItemForm': { ItemForm: Null }, './ShownIn': { ShownIn: Null },
     '../components/Avatar': { Avatar: Null }, '../components/Cat': { Cat: Null },
+    '../components/PhotoPreview': { PhotoPreview: Null },
     '../components/Stamp': { Stamp: ({ children }: { children: ReactNode }) => createElement('span', null, children) },
     '../components/Box': { boxColor: () => '#f6a06b' }, '../components/ThingTile': { thingTone: () => 'clay' },
     '../components/Skeleton': { LoadingStatus: Null, Shimmer: Null, SkeletonRows: Null },
     '../components/skeletons/ItemSkeletons': { ItemSkeleton: Null, ItemEditorSkeleton: Null },
   }
+  const hook = { exports: {} }
+  const hookSource = readFileSync(new URL('./usePhotoSelection.ts', import.meta.url), 'utf8')
+  const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
+  modules['../lib/usePhotoSelection'] = hook.exports
   const oldFile = kind === 'delete' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'ItemPhoto'
   const newFile = kind === 'delete' ? 'ItemPage' : oldFile
   const source = process.env.ITEM_CONTRACT_PARENT === '1'
@@ -194,6 +200,8 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
   return {
     trace, render, open, submit, escape, change, selectCache, resizePhoto, inputModel, dialogModel, buttons,
     settled: () => lastMutation, focus: () => focus, libraryItem: () => libraryItem,
+    async prepared() { for (let index = 0; index < 5; index++) await Promise.resolve(); return render() },
+    preview: () => elements.find(node => String(node.props.alt).startsWith('Selected'))!,
     cancel: () => click(buttons()[0]), confirm: () => click(buttons()[1]),
     button: (label: string) => elements.find(node => node.type === 'button' && text(node) === label)!,
   }
@@ -246,6 +254,9 @@ it('preserves save→failed photo→photo retry→partial sharing→sharing retr
   const page = fixture('form')
   page.change('item-title', 'Tent'); page.change('new-item-photo', new File(['png'], 'photo.png', { type: 'image/png' }))
   page.selectCache(cacheA.id, true); page.selectCache(cacheB.id, true)
+  await page.prepared()
+  expect(page.preview().props.src).toMatch(/^blob:/)
+  expect(page.render()).not.toContain('photo.png')
   page.submit(); await page.settled()
   expect(page.render()).toContain('Retry photo')
   expect(page.render()).toContain('<fieldset disabled="" class="cc-item-fields"')
@@ -256,7 +267,9 @@ it('preserves save→failed photo→photo retry→partial sharing→sharing retr
     '/api/me/items', `/api/me/items/${item.id}/photo`, `/api/me/items/${item.id}/photo`,
     `/api/me/items/${item.id}/attachments/${cacheA.id}`, `/api/me/items/${item.id}/attachments/${cacheB.id}`, `/api/me/items/${item.id}/attachments/${cacheB.id}`,
   ])
-  expect(page.resizePhoto).toHaveBeenCalledTimes(2)
+  expect(page.resizePhoto).toHaveBeenCalledOnce()
+  const uploads = fetch.mock.calls.filter(call => String(call[0]).endsWith('/photo'))
+  expect(uploads[0][1]?.body).toBe(uploads[1][1]?.body)
   expect(page.trace.filter(row => row[0] === 'saved')).toEqual([['saved', item.id]])
   expect(page.trace.slice(-13)).toEqual([['saved', item.id], ['busy', false], ...invalidations.map(key => ['invalidate', [key]])])
 })
@@ -264,11 +277,14 @@ it('preserves save→failed photo→photo retry→partial sharing→sharing retr
 it('keeps decode failure before create, explicit Continue without photo and Keep without remaining shares', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async path => path === '/api/me/items' ? Response.json(item) : Response.json({ error: 'not_found' }, { status: 404 }))
   const page = fixture('form')
+  page.resizePhoto.mockRejectedValueOnce(new Error(PHOTO_READ_ERROR))
   page.change('item-title', 'Tent'); page.change('new-item-photo', new File(['png'], 'photo.png', { type: 'image/png' }))
   page.selectCache(cacheA.id, true)
-  page.resizePhoto.mockRejectedValueOnce(new Error(PHOTO_READ_ERROR))
+  await page.prepared()
   page.submit(); await page.settled(); expect(fetch).not.toHaveBeenCalled()
   expect(page.render()).toContain("Couldn&#x27;t read that image, try another.")
+  page.change('new-item-photo', new File(['png'], 'replacement.png', { type: 'image/png' }))
+  await page.prepared()
   page.submit(); await page.settled(); expect(page.render()).toContain('Retry photo')
   click(page.button('Continue without photo')); await page.settled()
   expect(page.render()).toContain('Keep item without remaining shares')
@@ -296,9 +312,14 @@ it('photo upload failure retains selection, then retry updates cache data before
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({ error: 'invalid_photo' }, { status: 400 })).mockResolvedValueOnce(Response.json(saved))
   const page = fixture('photo', { cacheId: cacheA.id })
   page.change('item-photo', new File(['png'], 'photo.png', { type: 'image/png' }))
+  await page.prepared()
+  expect(page.preview().props.src).toMatch(/^blob:/)
+  expect(page.render()).not.toContain('photo.png')
   page.submit(); await page.settled(); expect(page.inputModel.value).toBe('selected-photo.png')
   page.trace.length = 0; page.submit(); await page.settled()
   expect(fetch.mock.calls.map(call => call[0])).toEqual(Array(2).fill(`/api/caches/${cacheA.id}/items/${item.id}/photo`))
   expect(page.trace).toEqual([['set', ['item', cacheA.id, item.id], saved], ...invalidations.map(key => ['invalidate', [key]])])
   expect(page.inputModel.value).toBe('')
+  page.render(); expect(page.preview().props.src).toBeNull()
+  expect(page.resizePhoto).toHaveBeenCalledOnce()
 })
