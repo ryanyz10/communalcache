@@ -668,6 +668,48 @@ dialog::backdrop {
   }
 }
 
+.cc-toast-region {
+  position: fixed;
+  z-index: 1100;
+  top: calc(12px + env(safe-area-inset-top,0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(32rem,calc(100vw - 32px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
+  pointer-events: none;
+}
+
+.cc-toast-message {
+  margin: 0;
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
+  background: var(--cc-fg);
+  color: var(--cc-bg);
+  box-shadow: var(--cc-shadow);
+  font: 600 14px/1.45 var(--font-body);
+  text-align: center;
+  overflow-wrap: anywhere;
+  animation: cc-toast-enter 160ms ease-out;
+}
+
+@keyframes cc-toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-toast-message {
+    animation: none;
+  }
+}
+
 .cc-app-shell {
   min-height: 100dvh;
 }
