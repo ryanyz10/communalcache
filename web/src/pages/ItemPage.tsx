@@ -15,8 +15,11 @@ import { Stamp } from '../components/Stamp'
 import { boxColor } from '../components/Box'
 import { ShownIn } from './ShownIn'
 import { ItemSkeleton } from '../components/skeletons/ItemSkeletons'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 function DeleteItem({ item }: { item: Item }) {
+  const { showToast } = useToast()
   const deleteDialog = useRef<HTMLDialogElement>(null)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -29,7 +32,9 @@ function DeleteItem({ item }: { item: Item }) {
       queryClient.removeQueries({ queryKey: ['library-item'] })
       queryClient.removeQueries({ queryKey: ['item-requests'] })
       await invalidateRequestViews(queryClient)
+      showToast('Item deleted.')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
   return <>
@@ -49,7 +54,7 @@ function DeleteItem({ item }: { item: Item }) {
         <li>Its request history is erased. Neighbors with pending requests will be notified.</li>
         <li>Its private photos are queued for cleanup.</li>
       </ul>
-      {deleteItem.isError && <p role="alert" className="cc-form-error">{errorMessage(deleteItem.error)}</p>}
+      {deleteItem.isError && !transientActionFailure(deleteItem.error) && <p role="alert" className="cc-form-error">{errorMessage(deleteItem.error)}</p>}
       <div className="cc-inline-actions">
         <button type="button" autoFocus disabled={deleteItem.isPending} className="cc-profile-secondary" onClick={() => deleteDialog.current?.close()}>
           Cancel
@@ -63,6 +68,7 @@ function DeleteItem({ item }: { item: Item }) {
 }
 
 function ItemAvailability({ item }: { item: Item }) {
+  const { showToast } = useToast()
   const queryClient = useQueryClient()
   const [isLentOut, setIsLentOut] = useState(item.available === false)
   const [note, setNote] = useState(item.unavailable_note ?? '')
@@ -72,6 +78,8 @@ function ItemAvailability({ item }: { item: Item }) {
     mutationFn: () => apiFetch(`/api/me/items/${item.id}`, {
       method: 'PATCH', body: { available: !isLentOut, unavailable_note: trimmedNote || null },
     }),
+    onSuccess: () => showToast('Availability saved.'),
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: () => invalidateRequestViews(queryClient),
   })
 
@@ -98,8 +106,7 @@ function ItemAvailability({ item }: { item: Item }) {
     <input id="unavailable-note" value={note} disabled={saveAvailability.isPending} onChange={event => setNote(event.target.value)} className="cc-profile-input" />
     <p className="cc-form-hint">Up to 200 characters. This blocks new requests, not existing pending requests.</p>
     {noteTooLong && <p role="alert" className="cc-form-error">Keep the note within 200 characters.</p>}
-    {saveAvailability.isError && <p role="alert" className="cc-form-error">{errorMessage(saveAvailability.error)}</p>}
-    {saveAvailability.isSuccess && <p role="status">Availability saved.</p>}
+    {saveAvailability.isError && !transientActionFailure(saveAvailability.error) && <p role="alert" className="cc-form-error">{errorMessage(saveAvailability.error)}</p>}
     <button type="submit" disabled={saveAvailability.isPending || noteTooLong} className="cc-profile-secondary">
       {saveAvailability.isPending ? 'Saving…' : 'Save availability'}
     </button>

@@ -4,6 +4,8 @@ import { ApiError, errorMessage } from '../lib/api'
 import { loadConfig } from '../lib/config'
 import { disablePush, enablePush, pushSupport, subscriptionForAccount } from '../lib/push'
 import { LoadingLines } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function PushControls({ userId }: { userId: string }) {
   const support = pushSupport()
@@ -11,7 +13,7 @@ export function PushControls({ userId }: { userId: string }) {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
   const [hasSubscription, setHasSubscription] = useState(false)
   const [pending, setPending] = useState(false)
-  const [status, setStatus] = useState('')
+  const { showToast } = useToast()
   const [error, setError] = useState('')
   useEffect(() => {
     if (!support.supported) return
@@ -34,14 +36,14 @@ export function PushControls({ userId }: { userId: string }) {
     if (!registration || !configQuery.data?.vapid_public_key) return
     setPending(true)
     setError('')
-    setStatus('')
     try {
       await enablePush(registration, configQuery.data.vapid_public_key, userId)
       setHasSubscription(true)
-      setStatus('Notifications enabled for this account on this browser.')
+      showToast('Notifications enabled for this account on this browser.')
     } catch (error) {
       setHasSubscription(false)
-      if (error instanceof ApiError) setError(errorMessage(error))
+      if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+      else if (error instanceof ApiError) setError(errorMessage(error))
       else if (error instanceof Error) setError(error.message)
       else setError('Could not enable notifications.')
     } finally {
@@ -51,13 +53,13 @@ export function PushControls({ userId }: { userId: string }) {
   async function disable() {
     setPending(true)
     setError('')
-    setStatus('')
     try {
       await disablePush()
       setHasSubscription(false)
-      setStatus('Notifications disabled on this browser.')
+      showToast('Notifications disabled on this browser.')
     } catch (error) {
-      setError(errorMessage(error))
+      if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+      else setError(errorMessage(error))
     } finally {
       setPending(false)
     }
@@ -84,6 +86,5 @@ export function PushControls({ userId }: { userId: string }) {
     </div>}
     {pending && <p role="status" className="mt-3 text-sm">Updating notifications…</p>}
     {error && <p role="alert" className="mt-3 text-red-700">{error}</p>}
-    {status && <p role="status" className="mt-3 text-emerald-700">{status}</p>}
   </section>
 }

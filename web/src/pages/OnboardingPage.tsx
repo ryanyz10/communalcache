@@ -6,14 +6,18 @@ import { AuthScreen } from '../components/AuthScreen'
 import { NamePreview } from '../components/NamePreview'
 import { CoatPicker } from '../components/CoatPicker'
 import type { CatCoat } from '../lib/cats'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function OnboardingPage() {
   const { me, refresh } = useAuth()
+  const { showToast } = useToast()
   const [name, setName] = useState('')
   const [coat, setCoat] = useState<CatCoat | null>(me?.cat_coat ?? null)
   const saveProfile = useMutation({
     mutationFn: () => apiFetch('/api/me', { method: 'PATCH', body: { display_name: name, cat_coat: coat } }),
-    onSuccess: refresh,
+    onSuccess: async () => { await refresh(); showToast('Profile saved.') },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -31,7 +35,7 @@ export function OnboardingPage() {
         className="cc-profile-input" value={name} disabled={saveProfile.isPending} onChange={event => setName(event.target.value)}
       />
       <CoatPicker userId={me.id} value={coat} onChange={setCoat} disabled={saveProfile.isPending} label="Pick your cat" />
-      {saveProfile.isError && <p role="alert" className="cc-form-error">{errorMessage(saveProfile.error)}</p>}
+      {saveProfile.isError && !transientActionFailure(saveProfile.error) && <p role="alert" className="cc-form-error">{errorMessage(saveProfile.error)}</p>}
       <button type="submit" disabled={saveProfile.isPending || !name.trim()} className="cc-profile-primary cc-onboarding-continue">{saveProfile.isPending ? 'Saving…' : 'Continue'}</button>
     </form>
   </AuthScreen>

@@ -3,15 +3,20 @@ import { apiFetch, errorMessage } from '../lib/api'
 import type { JoinRequest } from '../lib/joining'
 import { Avatar } from '../components/Avatar'
 import { SkeletonRows } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function JoinRequests({ cacheId }: { cacheId: string }) {
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   const joinRequestsQuery = useQuery({
     queryKey: ['join-requests', cacheId],
     queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`),
   })
   const decideJoin = useMutation({
     mutationFn: ({ userId, decision }: { userId: string; decision: 'approve' | 'reject' }) => apiFetch(`/api/caches/${cacheId}/join-requests/${userId}/${decision}`, { body: {} }),
+    onSuccess: () => showToast('Join request decided.'),
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ['join-requests', cacheId] })
       await queryClient.invalidateQueries({ queryKey: ['cache', cacheId] })
@@ -27,8 +32,7 @@ export function JoinRequests({ cacheId }: { cacheId: string }) {
       <button type="button" className="mt-2 text-sm underline" disabled={joinRequestsQuery.isFetching} onClick={() => void joinRequestsQuery.refetch()}>Try join requests again</button>
     </div>}
     {decideJoin.isPending && <p role="status" className="mt-3">Saving join decision…</p>}
-    {decideJoin.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(decideJoin.error)}</p>}
-    {decideJoin.isSuccess && <p role="status" className="mt-3 text-emerald-700">Join request decided.</p>}
+    {decideJoin.isError && !transientActionFailure(decideJoin.error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(decideJoin.error)}</p>}
     {(!!joinRequestsQuery.data?.length || joinRequestsQuery.isSuccess) && <ul className="cc-list lg:border-0">
       {joinRequestsQuery.isSuccess && !joinRequestsQuery.data.length && <li className="cc-list-empty">No pending join requests.</li>}
       {joinRequestsQuery.data?.map(request => <li key={request.user_id} className="cc-row flex-wrap">

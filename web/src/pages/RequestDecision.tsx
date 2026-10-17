@@ -3,9 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch, errorMessage } from '../lib/api'
 import { approvalBody, DEFAULT_MARK_LENT_OUT, invalidateRequestViews, relativeWhen, type ItemRequest } from '../lib/requests'
 import { Cat } from '../components/Cat'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function RequestDecision({ request }: { request: ItemRequest }) {
   const client = useQueryClient()
+  const { showToast } = useToast()
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [mode, setMode] = useState<'approve' | 'decline'>('approve')
   const [message, setMessage] = useState('')
@@ -23,7 +26,8 @@ export function RequestDecision({ request }: { request: ItemRequest }) {
         : approvalBody(request.quantity, message, markLentOut, note, noteEdited)
       return apiFetch<ItemRequest>(`/api/me/requests/${request.id}/${action}`, { body })
     },
-    onSuccess: () => dialogRef.current?.close(),
+    onSuccess: (_data, action) => { showToast(action === 'approve' ? 'Request approved.' : 'Request declined.'); dialogRef.current?.close() },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
   function open(nextMode: 'approve' | 'decline') {
@@ -139,7 +143,7 @@ export function RequestDecision({ request }: { request: ItemRequest }) {
           <button type="submit" className="cc-profile-primary" disabled={decisionMutation.isPending || !reason.trim() || reasonTooLong}>{decisionMutation.isPending ? 'Saving decision…' : 'Decline ask'}</button>
           <button type="button" className="cc-sheet-text-button" disabled={decisionMutation.isPending} onClick={() => { decisionMutation.reset(); setMode('approve') }}>Back to approval</button>
         </>}
-        {decisionMutation.isError && <p role="alert" className="cc-form-error">{decisionError}</p>}
+        {decisionMutation.isError && !transientActionFailure(decisionMutation.error) && <p role="alert" className="cc-form-error">{decisionError}</p>}
       </form>
     </dialog>
   </div>

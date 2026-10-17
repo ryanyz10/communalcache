@@ -19,11 +19,14 @@ import { JoinInviteSheet } from './JoinInviteSheet'
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 import { HomeBoxesSkeleton } from '../components/skeletons/HomeSkeleton'
 import { SkeletonRows } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function HomePage() {
   const { me } = useAuth()
   const navigate = useNavigate()
   const client = useQueryClient()
+  const { showToast } = useToast()
   const createDialog = useRef<HTMLDialogElement>(null)
   const joinDialog = useRef<HTMLDialogElement>(null)
   const actionsDialog = useRef<HTMLDialogElement>(null)
@@ -47,8 +50,10 @@ export function HomePage() {
     onSuccess: cache => {
       createDialog.current?.close()
       void client.invalidateQueries({ queryKey: ['caches'] })
+      showToast('Cache created.')
       navigate(`/caches/${cache.id}`)
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
   if (!me) return <LandingPage />
   if (peekJoinToken()) return <Navigate to={destinationAfterLogin()} replace />
@@ -212,7 +217,7 @@ export function HomePage() {
           <input type="checkbox" role="switch" aria-checked={requiresApproval} checked={requiresApproval} onChange={event => setRequiresApproval(event.target.checked)} className="cc-switch" />
         </label>
         {createOpen && <div className="cc-create-bot"><Turnstile ref={botCheck} action="create_cache" onToken={setBotToken} /></div>}
-        {createCache.isError && <p role="alert" className="cc-form-error">{errorMessage(createCache.error)}</p>}
+        {createCache.isError && !transientActionFailure(createCache.error) && <p role="alert" className="cc-form-error">{errorMessage(createCache.error)}</p>}
         <div className="cc-create-buttons">
           <button type="button" disabled={createCache.isPending} onClick={() => createDialog.current?.close()} className="cc-profile-secondary">Cancel</button>
           <button type="submit" disabled={createCache.isPending || !name.trim() || !botToken} className="cc-profile-primary">{createCache.isPending ? 'Creating…' : 'Create cache'}</button>

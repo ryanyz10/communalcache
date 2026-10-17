@@ -10,17 +10,23 @@ import { OnboardingPage } from './OnboardingPage'
 import { AuthBrand, AuthScreen } from '../components/AuthScreen'
 import { InviteBox } from '../components/InviteBox'
 import { LoadingStatus, Shimmer } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function JoinPage() {
   const { token = '' } = useParams()
   const { me } = useAuth()
   const [storageError, setStorageError] = useState(false)
   const client = useQueryClient()
+  const { showToast } = useToast()
   const joinCache = useMutation({
     mutationFn: joinFromToken,
     retry: false,
     onSuccess: () => { void client.invalidateQueries({ queryKey: ['caches'] }) },
-    onError: (_error, failedToken) => client.invalidateQueries({ queryKey: ['invite-preview', me?.id, failedToken] }),
+    onError: (error, failedToken) => {
+      if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+      return client.invalidateQueries({ queryKey: ['invite-preview', me?.id, failedToken] })
+    },
   })
   const validToken = validJoinToken(token)
   const joinedThisInvite = joinCache.isSuccess && joinCache.variables === token
@@ -70,7 +76,7 @@ export function JoinPage() {
         <button type="button" className="cc-text-action" disabled={previewQuery.isFetching} onClick={() => void previewQuery.refetch()}>Try invitation again</button>
       </div>}
     </div>
-    {joinCache.isError && joinCache.variables === token && <p role="alert" className="cc-form-error">{errorMessage(joinCache.error)}</p>}
+    {joinCache.isError && !transientActionFailure(joinCache.error) && joinCache.variables === token && <p role="alert" className="cc-form-error">{errorMessage(joinCache.error)}</p>}
     <div className="cc-join-actions cc-auth-bottom">
       <button type="button" disabled={joinCache.isPending || !preview || previewQuery.isFetching} onClick={() => joinCache.mutate(token)} className="cc-profile-primary">{joinCache.isPending ? 'Joining…' : 'Ask to join'}</button>
       <Link to="/" onClick={() => clearJoinToken(token)} className="cc-join-cancel"><span className="cc-join-cancel-short">Not now</span><span className="cc-join-cancel-long">Not now, cancel this invite</span></Link>
