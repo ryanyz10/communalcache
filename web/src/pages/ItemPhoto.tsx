@@ -4,11 +4,10 @@ import { errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
 import { PHOTO_READ_ERROR,resizePhoto,uploadPhoto } from '../lib/photos'
 import { invalidateRequestViews } from '../lib/requests'
-import { ThingTile,thingTone } from '../components/ThingTile'
+import { thingTone } from '../components/ThingTile'
 
-export function ItemPhoto({item,thumbnail=false}:{item:Item;thumbnail?:boolean}) {
+export function ItemPhoto({item}:{item:Item}) {
   const [failed,setFailed]=useState(false)
-  if(thumbnail) return <ThingTile item={item} library={!item.cache_id} />
   return <div className={`cc-item-photo-frame cc-thing-tile-${thingTone(item.id)}`}>
     {item.photo_version && !failed ? <img src={`${item.cache_id?`/api/caches/${item.cache_id}/items`:'/api/me/items'}/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}`} alt={`Photo of ${item.title}`} onError={()=>setFailed(true)} /> : <>
       <span className="cc-item-name-art" aria-hidden="true">{item.title.toLocaleLowerCase()}</span>
