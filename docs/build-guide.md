@@ -139,7 +139,8 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readability 9/9 | Database domain modules | Implemented; in review, stacked on 8: replaces the database monolith with profiles, caches, memberships, items/library, attachments, requests, contacts, photos, push, outbox, cleanup and limits modules under src/db/, with shared SQL fragments and a stable index export. All 88 declarations are byte-identical except internal export modifiers; AST set/sequence proof covers 107 prepare calls (108 SQL variants), 105 bind lists, 19 batches and the unchanged 61-name public API. Existing tests, including the frozen Worker response-parity fixture, stay unchanged; migrations remain byte-identical. No SQL/logic, frontend, dependency, configuration, remote-resource or release change. |
 | Gate 10 | Full user-flow parity and cleanup refactor | Local Organic walkthrough recorded for all 54 journeys; provider/setup/device and exhaustive accessibility variants remain explicitly partial/blocked. Final intended release scope still needs its complete parity acceptance; not security/release approval. |
 | Security follow-up | Account-switch privacy | Implemented; in review, stacked on admin #84: CC-SEC-01/02 centralize identity transitions, cross-tab/foreground revalidation, private-query cancellation/clearing and push-owner reconciliation across OTP/magic/Google without Account or new permission. CC-SEC-04 binds push to recipient ID plus browser marker/current authenticated session; mismatch/offline/error uses generic Home notification. Cancellation, two-client and decrypted-payload regressions cover the boundary; HTTP response-parity fixture is unchanged. No dependency, migration, provider/resource operation or release approval. |
-| Gate 11 | Independent security review | Review recorded at admin revision 0718eda; this account-switch follow-up addresses CC-SEC-01/02/04. Photo churn CC-SEC-03 and header hardening CC-SEC-05 remain outside this slice; fixes/acceptance and final intended-revision review remain release gates, not a CI-only signoff. |
+| Security follow-up | Photo-upload admission | Implemented; in review, stacked on account privacy #85: CC-SEC-03 adds a shared 20-attempt fixed-clock-hour D1 budget before profile/item body reads or R2 puts, 0016 preserving counter CHECK upgrade, clear 429 photo retry copy, ten-intent cleanup pages and admin count/oldest age. Post-I/O photo finalization and plan slot quotas remain unchanged. Real-D1 admission/race/rollover, pre-body/R2 rejection, larger-page/fault query bounds and churn-probe evidence accompany the PR. Aggregate load/R2 outages can still exceed drain capacity; no hard backlog/orphan ledger or release approval is claimed. |
+| Gate 11 | Independent security review | Review recorded at admin revision 0718eda; follow-ups address CC-SEC-01/02/04 and bound per-user churn in CC-SEC-03. Header hardening CC-SEC-05, documented capacity/orphan residual acceptance and final intended-revision review remain release gates, not a CI-only signoff. |
 | Gate 12 | Explicit release approval | not started — owner-approved revision/environment/features after parity and security; external setup, destructive retirement/reset and legacy cutover approvals remain separate |
 
 ## D1 implementation plan
@@ -215,11 +216,12 @@ losing a cache never deletes the canonical item/photo or blocks own-library acce
 Manual available/unavailable_note fields are stored and validated now (200 Unicode
 code points); UI controls/approval behavior follow later PRs. With request routes
 gated, new D1 items have no reservations yet; PR 4 must add the all-cache pending
-floor to guarded stock edits before requests open. Cleanup uses two cursor-paged
-intents per Cron tick, one 100-key prefix page each, 90s guarded leases and durable
-retry without an attempt cutoff. A nonempty prefix page retains its intent until
-a later empty confirmation. Its worst normal sweep is seven D1 queries + four R2
-calls, leaving headroom alongside retained legacy registry/outbox recovery.
+floor to guarded stock edits before requests open. Cleanup originally used two
+cursor-paged intents; the photo-admission follow-up raises this to ten per Cron
+tick, one 100-key prefix page each, 90s guarded leases and durable retry without
+an attempt cutoff. A nonempty prefix page retains its intent until a later empty
+confirmation. The current page is bounded to 23 D1 queries + 20 R2 calls; the
+independent outbox rescue adds three D1 calls + at most one Queue batch.
 Replacement pointer + old-key cleanup commit atomically; rejected-upload cleanup
 is an independent guarded repair that never deletes a currently referenced key.
 A put-before-finalization crash can still orphan unknown bytes; no complete orphan

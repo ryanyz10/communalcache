@@ -302,6 +302,14 @@ above before streaming with private, no-store headers. Library reads authenticat
 the owner directly. Same-origin cookies work with `<img src>`; no signed URL or
 bearer/blob route, no shared authorized-response cache.
 
+Owner uploads first consume one shared per-user D1 abuse budget: **20 attempts
+per fixed clock hour** across profile and item photos, before body reading/R2 put.
+The guarded reusable counter follows the existing code-defined request/join abuse
+budgets, not plan entitlements. Fixed-window boundaries can admit 40 attempts;
+this is not a rolling-hour or total-storage cap. Over-budget requests get 429
+`rate_limited`, stable `limit: 'photo_upload'` and Retry-After, with “Too many photo
+uploads, try again later.” UI copy. Ordinary replacement stays allowed below the
+budget; reads/removal and the post-I/O guards are unchanged.
 Owner upload caps actual bytes at 5 MB, sniffs JPEG/PNG/WebP (never SVG), writes a
 new ownerId/itemId/uploadUUID key, then **rechecks item/ownership in a guarded D1
 finalization batch after R2 I/O**. Atomically replace photo_path and insert cleanup
@@ -489,7 +497,13 @@ Cron separately retries r2_cleanup intents with guarded claims, bounded pages an
 safe progress; delete intent only after external cleanup succeeds. Exact deletes
 are idempotent; prefix cleanup re-lists until empty. Validate owner/item boundaries
 and do not delete a currently referenced photo. No DO sync work remains. Cleanup
-and outbox share invocation budgets with auth/queries headroom, not unbounded loops.
+and outbox share invocation budgets, not unbounded loops. Cleanup handles ten
+intents/tick with one 100-key prefix page each: at most 23 D1 + 20 R2 calls,
+plus notification rescue's three D1 + one Queue call. Failed completion retains
+its 90-second lease for later retry. Admin shows cleanup count/oldest age only.
+The shared upload admission limits per-user churn, not aggregate storage: many
+users or R2 outages can still outpace the 120 exact-intent/hour nominal drain.
+A hard outstanding-work cap/orphan ledger is deferred, not claimed here.
 
 Channel choice is structural: push if live subscriptions; none, or all returned
 404/410 this pass → delete expired registrations and email now. Transient push
