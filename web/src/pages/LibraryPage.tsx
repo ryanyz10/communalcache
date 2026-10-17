@@ -9,7 +9,7 @@ import { Cat } from '../components/Cat'
 import { Stamp } from '../components/Stamp'
 import { ThingTile,ThingStatus } from '../components/ThingTile'
 import { boxColor } from '../components/Box'
-import { LibrarySkeleton } from '../components/PageSkeletons'
+import { LibrarySkeleton } from '../components/skeletons/LibrarySkeleton'
 import { LoadingStatus, Shimmer } from '../components/Skeleton'
 
 export function LibraryPage() {

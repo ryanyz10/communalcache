@@ -17,7 +17,7 @@ import { ThingTile, ThingStatus } from '../components/ThingTile'
 import { LandingPage } from './LandingPage'
 import { JoinInviteSheet } from './JoinInviteSheet'
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
-import { HomeBoxesSkeleton } from '../components/PageSkeletons'
+import { HomeBoxesSkeleton } from '../components/skeletons/HomeSkeleton'
 import { SkeletonRows } from '../components/Skeleton'
 
 export function HomePage() {
