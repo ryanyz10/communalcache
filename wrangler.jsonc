@@ -13,6 +13,7 @@
   "vars": {
     "APP_BASE_URL": "https://communalcache.com",
     "BETTER_AUTH_URL": "https://communalcache.com",
+    "GOOGLE_CLIENT_ID": "590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleusercontent.com",
     "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
     "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
     "TURNSTILE_HOSTNAMES": "communalcache.com",
@@ -41,6 +42,7 @@
       "vars": {
         "APP_BASE_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
         "BETTER_AUTH_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
+        "GOOGLE_CLIENT_ID": "590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleusercontent.com",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
         "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
         "TURNSTILE_HOSTNAMES": "communalcache-staging.ryanyz10-be6.workers.dev",
@@ -67,6 +69,7 @@
       "vars": {
         "APP_BASE_URL": "https://communalcache.com",
         "BETTER_AUTH_URL": "https://communalcache.com",
+        "GOOGLE_CLIENT_ID": "590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleusercontent.com",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
         "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
         "TURNSTILE_HOSTNAMES": "communalcache.com",

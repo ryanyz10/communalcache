@@ -2,6 +2,11 @@
 APP_BASE_URL=http://localhost:8787
 BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=
+# Google is hidden unless both values exist. Client ID is public; secret stays local.
+GOOGLE_CLIENT_ID=590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=
+# Registered local OAuth callback: http://localhost:8787/api/auth/callback/google
+# Use localhost:8787 for Google; the Vite :5173 origin is not a registered callback.
 RESEND_API_KEY=
 EMAIL_FROM=Communal Cache <signin@send.communalcache.com>
 # Optional local-only VAPID P-256 pair, never production keys. Leave blank to disable push UI.

@@ -12,6 +12,7 @@ import * as caches from './caches'
 import * as joining from './joining'
 import * as pendingJoin from './pendingJoin'
 import * as magicLinks from './magicLinks'
+import * as googleSignIn from './googleSignIn'
 import { refreshProfileViews } from './profile'
 
 type Element = ReactElement<Record<string, unknown>>
@@ -113,7 +114,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     '../auth/AuthProvider': { useAuth: () => auth }, '../lib/api': { ApiError, apiFetch, errorMessage },
     '../lib/caches': { ...caches, useHomeSummary: () => ({ data: undefined, isError: false }) },
     '../lib/items': { useLibrary: () => ({ data: { pages: [{ items: [] }] }, isSuccess: true }) },
-    '../lib/pendingJoin': pendingJoin, '../lib/magicLinks': magicLinks, '../lib/joining': joining, '../lib/profile': { refreshProfileViews },
+    '../lib/pendingJoin': pendingJoin, '../lib/magicLinks': magicLinks, '../lib/googleSignIn': googleSignIn, '../lib/joining': joining, '../lib/profile': { refreshProfileViews },
     '../lib/push': { subscriptionForAccount: async (_registration: unknown, id: string) => trace.push(['push-account', id]) },
     '../components/peekOverlay': { openCacheWithPeek: Null },
     '../components/AuthScreen': { AuthScreen: Container, AuthBrand: Null, SignInBox: Null, BrandMark: Null },
@@ -123,6 +124,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     '../components/Skeleton': { SkeletonRows: Null, LoadingStatus: Null, Shimmer: Null },
     '../components/skeletons/HomeSkeleton': { HomeBoxesSkeleton: Null },
     '../components/Turnstile': { Turnstile: Null }, '../components/CodeInput': { CodeInput: Null },
+    '../components/GoogleSignInButton': { GoogleSignInButton: Null },
     '../components/LegalLinks': { LegalLinks: Null }, '../components/InviteBox': { InviteBox: Null },
     '../components/NamePreview': { NamePreview: Null }, '../components/CoatPicker': { CoatPicker: Null },
     '../lib/landingCopy': { landingCopy: { inviteNote: 'Saved invite hint' } },

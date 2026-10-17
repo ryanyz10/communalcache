@@ -8,7 +8,7 @@ import { appRequest, authRequest, login, base, mailMock, turnstileMock } from '.
 it('serves health/config without secrets and keeps unknown APIs JSON', async () => {
   expect(await (await worker.fetch(appRequest('/api/healthz'), env)).json()).toEqual({status: 'ok'})
   const config = await (await worker.fetch(appRequest('/api/config'), env)).json()
-  expect(config).toEqual({app_base_url: base, better_auth_url: base, vapid_public_key: '',turnstile_site_key:env.TURNSTILE_SITE_KEY})
+  expect(config).toEqual({app_base_url: base, better_auth_url: base, vapid_public_key: '',turnstile_site_key:env.TURNSTILE_SITE_KEY,google_sign_in:false})
   for (const path of ['/api', '/api/missing', '/api/auth/missing']) {
     const res = await worker.fetch(appRequest(path), env)
     expect(res.status).toBe(404)
