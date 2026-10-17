@@ -19,9 +19,12 @@ export function MagicLinkPage() {
     // Keep the bearer token only in this page's memory, not browser history.
     history.replaceState(history.state, '', location.pathname + location.search)
   }, [])
+
   async function proceed() {
     if (!link || pending) return
-    setPending(true); setError(''); setAttempted(true)
+    setPending(true)
+    setError('')
+    setAttempted(true)
     try {
       const result = await verifyMagicLink(link)
       // A link may sign this browser into a different account; discard its old private views.
@@ -32,10 +35,14 @@ export function MagicLinkPage() {
         const registration = await navigator.serviceWorker.getRegistration('/')
         if (registration) await subscriptionForAccount(registration, signedIn.id)
       }
-      navigate(magicLinkDestination(result.callback_url,location.origin), { replace: true })
-    } catch (error) { setError(errorMessage(error)) }
-    finally { setPending(false) }
+      navigate(magicLinkDestination(result.callback_url, location.origin), { replace: true })
+    } catch (error) {
+      setError(errorMessage(error))
+    } finally {
+      setPending(false)
+    }
   }
+
   return <AuthScreen className="cc-auth-recovery">
     <header className="mt-14 text-center lg:mt-0">
       <div className="flex justify-center lg:hidden"><BrandMark /></div>
