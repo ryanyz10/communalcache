@@ -1,0 +1,152 @@
+.cc-admin-page {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 24px 16px 48px;
+}
+
+.cc-admin-page > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.cc-admin-page > header > div {
+  margin-right: auto;
+}
+
+.cc-admin-page h1 {
+  margin: 0;
+  font-size: 38px;
+}
+
+.cc-admin-page h2 {
+  margin: 0 0 16px;
+  font-size: 26px;
+}
+
+.cc-admin-eyebrow {
+  margin: 0;
+  color: var(--cc-sub);
+  font-weight: 700;
+}
+
+.cc-admin-page > p, .cc-admin-page section > p {
+  color: var(--cc-sub);
+  max-width: 72ch;
+}
+
+.cc-admin-overview {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.cc-admin-overview > div {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border: 1px solid var(--cc-edge);
+  border-radius: 24px;
+  background: var(--cc-card);
+}
+
+.cc-admin-overview strong {
+  font: 400 32px var(--font-heading);
+}
+
+.cc-admin-overview span {
+  color: var(--cc-sub);
+}
+
+.cc-admin-page > section:not(.cc-admin-overview) {
+  margin-top: 32px;
+}
+
+.cc-admin-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--cc-edge);
+  border-radius: 20px;
+  background: var(--cc-card);
+}
+
+.cc-admin-page table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.cc-admin-page th, .cc-admin-page td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cc-line);
+  vertical-align: top;
+}
+
+.cc-admin-page td {
+  white-space: nowrap;
+}
+
+.cc-admin-page th {
+  background: var(--cc-chip);
+  white-space: nowrap;
+}
+
+.cc-admin-page tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cc-admin-page code {
+  display: block;
+  min-width: 180px;
+  max-width: 230px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--cc-sub);
+  font-size: 11px;
+}
+
+.cc-admin-plan {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 170px;
+}
+
+.cc-admin-plan select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--cc-edge);
+  border-radius: 12px;
+  background: var(--cc-field);
+  color: var(--cc-fg);
+}
+
+.cc-admin-plan button, .cc-admin-pager button, .cc-admin-page > header button {
+  min-height: 44px;
+}
+
+.cc-admin-plan > span {
+  width: 100%;
+  font-size: 12px;
+}
+
+.cc-admin-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (min-width: 1024px) {
+  .cc-admin-page {
+    padding: 32px 40px 56px;
+  }
+
+  .cc-admin-overview {
+    grid-template-columns: repeat(4,minmax(0,1fr));
+  }
+}
