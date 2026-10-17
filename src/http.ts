@@ -1,5 +1,7 @@
 export class HttpError extends Error {
-  constructor(public status: number, public code: string, public retryAfter?: number, public limit?: string) { super(code) }
+  constructor(public status: number, public code: string, public retryAfter?: number, public limit?: string) {
+    super(code)
+  }
 }
 
 export function json(value: unknown, status = 200) {
@@ -48,7 +50,10 @@ export async function readBody(request: Request): Promise<Record<string, unknown
   } finally { reader.releaseLock() }
   const bytes = new Uint8Array(size)
   let offset = 0
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
   try {
     const body: unknown = JSON.parse(new TextDecoder().decode(bytes))
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('object required')
