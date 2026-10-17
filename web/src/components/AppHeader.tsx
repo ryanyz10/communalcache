@@ -9,7 +9,7 @@ import { Shimmer } from './Skeleton'
 export function AppHeader({ loading = false }: { loading?: boolean }) {
   const { me } = useAuth()
   const { pathname } = useLocation()
-  const visible = (loading || !!me?.display_name) && pathname !== '/login' && pathname !== '/auth/link' && !pathname.startsWith('/join/')
+  const visible = (loading || !!me?.display_name) && pathname !== '/login' && pathname !== '/auth/link' && pathname !== '/privacy' && pathname !== '/terms' && !pathname.startsWith('/join/')
   const summary = useHomeSummary(visible && !!me?.display_name)
   if (!visible) return null
   const count = summary.isError ? 0 : summary.data?.pending_answer_count ?? 0

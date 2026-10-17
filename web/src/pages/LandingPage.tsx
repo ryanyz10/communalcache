@@ -4,6 +4,7 @@ import { BoxMark } from '../components/Box'
 import { Cat } from '../components/Cat'
 import { landingCopy as copy } from '../lib/landingCopy'
 import { SupportLink } from '../components/Support'
+import { LegalLinks } from '../components/LegalLinks'
 
 export function LandingPage() {
   useEffect(() => {
@@ -61,6 +62,6 @@ export function LandingPage() {
         </section>
       </div>
     </main>
-    <footer className="cc-landing-footer"><span>{copy.brand}</span><p>{copy.support.description}</p><SupportLink className="cc-landing-secondary">{copy.support.button}</SupportLink></footer>
+    <footer className="cc-landing-footer"><span>{copy.brand}</span><p>{copy.support.description}</p><SupportLink className="cc-landing-secondary">{copy.support.button}</SupportLink><LegalLinks /></footer>
   </div>
 }
