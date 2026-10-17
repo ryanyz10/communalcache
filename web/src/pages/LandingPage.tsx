@@ -5,11 +5,12 @@ import { Cat } from '../components/Cat'
 import { landingCopy as copy } from '../lib/landingCopy'
 import { SupportLink } from '../components/Support'
 import { LegalLinks } from '../components/LegalLinks'
+import { siteTitle } from '../lib/siteName'
 
 export function LandingPage() {
   useEffect(() => {
     const previousTitle = document.title
-    document.title = copy.title
+    document.title = siteTitle(copy.title)
     return () => { document.title = previousTitle }
   }, [])
 

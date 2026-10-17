@@ -69,6 +69,8 @@ jobs:
         run: npm ci && npm --prefix web ci
       - name: Build web assets
         if: steps.target.outputs.sha != ''
+        env:
+          VITE_SITE_NAME: Communal Cache Staging
         run: npm --prefix web run build
       - name: Migrate and deploy staging
         if: steps.target.outputs.sha != ''
