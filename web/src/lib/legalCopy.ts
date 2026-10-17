@@ -1,5 +1,5 @@
 const operator = 'Ryan Zhou (an individual)'
-const contact = 'ryanyz10+communalcache@gmail.com'
+const contact = 'privacy@communalcache.com'
 
 export const legalCopy = {
   brand: 'Communal Cache',
