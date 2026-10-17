@@ -9,6 +9,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { Avatar } from '../components/Avatar'
+import { Toast, useToast } from '../components/Toast'
 import { CacheSettingsSkeleton } from '../components/skeletons/CacheSkeleton'
 
 function OwnerSettings({ cache }: { cache: CacheDetail }) {
@@ -261,14 +262,14 @@ export function CacheSettingsPage() {
   const { me } = useAuth()
   const queryClient = useQueryClient()
   const rotateDialog = useRef<HTMLDialogElement>(null)
-  const [copyStatus, setCopyStatus] = useState('')
+  const { toast, showToast, dismissToast } = useToast()
   const [rotationStatus, setRotationStatus] = useState('')
   const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me?.display_name })
   const rotateInvite = useMutation({
     mutationFn: () => apiFetch<CacheInfo>(`/api/caches/${cacheId}/invite/rotate`, { body: {} }),
     onSuccess: async () => {
       rotateDialog.current?.close()
-      setCopyStatus('')
+      dismissToast()
       setRotationStatus('Invite rotated. The old link no longer works.')
       await queryClient.invalidateQueries({ queryKey: ['cache', cacheId] })
     },
@@ -290,13 +291,14 @@ export function CacheSettingsPage() {
   async function copyInvite() {
     try {
       await navigator.clipboard.writeText(inviteUrl)
-      setCopyStatus('Invite copied.')
+      showToast('Invite copied.')
     } catch {
-      setCopyStatus('Could not copy automatically. Select the invite link and copy it.')
+      showToast('Could not copy automatically. Select the invite link and copy it.')
     }
   }
 
   return <main className="cc-page cc-cache-settings-page">
+    <Toast toast={toast} />
     <WideBreadcrumbs>
       <Link to="/">Caches</Link>
       <span aria-hidden="true">›</span>
@@ -388,7 +390,6 @@ export function CacheSettingsPage() {
               <span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span>
             </button>}
           </div>
-          {copyStatus && <p role="status" className="mt-3 text-sm">{copyStatus}</p>}
           {rotationStatus && <p role="status" className="mt-3 text-sm text-emerald-700">{rotationStatus}</p>}
         </section>
         {isOwner ? <OwnerSettings cache={cache} /> : <LeaveCache cache={cache} />}
