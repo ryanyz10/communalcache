@@ -182,6 +182,8 @@ it('matches the frozen parent response fixture across routes, methods and caller
             cacheControl: response.headers.get('Cache-Control'), contentType: type,
             setCookie: response.headers.has('Set-Cookie'), location: response.headers.get('Location'),
             referrerPolicy: response.headers.get('Referrer-Policy'), nosniff: response.headers.get('X-Content-Type-Options'),
+            frameOptions: response.headers.get('X-Frame-Options'), csp: response.headers.get('Content-Security-Policy'),
+            cspReportOnly: response.headers.get('Content-Security-Policy-Report-Only'), permissionsPolicy: response.headers.get('Permissions-Policy'), hsts: response.headers.get('Strict-Transport-Security'),
           },
           body: type?.includes('application/json') ? await response.json() : type?.startsWith('image/') ? [...new Uint8Array(await response.arrayBuffer())] : await response.text(),
         }
@@ -217,7 +219,9 @@ it('adds only new admin route cells, hidden for every existing caller/method wit
     const body = await response.json()
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(body))))
     expect(response.status, `${caller.name}: ${method} ${path}`).toBe(adminResponseFixture.status)
-    expect({ cacheControl: response.headers.get('Cache-Control'), contentType: response.headers.get('Content-Type'), setCookie: response.headers.has('Set-Cookie'), location: response.headers.get('Location'), referrerPolicy: response.headers.get('Referrer-Policy'), nosniff: response.headers.get('X-Content-Type-Options') }).toEqual(adminResponseFixture.headers)
+    expect({ cacheControl: response.headers.get('Cache-Control'), contentType: response.headers.get('Content-Type'), setCookie: response.headers.has('Set-Cookie'), location: response.headers.get('Location'), referrerPolicy: response.headers.get('Referrer-Policy'), nosniff: response.headers.get('X-Content-Type-Options'),
+      frameOptions: response.headers.get('X-Frame-Options'), csp: response.headers.get('Content-Security-Policy'),
+      cspReportOnly: response.headers.get('Content-Security-Policy-Report-Only'), permissionsPolicy: response.headers.get('Permissions-Policy'), hsts: response.headers.get('Strict-Transport-Security') }).toEqual(adminResponseFixture.headers)
     expect([...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')).toBe(adminResponseFixture.bodyHash)
     cells++
   }

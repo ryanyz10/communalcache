@@ -12,7 +12,7 @@ import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
 import { serveItemPhoto, serveProfilePhoto } from './photos'
 import { sweepPhotoCleanup } from './cleanup'
-import { HttpError, json, readBody, readOptionalBody, requireOrigin } from './http'
+import { HttpError, json, readBody, readOptionalBody, requireOrigin, securityHeaders } from './http'
 import { consumeNotifications, sweepNotifications } from './notifications'
 import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
@@ -357,15 +357,17 @@ export default {
     if (results.some(result => result.status === 'rejected')) throw new Error('Scheduled recovery incomplete')
   },
   async fetch(request: Request, env: Env): Promise<Response> {
-    try { return await dispatch(request, env) }
+    let response: Response
+    try { response = await dispatch(request, env) }
     catch (error) {
       if (error instanceof HttpError) {
-        const response = json({ error: error.code, ...(error.limit ? { limit: error.limit } : {}) }, error.status)
+        response = json({ error: error.code, ...(error.limit ? { limit: error.limit } : {}) }, error.status)
         if (error.retryAfter !== undefined) response.headers.set('Retry-After', String(error.retryAfter))
-        return response
+      } else {
+        // Auth/session/body errors must not log credentials or provider request bodies.
+        response = json({ error: 'internal_error' }, 500)
       }
-      // Auth/session/body errors must not log credentials or provider request bodies.
-      return json({ error: 'internal_error' }, 500)
     }
+    return securityHeaders(response, env.APP_BASE_URL, new URL(request.url).pathname, request.url)
   },
 } satisfies ExportedHandler<Env>
