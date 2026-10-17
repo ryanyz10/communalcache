@@ -1,6 +1,12 @@
 import { createAuth, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
-import { attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest, decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail, itemRequests, joinCache, invitePreview, libraryPage, listMyCaches, homeSummary, removeCacheMember, requestDetail, requestsPage, savePush, updateProfile, updateCache, updateItem, type Profile, ownContact, saveContact, removeContact, requestContact } from './db'
+import {
+  attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest,
+  decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail,
+  itemRequests, joinCache, invitePreview, libraryPage, listMyCaches, homeSummary, removeCacheMember,
+  requestDetail, requestsPage, savePush, updateProfile, updateCache, updateItem, type Profile,
+  ownContact, saveContact, removeContact, requestContact,
+} from './db'
 import { contactInput } from './contacts'
 import { decisionInput, requestQuantity } from './requests'
 import { itemChanges } from './items'
@@ -42,26 +48,33 @@ async function dispatch(request: Request, env: Env) {
   }
   if (method === 'OPTIONS') return new Response(null, { status: 204 })
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) requireOrigin(request, env.APP_BASE_URL)
+
   if (path.startsWith('/api/auth/')) {
     if (!authMethods[path]) throw new HttpError(404, 'not_found')
     if (method !== authMethods[path]) throw new HttpError(405, 'method_not_allowed')
     if (method === 'POST') {
       const body = await readBody(request)
       if (path.endsWith('/send-verification-otp') && body.type !== 'sign-in') throw new HttpError(400, 'invalid_type')
-      if (path.endsWith('/sign-in/email-otp') && (typeof body.otp !== 'string' || !/^\d{6}$/.test(body.otp))) throw new HttpError(400, 'invalid_otp')
+      if (path.endsWith('/sign-in/email-otp') && (typeof body.otp !== 'string' || !/^\d{6}$/.test(body.otp))) {
+        throw new HttpError(400, 'invalid_otp')
+      }
       if (path === '/api/auth/magic-link/verify') {
         if (typeof body.token !== 'string' || !/^[A-Za-z]{32}$/.test(body.token)) throw new HttpError(400, 'invalid_magic_link')
-        const url = new URL('/api/auth/magic-link/verify', env.APP_BASE_URL)
-        url.search = new URLSearchParams({ token: body.token, ...magicCallbacks(body, env.APP_BASE_URL) }).toString()
+        const verificationUrl = new URL('/api/auth/magic-link/verify', env.APP_BASE_URL)
+        verificationUrl.search = new URLSearchParams({ token: body.token, ...magicCallbacks(body, env.APP_BASE_URL) }).toString()
         // The plugin is GET-only. This internal HTTP adapter retains its D1 limiter;
         // only our Origin-checked POST is public, and no token enters an incoming URL.
-        request = new Request(url, { method: 'GET', headers: request.headers })
+        request = new Request(verificationUrl, { method: 'GET', headers: request.headers })
       } else {
-        const input = path === '/api/auth/sign-in/magic-link' ? { email: body.email, ...magicCallbacks(body, env.APP_BASE_URL) } : body
+        const input = path === '/api/auth/sign-in/magic-link'
+          ? { email: body.email, ...magicCallbacks(body, env.APP_BASE_URL) }
+          : body
         request = new Request(request, { body: JSON.stringify(input) })
       }
     }
-    if (path === '/api/auth/sign-in/magic-link' || path === '/api/auth/email-otp/send-verification-otp') await requireTurnstile(request, env, 'signin')
+    if (path === '/api/auth/sign-in/magic-link' || path === '/api/auth/email-otp/send-verification-otp') {
+      await requireTurnstile(request, env, 'signin')
+    }
     const delivery: DeliveryResult = { status: 'not_called' }
     const response = await createAuth(env, delivery, path).handler(request)
     if ((path.endsWith('/send-verification-otp') || path === '/api/auth/sign-in/magic-link') && delivery.status === 'failed') {
@@ -87,15 +100,18 @@ async function dispatch(request: Request, env: Env) {
     }
     return new Response(response.body, { status: response.status, headers })
   }
+
   if (path === '/api/healthz' || path === '/api/config') {
     if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, 'method_not_allowed')
-    return path.endsWith('/healthz') ? json({ status: 'ok' }) : json({
+    if (path.endsWith('/healthz')) return json({ status: 'ok' })
+    return json({
       app_base_url: env.APP_BASE_URL,
       better_auth_url: env.BETTER_AUTH_URL,
       vapid_public_key: env.VAPID_PUBLIC_KEY,
       turnstile_site_key: env.TURNSTILE_SITE_KEY,
     })
   }
+
   const cacheRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/invite\/rotate|\/invite\/preview|\/leave|\/join|\/join-requests(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject))?)?$/i)
   const itemRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/items(?:\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/photo|\/requests)?)?$/i)
   const requestRoute = path.match(/^\/api\/caches\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/requests\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(approve|reject)$/i)
@@ -106,50 +122,67 @@ async function dispatch(request: Request, env: Env) {
   const ownContactRoute = path === '/api/me/contact' || path === '/api/me/contact/preview'
   // UUIDs are case-insensitive; SQLite text keys are not.
   for (const route of [cacheRoute, itemRoute, requestRoute, memberRoute, libraryRoute, ownRequestRoute, profilePhotoRoute]) {
-    if (route) for (let index = 1; index < route.length; index++) if (route[index]) route[index] = route[index].toLowerCase()
+    if (!route) continue
+    for (let index = 1; index < route.length; index++) {
+      if (route[index]) route[index] = route[index].toLowerCase()
+    }
   }
   const ownPhoto = path === '/api/me/photo'
   const photoRoute = ownPhoto || !!profilePhotoRoute || itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
-  if (path !== '/api/me' && path !== '/api/me/summary' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute && !ownPhoto && !profilePhotoRoute && !ownContactRoute) throw new HttpError(404, 'not_found')
-  let methods: string[]
-  if (cacheRoute?.[2] === '/invite/preview' || path === '/api/me/summary') methods = ['GET']
+  if (
+    path !== '/api/me' && path !== '/api/me/summary' && path !== '/api/caches' &&
+    path !== '/api/requests' && path !== '/api/push/subscribe' &&
+    !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute &&
+    !ownRequestRoute && !ownPhoto && !profilePhotoRoute && !ownContactRoute
+  ) throw new HttpError(404, 'not_found')
+
+  let allowedMethods: string[]
+  if (cacheRoute?.[2] === '/invite/preview' || path === '/api/me/summary') allowedMethods = ['GET']
   else if (ownContactRoute) {
-    if (path.endsWith('/preview')) methods = ['POST']
-    else methods = ['GET', 'PUT', 'DELETE']
-  } else if (ownRequestRoute && (!ownRequestRoute[2] || ownRequestRoute[2] === 'contact')) methods = ['GET']
-  else if (ownPhoto) methods = ['GET', 'POST', 'DELETE']
-  else if (profilePhotoRoute) methods = ['GET']
+    if (path.endsWith('/preview')) allowedMethods = ['POST']
+    else allowedMethods = ['GET', 'PUT', 'DELETE']
+  } else if (ownRequestRoute && (!ownRequestRoute[2] || ownRequestRoute[2] === 'contact')) allowedMethods = ['GET']
+  else if (ownPhoto) allowedMethods = ['GET', 'POST', 'DELETE']
+  else if (profilePhotoRoute) allowedMethods = ['GET']
   else if (libraryRoute) {
-    if (libraryRoute[3]) methods = ['PUT', 'DELETE']
-    else if (libraryRoute[2] || !libraryRoute[1]) methods = ['GET', 'POST']
-    else methods = ['GET', 'PATCH', 'DELETE']
-  } else if (memberRoute) methods = ['DELETE']
-  else if (path === '/api/push/subscribe') methods = ['POST', 'DELETE']
-  else if (requestRoute || ownRequestRoute) methods = ['POST']
-  else if (path === '/api/requests') methods = ['GET']
+    if (libraryRoute[3]) allowedMethods = ['PUT', 'DELETE']
+    else if (libraryRoute[2] || !libraryRoute[1]) allowedMethods = ['GET', 'POST']
+    else allowedMethods = ['GET', 'PATCH', 'DELETE']
+  } else if (memberRoute) allowedMethods = ['DELETE']
+  else if (path === '/api/push/subscribe') allowedMethods = ['POST', 'DELETE']
+  else if (requestRoute || ownRequestRoute) allowedMethods = ['POST']
+  else if (path === '/api/requests') allowedMethods = ['GET']
   else if (itemRoute) {
-    if (itemRoute[3] || !itemRoute[2]) methods = ['GET', 'POST']
-    else methods = ['GET', 'PATCH', 'DELETE']
-  } else if (path === '/api/caches') methods = ['GET', 'POST']
-  else if (cacheRoute?.[2] === '/join-requests') methods = ['GET']
-  else if (cacheRoute?.[2]) methods = ['POST']
-  else methods = ['GET', 'PATCH']
-  if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
+    if (itemRoute[3] || !itemRoute[2]) allowedMethods = ['GET', 'POST']
+    else allowedMethods = ['GET', 'PATCH', 'DELETE']
+  } else if (path === '/api/caches') allowedMethods = ['GET', 'POST']
+  else if (cacheRoute?.[2] === '/join-requests') allowedMethods = ['GET']
+  else if (cacheRoute?.[2]) allowedMethods = ['POST']
+  else allowedMethods = ['GET', 'PATCH']
+  if (!allowedMethods.includes(method)) throw new HttpError(405, 'method_not_allowed')
+
   const session = await createAuth(env).api.getSession({ headers: request.headers })
-  if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
+  const privatePhotoRead = photoRoute && method === 'GET'
+  if (!session) throw new HttpError(privatePhotoRead ? 404 : 401, privatePhotoRead ? 'not_found' : 'unauthorized')
   const profile = await getProfile(env.DB, session.user.id)
-  if (!profile) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
+  if (!profile) throw new HttpError(privatePhotoRead ? 404 : 401, privatePhotoRead ? 'not_found' : 'unauthorized')
   requireProfile(path, method, profile)
-  const writeRoute: WriteRoute | null = method !== 'POST' ? null
-    : cacheRoute?.[2] === '/join' ? 'join'
-    : cacheRoute?.[3] ? 'join_decision'
-    : itemRoute?.[3] === '/requests' ? 'request'
-    : requestRoute || (ownRequestRoute && ownRequestRoute[2] !== 'contact') ? 'request_decision' : null
+
+  let writeRoute: WriteRoute | null = null
+  if (method === 'POST') {
+    if (cacheRoute?.[2] === '/join') writeRoute = 'join'
+    else if (cacheRoute?.[3]) writeRoute = 'join_decision'
+    else if (itemRoute?.[3] === '/requests') writeRoute = 'request'
+    else if (requestRoute || (ownRequestRoute && ownRequestRoute[2] !== 'contact')) writeRoute = 'request_decision'
+  }
   if (writeRoute) {
     if (!session.user.emailVerified) throw new HttpError(401, 'unauthorized')
     await requireWriteLimit(env.DB, profile.id, writeRoute)
   }
-  if (ownPhoto || profilePhotoRoute) return serveProfilePhoto(request,env,profilePhotoRoute?.[1] ?? profile.id,profile.id)
+
+  if (ownPhoto || profilePhotoRoute) {
+    return serveProfilePhoto(request, env, profilePhotoRoute?.[1] ?? profile.id, profile.id)
+  }
   if (ownContactRoute) {
     if (path.endsWith('/preview')) return json({ contact: contactInput(await readBody(request)) })
     if (method === 'GET') return json({ contact: await ownContact(env.DB, profile.id) })
@@ -162,35 +195,41 @@ async function dispatch(request: Request, env: Env) {
     await saveContact(env.DB, profile.id, contact)
     return json({ contact })
   }
-  if (ownRequestRoute && !ownRequestRoute[2]) return json(await requestDetail(env.DB,ownRequestRoute[1],profile.id))
+  if (ownRequestRoute && !ownRequestRoute[2]) return json(await requestDetail(env.DB, ownRequestRoute[1], profile.id))
   if (ownRequestRoute?.[2] === 'contact') return json({ contact: await requestContact(env.DB, ownRequestRoute[1], profile.id) })
-  if (path === '/api/me/summary') return json(await homeSummary(env.DB,profile.id))
+  if (path === '/api/me/summary') return json(await homeSummary(env.DB, profile.id))
+
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
     const body = await readBody(request)
     const changes: { display_name?: string; cat_coat?: CatCoat | null } = {}
     if ('display_name' in body) {
-      if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) throw new HttpError(400, 'invalid_display_name')
+      if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) {
+        throw new HttpError(400, 'invalid_display_name')
+      }
       changes.display_name = body.display_name.trim()
     }
     if ('cat_coat' in body) {
-      if (body.cat_coat !== null && !isCatCoat(body.cat_coat)) throw new HttpError(400,'invalid_cat_coat')
+      if (body.cat_coat !== null && !isCatCoat(body.cat_coat)) throw new HttpError(400, 'invalid_cat_coat')
       changes.cat_coat = body.cat_coat
     }
-    if (!Object.keys(changes).length) throw new HttpError(400,'invalid_display_name')
-    return json(await updateProfile(env.DB,profile.id,changes))
+    if (!Object.keys(changes).length) throw new HttpError(400, 'invalid_display_name')
+    return json(await updateProfile(env.DB, profile.id, changes))
   }
   if (memberRoute || cacheRoute?.[2] === '/leave') {
     await readOptionalBody(request)
-    const ids = await removeCacheMember(env.DB, memberRoute?.[1] ?? cacheRoute![1], profile.id, memberRoute?.[2] ?? profile.id, !memberRoute)
-    await enqueueNotifications(env, ids)
+    const notificationIds = await removeCacheMember(env.DB, memberRoute?.[1] ?? cacheRoute![1], profile.id, memberRoute?.[2] ?? profile.id, !memberRoute)
+    await enqueueNotifications(env, notificationIds)
     return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   }
-  if (path === '/api/requests') return json(await requestsPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
+  if (path === '/api/requests') {
+    return json(await requestsPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
+  }
   if (requestRoute || ownRequestRoute) {
     const requestId = requestRoute?.[2] ?? ownRequestRoute![1]
     const action = (requestRoute?.[3] ?? ownRequestRoute![2]) as 'approve' | 'reject'
-    const result = await decideRequest(env.DB, requestId, profile.id, action, decisionInput(await readBody(request), action), requestRoute?.[1] ?? null)
+    const input = decisionInput(await readBody(request), action)
+    const result = await decideRequest(env.DB, requestId, profile.id, action, input, requestRoute?.[1] ?? null)
     await enqueueNotification(env, result.notificationId)
     return json(result.request)
   }
@@ -200,8 +239,10 @@ async function dispatch(request: Request, env: Env) {
     await enqueueNotification(env, result.notificationId)
     return json(result.request, 201)
   }
+
   if (libraryRoute || itemRoute) {
-    const cacheId = itemRoute?.[1] ?? null, itemId = itemRoute?.[2] ?? libraryRoute?.[1]
+    const cacheId = itemRoute?.[1] ?? null
+    const itemId = itemRoute?.[2] ?? libraryRoute?.[1]
     if (libraryRoute?.[3]) {
       await readOptionalBody(request)
       if (method === 'DELETE') await enqueueNotifications(env, await detachItem(env.DB, itemId!, libraryRoute[3], profile.id))
@@ -214,11 +255,16 @@ async function dispatch(request: Request, env: Env) {
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
     if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
-    if (!itemId && method === 'GET') return json(cacheId ? await cacheItems(env.DB, cacheId, profile.id) : await libraryPage(env.DB, profile.id, new URL(request.url).searchParams.get('after'), new URL(request.url).searchParams.get('filter') ?? 'all'))
+    if (!itemId && method === 'GET') {
+      if (cacheId) return json(await cacheItems(env.DB, cacheId, profile.id))
+      const params = new URL(request.url).searchParams
+      return json(await libraryPage(env.DB, profile.id, params.get('after'), params.get('filter') ?? 'all'))
+    }
     if (method === 'POST') return json(await createItem(env.DB, profile.id, itemChanges(await readBody(request), true), cacheId), 201)
     if (method === 'PATCH') return json(await updateItem(env.DB, itemId!, profile.id, itemChanges(await readBody(request), false), cacheId))
     return json(await itemDetail(env.DB, itemId!, profile.id, cacheId))
   }
+
   if (path === '/api/caches' && method === 'GET') return json((await listMyCaches(env.DB, profile.id)).results)
   if (path === '/api/push/subscribe') {
     const body = await readBody(request)
@@ -241,8 +287,10 @@ async function dispatch(request: Request, env: Env) {
     await requireTurnstile(request, env, 'create_cache')
     return json(await createCache(env.DB, profile.id, changes.name, changes.requires_approval ?? false), 201)
   }
-  const cacheId = cacheRoute![1], action = cacheRoute![2]
-  if (action === '/invite/preview') return json(await invitePreview(env.DB,cacheId,profile.id,request.headers.get('X-Invite-Secret') ?? ''))
+
+  const cacheId = cacheRoute![1]
+  const action = cacheRoute![2]
+  if (action === '/invite/preview') return json(await invitePreview(env.DB, cacheId, profile.id, request.headers.get('X-Invite-Secret') ?? ''))
   if (action === '/join') {
     const body = await readBody(request)
     if (typeof body.secret !== 'string') throw new HttpError(400, 'invalid_secret')

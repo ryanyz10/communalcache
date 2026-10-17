@@ -18,9 +18,9 @@ export type DeliveryResult = { status: 'not_called' | 'sent' | 'failed' }
 
 export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath?: string) {
   if (env.BETTER_AUTH_URL !== env.APP_BASE_URL) throw new Error('Auth URL must match app URL')
-  const url = new URL(env.APP_BASE_URL)
-  if (url.origin !== env.APP_BASE_URL) throw new Error('App URL must be an exact origin')
-  if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {
+  const appUrl = new URL(env.APP_BASE_URL)
+  if (appUrl.origin !== env.APP_BASE_URL) throw new Error('App URL must be an exact origin')
+  if (appUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(appUrl.hostname)) {
     throw new Error('App URL must use HTTPS')
   }
   return {
@@ -34,8 +34,10 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
       onError(error) {
         // ponytail: 1.7.7 restores a wrong OTP after consuming it; a newer resend
         // wins our partial unique index. PR #10443 will classify this as INVALID_OTP upstream.
-        if (requestPath === '/api/auth/sign-in/email-otp' && error instanceof Error &&
-          /^D1_ERROR: UNIQUE constraint failed: verification\.identifier: SQLITE_CONSTRAINT(?: \(extended: SQLITE_CONSTRAINT_UNIQUE\))?$/.test(error.message)) {
+        if (
+          requestPath === '/api/auth/sign-in/email-otp' && error instanceof Error &&
+          /^D1_ERROR: UNIQUE constraint failed: verification\.identifier: SQLITE_CONSTRAINT(?: \(extended: SQLITE_CONSTRAINT_UNIQUE\))?$/.test(error.message)
+        ) {
           throw new APIError('BAD_REQUEST', { code: 'INVALID_OTP', message: 'Invalid OTP' })
         }
       },
@@ -53,7 +55,7 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
       disableOriginCheck: false,
       disableCSRFCheck: false,
       database: { generateId: 'uuid' },
-      useSecureCookies: url.protocol === 'https:',
+      useSecureCookies: appUrl.protocol === 'https:',
       defaultCookieAttributes: { httpOnly: true, sameSite: 'lax' },
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
     },
@@ -109,7 +111,10 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
           method: 'POST',
           redirect: 'manual',
           signal: AbortSignal.timeout(10_000),
-          headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: {
+            Authorization: `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             from: env.EMAIL_FROM,
             to: [email],
