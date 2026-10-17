@@ -14,7 +14,7 @@ import { MemberCats } from '../components/MemberCats'
 import { Stamp } from '../components/Stamp'
 import { ThingTile, ThingStatus } from '../components/ThingTile'
 
-import { CacheSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheSettingsIcon as SettingsIcon } from '../components/PageSkeletons'
+import { CacheSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheSettingsIcon as SettingsIcon } from '../components/skeletons/CacheSkeleton'
 
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams(), { me } = useAuth()
