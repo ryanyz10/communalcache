@@ -173,6 +173,31 @@ pipeline policy; opening the draft PR performs no release. **Merging this draft
 would make the successful master-push staging job apply the destructive class
 deletion. Draft status is a review warning, not a technical deployment gate.**
 
+### Staging site and installed-app name
+
+Staging and production each build `web/dist` in their own deployment job; no shared
+CI asset artifact is promoted. The Staging workflow (`main.yml`) sets public
+`VITE_SITE_NAME=Communal Cache Staging` only on its web-build step. A small Vite
+hook updates the built HTML/manifest, and the landing/legal runtime title overrides
+retain that build name. Default/local/production builds remain Communal Cache.
+In-app wordmarks and the accessible Home name are not renamed. For a manual local
+staging bundle, run `VITE_SITE_NAME='Communal Cache Staging' npm --prefix web run build`
+before the staging dry-run; Wrangler `-e staging` alone changes bindings, not built
+asset names. Rebuild without that variable before any production bundle.
+
+| Surface | Staging | Production/local default |
+| --- | --- | --- |
+| Browser/manifest full name | Communal Cache Staging | Communal Cache |
+| Manifest short_name / Apple home-screen title | CC Staging | Communal Cache |
+
+Manifest id, start_url, scope and icons stay the same. Security headers and asset
+routing are unchanged; no Worker-side rewriting or runtime flag is involved.
+After separately approved staging rollout, verify the new tab/title and manifest.
+**Existing iPhone installs need remove + re-add to pick up the saved label**; merely
+reloading may retain the original Add-to-Home-Screen name. Sign in/re-enable push
+as needed after re-adding; household data remains in D1. Record a native iOS
+receipt rather than claiming the existing icon was renamed by local builds.
+
 ### One-time setup and approval boundaries
 
 1. GitHub Actions/default master; staging and production Environments limited to
