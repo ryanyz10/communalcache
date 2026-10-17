@@ -188,7 +188,7 @@ it('shares the exact handoff ramp/timing, static reduced motion, and decorative 
   expect(css).toContain('--cc-shine: #5a5348')
   expect(css).toContain('animation: cc-shimmer 1.6s linear infinite')
   expect(css).toContain('background-position: -100% 0')
-  expect(css).toContain('.cc-shimmer { animation: none; background: var(--cc-chip); }')
+  expect(css).toMatch(/\.cc-shimmer\s*\{\s*animation: none;\s*background: var\(--cc-chip\);\s*\}/)
   expect(css).toContain('animation: cc-placeholder-exit 350ms ease-out both')
   expect(css).toContain('animation: cc-cache-row-enter 400ms ease-out both')
   expect(css).toContain('animation: cc-skeleton-swap 200ms ease-out both')
