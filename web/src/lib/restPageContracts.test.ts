@@ -274,12 +274,12 @@ it('Login validates before send, retains errors, transitions link→code, verifi
   page.click('Wrong email? Change it'); expect(page.trace.at(-1)).toEqual(['focus', 'email']); expect(page.render()).toContain('Email me a sign-in link')
 })
 
-it('Magic link never auto-verifies, scrubs history, and preserves verify→clear private queries→refresh→push→navigation', async () => {
+it('Magic link never auto-verifies, scrubs history, and awaits centralized auth refresh before navigation', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ success: true, callback_url: 'https://communalcache.com/items' }))
   const page = fixture('MagicLinkPage')
   expect(fetch).not.toHaveBeenCalled(); expect(page.trace[0]).toEqual(['history', null, '', '/auth/link'])
   page.click('Continue'); await vi.waitFor(() => expect(page.trace.some(row => row[0] === 'navigate')).toBe(true))
-  expect(page.trace.slice(1)).toEqual([['remove-private', false, true], ['refresh'], ['push-account', 'owner'], ['navigate', '/items', { replace: true }]])
+  expect(page.trace.slice(1)).toEqual([['refresh'], ['navigate', '/items', { replace: true }]])
   expect(fetch.mock.calls[0][0]).toBe('/api/auth/magic-link/verify'); page.render(); expect(page.button('Continue').props.disabled).toBe(true)
 })
 
