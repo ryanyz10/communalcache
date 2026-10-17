@@ -79,7 +79,7 @@
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
         "TURNSTILE_SITE_KEY": "0x4AAAAAAFX8jA_m3iHxQbuL",
         "TURNSTILE_HOSTNAMES": "communalcache.com",
-        "VAPID_PUBLIC_KEY": ""
+        "VAPID_PUBLIC_KEY": "BPwGTSt_6o4dDY6JU0-2cGSIWA8fQs9ZMCyEO_ht4GIIWVSqIMiPyUmk1jM8wgFa8SZbsYOXTdkc6X3l3amX3-E"
       },
       "d1_databases": [{
         "binding": "DB",
