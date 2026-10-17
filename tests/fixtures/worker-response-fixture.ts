@@ -1,6 +1,13 @@
 // Parent 66862db: exact headers and SHA-256 of each raw JSON/text/binary body.
 // Full response records remain in the parent parity receipt; no response normalization.
 // Google sign-in adds only google_sign_in:false to the unconfigured /api/config body.
+// Security headers intentionally replace only header expectations; cells, statuses and body hashes stay frozen.
+const baselineHeaders = {
+  frameOptions: 'DENY', csp: "frame-ancestors 'none'",
+  cspReportOnly: "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'",
+  permissionsPolicy: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), fullscreen=(), clipboard-write=(self), web-share=(self)',
+  hsts: 'max-age=31536000',
+}
 const encodedCells = [
   'AAABAQICAgICAwMCAgMCAgICAgMCAgIEBQYHCAgCCAgCCAgCAggCAggCCAICCAgCCAICCAIIAgIIAggIAggCCAIICAIIAggCCAIIAgIIAggCCAIIAggICAIIAggCCAkICggLCAwICA0IAwMDAggCCAUGBw==',
   'AAABAQ4PEBESExMUAwMVFgMXGBMZAwMaBQYHCAgbCAgcCAgdHQgcHAgcCBwcCAgcCBwcCBwIHBwIHAgIHAgcCBwICBwIHAgcCBwIHBwIHAgcCBwIHAgICBwIHAgcCAkICggLCAwICA0IAwMDHAgeCAUGBw==',
@@ -18,13 +25,13 @@ const encodedCells = [
 
 export const workerResponseFixture: { headers: unknown[]; templates: [number, number, string][]; cells: number[] } = {
   headers: [
-    { cacheControl: 'no-store', contentType: 'application/json', setCookie: false, location: null, referrerPolicy: null, nosniff: null },
-    { cacheControl: 'public, max-age=0', contentType: 'text/html', setCookie: false, location: null, referrerPolicy: null, nosniff: null },
-    { cacheControl: 'public, max-age=0', contentType: 'text/html', setCookie: false, location: null, referrerPolicy: 'no-referrer', nosniff: null },
-    { cacheControl: 'no-store', contentType: 'text/html', setCookie: false, location: null, referrerPolicy: 'no-referrer', nosniff: null },
-    { cacheControl: 'no-store', contentType: 'application/json', setCookie: true, location: null, referrerPolicy: null, nosniff: null },
-    { cacheControl: 'private, no-store', contentType: 'image/jpeg', setCookie: false, location: null, referrerPolicy: null, nosniff: 'nosniff' },
-    { cacheControl: 'no-store', contentType: null, setCookie: false, location: null, referrerPolicy: null, nosniff: null },
+    { ...baselineHeaders, cacheControl: 'no-store', contentType: 'application/json', setCookie: false, location: null, referrerPolicy: 'strict-origin-when-cross-origin', nosniff: 'nosniff' },
+    { ...baselineHeaders, cacheControl: 'public, max-age=0', contentType: 'text/html', setCookie: false, location: null, referrerPolicy: 'strict-origin-when-cross-origin', nosniff: 'nosniff' },
+    { ...baselineHeaders, cacheControl: 'public, max-age=0', contentType: 'text/html', setCookie: false, location: null, referrerPolicy: 'no-referrer', nosniff: 'nosniff' },
+    { ...baselineHeaders, cacheControl: 'no-store', contentType: 'text/html', setCookie: false, location: null, referrerPolicy: 'no-referrer', nosniff: 'nosniff' },
+    { ...baselineHeaders, cacheControl: 'no-store', contentType: 'application/json', setCookie: true, location: null, referrerPolicy: 'strict-origin-when-cross-origin', nosniff: 'nosniff' },
+    { ...baselineHeaders, cacheControl: 'private, no-store', contentType: 'image/jpeg', setCookie: false, location: null, referrerPolicy: 'strict-origin-when-cross-origin', nosniff: 'nosniff' },
+    { ...baselineHeaders, cacheControl: 'no-store', contentType: null, setCookie: false, location: null, referrerPolicy: 'strict-origin-when-cross-origin', nosniff: 'nosniff' },
   ],
   templates: [
     [200,0,'a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288'],
