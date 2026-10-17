@@ -1,5 +1,8 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
+import { env } from 'cloudflare:workers'
 import { buildPushPayload, encryptNotification } from '@block65/webcrypto-web-push'
+import { savePush } from '../src/db'
+import { deliverNotification } from '../src/notifications'
 
 const encode = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
 const decode = (value: string) => Uint8Array.from(atob(value.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(value.length / 4) * 4, '=')), char => char.charCodeAt(0))
@@ -17,13 +20,26 @@ async function fixture() {
   return { recipient, publicKey, auth, vapid, subscription: { endpoint: 'https://web.push.apple.com/test-token', expirationTime: null, keys: { p256dh: encode(publicKey), auth: encode(auth) } }, vapidKeys: { publicKey: encode(new Uint8Array(await crypto.subtle.exportKey('raw', vapid.publicKey) as ArrayBuffer)), privateKey: privateJwk.d!, subject: 'https://communalcache.com' } }
 }
 
-it('encrypts RFC 8291 aes128gcm in workerd and independently decrypts with the held subscription private key', async () => {
+it('decrypts real outbox delivery with its recipient ID and no contact/email/approval message', async () => {
   const { recipient, publicKey, auth, subscription, vapidKeys } = await fixture()
-  const message = { title: 'Communal Cache', body: 'Your request was approved', path: '/requests' }
-  const payload = await buildPushPayload({ data: message, options: { ttl: 60 } }, subscription, vapidKeys)
-  expect(payload.headers['content-encoding']).toBe('aes128gcm')
-  expect(payload.body.byteLength).toBe(4096)
-  const bytes = payload.body, salt = bytes.slice(0, 16)
+  const userId = crypto.randomUUID(), id = crypto.randomUUID(), requestId = crypto.randomUUID(), stamp = new Date().toISOString()
+  await env.DB.prepare('INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,1,?,?)')
+    .bind(userId, '', 'private-auth@example.test', stamp, stamp).run()
+  await savePush(env.DB, userId, { endpoint: subscription.endpoint, ...subscription.keys })
+  await env.DB.prepare('INSERT INTO outbox(id,kind,dedupe_key,payload,created_at) VALUES (?,?,?,?,?)').bind(id, 'request_approved', id,
+    JSON.stringify({ event: 'request_approved', recipient_id: userId, cache_id: crypto.randomUUID(), cache_name: 'Tools',
+      item_id: crypto.randomUUID(), item_title: 'Mixer', request_id: requestId, contact: 'private-contact', approval_message: 'private-message' }), Date.now()).run()
+  let bytes!: Uint8Array
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+    expect(url).toBe(subscription.endpoint)
+    expect(options?.headers).toMatchObject({ 'content-encoding': 'aes128gcm' })
+    bytes = options!.body as Uint8Array
+    return new Response(null, { status: 201 })
+  })
+  expect(await deliverNotification({ ...env, VAPID_PUBLIC_KEY: vapidKeys.publicKey, VAPID_PRIVATE_KEY: vapidKeys.privateKey }, id)).toBe('ack')
+  const message = { title: 'Your item request was approved', body: 'Cache: Tools\nItem: Mixer', path: `/requests/${requestId}`, recipient_id: userId }
+  expect(bytes.byteLength).toBe(4096)
+  const salt = bytes.slice(0, 16)
   expect(new DataView(bytes.buffer, bytes.byteOffset).getUint32(16)).toBe(4096)
   expect(bytes[20]).toBe(65)
   const senderBytes = bytes.slice(21, 86)

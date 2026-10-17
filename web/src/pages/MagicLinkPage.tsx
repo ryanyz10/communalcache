@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
-import { errorMessage, type Me } from '../lib/api'
-import { subscriptionForAccount } from '../lib/push'
+import { errorMessage } from '../lib/api'
 import { magicLinkDestination, readMagicLink, verifyMagicLink } from '../lib/magicLinks'
 import { AuthScreen, BrandMark } from '../components/AuthScreen'
 
@@ -13,7 +11,6 @@ export function MagicLinkPage() {
   const [error, setError] = useState('')
   const [attempted, setAttempted] = useState(false)
   const { refresh } = useAuth()
-  const client = useQueryClient()
   const navigate = useNavigate()
   useEffect(() => {
     // Keep the bearer token only in this page's memory, not browser history.
@@ -27,14 +24,7 @@ export function MagicLinkPage() {
     setAttempted(true)
     try {
       const result = await verifyMagicLink(link)
-      // A link may sign this browser into a different account; discard its old private views.
-      client.removeQueries({ predicate: query => query.queryKey[0] !== 'me' })
       await refresh()
-      const signedIn = client.getQueryData<Me | null>(['me'])
-      if (signedIn && 'serviceWorker' in navigator) {
-        const registration = await navigator.serviceWorker.getRegistration('/')
-        if (registration) await subscriptionForAccount(registration, signedIn.id)
-      }
       navigate(magicLinkDestination(result.callback_url, location.origin), { replace: true })
     } catch (error) {
       setError(errorMessage(error))

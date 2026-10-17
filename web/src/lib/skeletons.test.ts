@@ -19,7 +19,11 @@ import { hasSessionHint, setSessionHint } from './sessionHint'
 import { readFileSync } from 'node:fs'
 import { startSlowNotice, type CacheSummary } from './caches'
 
-vi.mock('./push', () => ({ disablePush: vi.fn(async () => {}) }))
+vi.mock('./push', () => ({
+  disablePush: vi.fn(async () => {}),
+  reconcilePushAccount: vi.fn(async () => {}),
+  setPushAccount: vi.fn(async () => {}),
+}))
 const id = '11111111-1111-4111-8111-111111111111'
 let store: Map<string, string>
 beforeEach(() => {
