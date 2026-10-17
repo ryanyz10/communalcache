@@ -60,6 +60,20 @@ export async function adminFailedOutbox(db: D1Database, actor: AdminActor, after
   return { rows: rows.results.slice(0, 25), next_cursor: rows.results.length > 25 ? rows.results[24].id as string : null }
 }
 
+export async function adminFlags(db: D1Database, actor: AdminActor) {
+  const rows = await db.prepare(`SELECT key,enabled,updated_at FROM feature_flags WHERE ${currentAdminSession} ORDER BY key`)
+    .bind(actor.userId, actor.sessionToken, new Date().toISOString()).all<{ key: string; enabled: number; updated_at: number }>()
+  return rows.results.map(row => ({ ...row, enabled: row.enabled === 1 }))
+}
+
+export async function adminSetFlag(db: D1Database, actor: AdminActor, key: string, enabled: boolean) {
+  const now = Date.now()
+  const result = await db.prepare(`UPDATE feature_flags SET enabled=?,updated_at=?,updated_by=?
+    WHERE key=? AND ${currentAdminSession}`)
+    .bind(enabled ? 1 : 0, now, actor.userId, key, actor.userId, actor.sessionToken, new Date(now).toISOString()).run()
+  if (!result.meta.changes) throw new HttpError(404, 'not_found')
+}
+
 export async function adminCachePlan(db: D1Database, actor: AdminActor, id: string, plan: string) {
   const result = await db.prepare(`UPDATE caches SET plan=? WHERE id=? AND join_secret IS NOT NULL
     AND EXISTS(SELECT 1 FROM plan_limits WHERE plan=?) AND ${currentAdminSession}`)

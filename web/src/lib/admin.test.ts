@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { AdminPage } from '../pages/AdminPage'
-import { adminListPath, setAdminPlan } from './admin'
+import { adminListPath, setAdminFlag, setAdminPlan } from './admin'
 import { readFileSync } from 'node:fs'
 
 const id = '11111111-1111-4111-8111-111111111111'
@@ -17,6 +17,7 @@ function render(mode: 'ready' | 'loading' | 'denied' | 'signed-out' = 'ready') {
   if (mode === 'denied') client.getQueryCache().find({ queryKey: ['admin', id, 'overview'] })!.setState({ status: 'error', error: new Error('not found') })
   client.setQueryData(['admin', id, 'caches', null], { rows: [{ id, name: 'Tools', owner_id: id, owner_name: 'Owner name', plan: 'free', member_count: 12, member_limit: 30, item_count: 3 }], next_cursor: id })
   client.setQueryData(['admin', id, 'users', null], { rows: [{ id, display_name: 'Neighbor name', plan: 'free', owned_caches: 1, owned_cache_limit: 1, owned_items: 3, owned_item_limit: 100, pending_outgoing: 4, pending_limit: 20, memberships: 2, membership_limit: 20, new_caches_24h: 1, new_cache_limit: 2, profile_photos: 0, profile_photo_limit: 1 }], next_cursor: null })
+  client.setQueryData(['admin', id, 'flags'], { flags: [{ key: 'google_sign_in', enabled: true, updated_at: 1_000 }] })
   client.setQueryData(['admin', id, 'failed-outbox', null], { rows: [{ id, kind: 'request_created', created_at: 1_000, failed_at: 2_000, attempts: 6, error_class: null }], next_cursor: null })
   const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, null, createElement(AdminPage)) })))
   client.clear()
@@ -25,9 +26,11 @@ function render(mode: 'ready' | 'loading' | 'denied' | 'signed-out' = 'ready') {
 
 it('renders cozy operational tables, policy-derived plan choices and safe metadata without email or payloads', () => {
   const html = render()
-  for (const text of ['Admin', 'Caches', 'Users', 'Failed outbox', 'Owner name', 'Neighbor name', id, '12 / 30', '3 / 100', '4 / 20', 'Not recorded', 'Photo cleanup:', '2 min', 'Plan for', 'First caches page', 'Next caches page']) expect(html).toContain(text)
+  for (const text of ['Admin', 'Caches', 'Users', 'Failed outbox', 'Owner name', 'Neighbor name', id, '12 / 30', '3 / 100', '4 / 20', 'Not recorded', 'Photo cleanup:', '2 min', 'Switches', 'Google sign-in', 'Plan for', 'First caches page', 'Next caches page']) expect(html).toContain(text)
   expect(html).toContain('<option value="free" selected="">free</option>')
   expect(html).toContain('<option value="plus">plus</option>')
+  expect(html).toContain('role="switch" aria-label="Google sign-in" aria-checked="true"')
+  expect(html).toContain('checked=""')
   expect(html).toContain('scope="col"')
   expect(html).toContain('role="region" aria-label="Users table" tabindex="0"')
   expect(html).not.toContain('admin-private@example.test')
@@ -51,6 +54,12 @@ it('uses explicit cursor requests and same-origin PATCH bodies without user-supp
   expect(adminListPath('failed-outbox', 'unsafe?cursor')).toBe('/api/admin/failed-outbox?after=unsafe%3Fcursor')
   await setAdminPlan('users', id, 'plus')
   expect(fetch).toHaveBeenCalledWith(`/api/admin/users/${id}/plan`, expect.objectContaining({ method: 'PATCH', credentials: 'same-origin', body: '{"plan":"plus"}' }))
+})
+
+it('PATCHes only the selected switch boolean with same-origin cookies', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ key: 'google_sign_in', enabled: false }))
+  await setAdminFlag('google_sign_in', false)
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/admin/flags/google_sign_in', expect.objectContaining({ method: 'PATCH', credentials: 'same-origin', body: '{"enabled":false}' }))
 })
 
 it('keeps admin SQL explicit and never selects authentication/contact fields or raw outbox contents', () => {
