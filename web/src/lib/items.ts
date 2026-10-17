@@ -22,6 +22,7 @@ export type Item = {
 }
 
 export type LibraryItem = Item & { caches: { id: string; name: string }[]; pending_count: number }
+export const libraryItemQuery = (userId: string | undefined, itemId: string) => ({ queryKey: ['library-item', userId, itemId], queryFn: () => apiFetch<LibraryItem>(`/api/me/items/${itemId}`) })
 export type LibraryFilter = 'all' | 'lend' | 'give' | 'unshared'
 export type LibraryTotals = {total_count:number;lend_count:number;give_count:number;unshared_count:number;shared_cache_count:number}
 export type LibraryPageData = { items: LibraryItem[]; next_cursor: string | null; totals: LibraryTotals }
