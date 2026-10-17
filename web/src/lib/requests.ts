@@ -38,10 +38,6 @@ export function useRequests(enabled: boolean) {
   })
 }
 
-export function pendingIncomingCount(rows: ItemRequest[], userId: string) {
-  return rows.filter(row => row.owner_id === userId && row.status === 'pending').length
-}
-
 export function invalidateRequestViews(client: QueryClient) {
   return Promise.all([
     client.invalidateQueries({ queryKey: ['item-requests'] }),

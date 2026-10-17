@@ -12,23 +12,10 @@ import { ItemRequests } from './RequestsPage'
 import { Avatar } from '../components/Avatar'
 import { Cat } from '../components/Cat'
 import { Stamp } from '../components/Stamp'
-import { ThingTile } from '../components/ThingTile'
 import { boxColor } from '../components/Box'
 import { ItemForm } from './ItemForm'
 import { ShownIn } from './ShownIn'
 import { ItemSkeleton, ItemEditorSkeleton } from '../components/PageSkeletons'
-import { SkeletonRows } from '../components/Skeleton'
-
-export function ItemList({cacheId,onAdd}:{cacheId:string;onAdd?:()=>void}) {
-  const query=useQuery({queryKey:['items',cacheId],queryFn:()=>apiFetch<Item[]>(`/api/caches/${cacheId}/items`)})
-  return <section aria-labelledby="items-heading"><h2 id="items-heading">Shared things</h2>
-    {query.isPending && <SkeletonRows label="Loading items…" />}
-    {query.isError && <div><p role="alert">{errorMessage(query.error)}</p><button onClick={()=>void query.refetch()}>Try items again</button></div>}
-    {query.isSuccess && !query.data.length && <p>Nothing shared yet. Add the first item for your neighbors.</p>}
-    <ul className="cc-packing-slip">{query.data?.map(item=><li key={item.id}><Link to={`/caches/${cacheId}/items/${item.id}`}><ThingTile item={item} /><h3>{item.title}</h3><Avatar userId={item.owner_id} name={item.owner_name ?? 'Member'} photoVersion={item.owner_photo_version} coat={item.owner_cat_coat} size={24} /><span>{item.owner_name ?? 'Member'} · {item.is_consumable?`${item.quantity} in stock`:'Reusable'}</span></Link></li>)}</ul>
-    <button type="button" className="cc-profile-secondary" onClick={onAdd}>+ Add item</button>
-  </section>
-}
 
 function DeleteItem({item}:{item:Item}) {
   const dialog=useRef<HTMLDialogElement>(null),client=useQueryClient(),navigate=useNavigate()
