@@ -1,7 +1,10 @@
 # One D1 database and private R2 storage
 
 **Single D1 authority.** PRs 2–6 ported the application to guarded SQL in
-`src/db.ts`. PR 7's draft removes historical Cache code/bindings/sweeps and adds
+`src/db/`. Domain modules keep each guarded statement/batch intact; `index.ts`
+preserves the public API, `shared.ts` holds reused read/authorization fragments
+and `limits.ts` holds shared quota guards/diagnostics. PR 7's draft removes
+historical Cache code/bindings/sweeps and adds
 `0011_retire_cache_projections.sql`, which drops only the unused discovery and
 registry-cursor tables. The canonical data and durable outbox/cleanup work stay.
 **Deploying the appended Wrangler class-deletion migration permanently destroys

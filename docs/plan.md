@@ -61,7 +61,7 @@ copies and revocation tombstones. Notifications and R2 still need durable extern
 work, not a cross-store transaction.
 
 PRs 2–6 implement the single-D1 routes/screens and real-SQL batch/race tests in
-`src/db.ts`. Draft PR 7 removes historical Cache code/sweeps and prepares the
+`src/db/`. Draft PR 7 removes historical Cache code/sweeps and prepares the
 class-deletion config plus obsolete projection-table migration. **It is not
 approved for merge/deploy: class deletion permanently destroys Cache DO data.**
 The [build plan](build-guide.md#d1-implementation-plan) records review/release
@@ -369,7 +369,8 @@ destructive endpoint ships only with its complete guarded batch/race proof.
 ## Backend and authentication
 
 One TypeScript module Worker handles HTTP, Queue messages and scheduled sweeps;
-plain dispatch and hand-written bound SQL in **one auditable module, src/db.ts**.
+plain dispatch and hand-written bound SQL in **auditable domain modules under src/db/**,
+with a stable index export and each guarded statement/token batch kept intact.
 No router/ORM dependency, DO RPC/class or interactive JS transaction in the target.
 D1 schema uses reviewed Wrangler migrations, never HTTP startup/public migration
 endpoints. R2/Queue/provider calls are outside atomic SQL batches.
