@@ -39,18 +39,20 @@ function render(element: ReactElement, options: { caller?: string | null; path?:
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('removes pixel scenery while retaining readable fluid fallback layouts until each page redesign', () => {
+it('retains shared fluid page sizing and current Home/cache layouts without retired scenery', () => {
   const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
   for (const old of ['cc-horizon', 'cc-walking-cat', 'cc-box-lid', '--cc-pixel']) expect(css).not.toContain(old)
   expect(css).toContain('--cc-gutter: clamp(16px,3.125vw,96px)')
   expect(css).toContain('--cc-content-cap: 1920px')
   expect(css).toContain('width: min(calc(100% - 2 * var(--cc-gutter)),var(--cc-content-cap))')
   expect(css).toContain('max-inline-size: 72ch')
-  expect(css).toContain('repeat(auto-fill,minmax(min(100%,clamp(220px,18vw,320px)),1fr))')
-  expect(css).toContain('@container (min-width: 68rem)')
-  expect(css).toContain('grid-template-columns: minmax(0,1fr) clamp(240px,18vw,320px)')
-  expect(css).toContain('.cc-home, .cc-cache-page { width: 100%')
-  expect(render(createElement(HomePage))).not.toMatch(/cc-horizon|cc-phone-terrain|data-opening/)
+  const home = render(createElement(HomePage))
+  expect(home).toContain('class="organic-home"')
+  expect(home).toContain('class="cc-home-boxes"')
+  expect(home).not.toMatch(/cc-horizon|cc-phone-terrain|data-opening/)
+  const cache = render(createElement(CachePage), { route: '/caches/:cacheId', path: `/caches/${id}` })
+  expect(cache).toContain('class="cc-contents-layout"')
+  expect(cache).toContain('cc-member-list')
 })
 
 it('uses top tabs and bottom links instead of the old account menu without exposing private email', () => {
@@ -104,7 +106,7 @@ it('retains settings section links only for authorized roles', () => {
   expect(member).not.toContain('href="#cache"')
 })
 
-it('keeps existing request and Account actions while their screen layouts await later PRs', () => {
+it('keeps current request and Account layouts and actions', () => {
   const requests = render(createElement(RequestsPage))
   expect(requests).toContain('aria-label="Needs your answer"')
   expect(requests).toContain('aria-label="Your asks"')

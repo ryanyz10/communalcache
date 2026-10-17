@@ -204,51 +204,20 @@ dialog::backdrop { background: var(--cc-scrim); }
 @media (hover: hover) {
   .cc-tabs a:hover { color: var(--cc-fg); background: var(--cc-chip); }
   .cc-tabs-mobile a:hover { background: transparent; }
-  .cc-pill:hover, .cc-auth-primary:hover { background: var(--cc-chip); color: var(--cc-fg); }
+  .cc-pill:hover { background: var(--cc-chip); color: var(--cc-fg); }
   .cc-outline:hover { background: var(--cc-chip); }
 }
 
-/* Layout compatibility, not the later screen-by-screen redesign. */
+/* Shared page and sheet sizing. */
 .cc-sheet { margin: auto auto 0; }
-.cc-home-mark { display: flex; align-items: center; justify-content: center; }
-.cc-hero { margin: -20px -16px 0; padding: 20px 16px 0; }
-.cc-content, .cc-hero-content { display: contents; }
 @media (min-width: 640px) {
   body { --cc-gutter: clamp(16px,3.125vw,96px); --cc-space: clamp(24px,2.5vw,48px); }
-  .cc-page, .cc-content, .cc-hero-content { width: min(calc(100% - 2 * var(--cc-gutter)),var(--cc-content-cap)); max-width: none; margin-inline: auto; padding-inline: 0; }
+  .cc-page { width: min(calc(100% - 2 * var(--cc-gutter)),var(--cc-content-cap)); max-width: none; margin-inline: auto; padding-inline: 0; }
   .cc-page { padding-block: var(--cc-space); }
   .cc-page :is(p,form) { max-inline-size: 72ch; }
   .cc-page h1 { font-size: var(--cc-type-page); line-height: 1.05; }
   .cc-page h2 { font-size: 26px; }
-  .cc-home, .cc-cache-page { width: 100%; padding: 0 0 var(--cc-space); }
-  .cc-content, .cc-hero-content { display: block; }
-  .cc-content { container-type: inline-size; }
-  .cc-hero { margin: 0; padding: var(--cc-space) 0 0; }
-  .cc-hero-content > .flex, .cc-hero-content > .flex > .flex { flex-wrap: wrap; }
-  .cc-hero-content > .flex > .flex { flex-direction: row; }
-  .cc-card-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,clamp(220px,18vw,320px)),1fr)); gap: clamp(16px,1.6vw,28px); margin-top: var(--cc-space); overflow: visible; border: 0; border-radius: 0; background: none; }
-  .cc-card-grid > li { min-width: 0; border: 0; }
-  .cc-card-grid > li > a { display: block; height: 100%; padding: 0; overflow: hidden; border: 1px solid var(--cc-line); border-radius: 14px; background: var(--cc-card); }
-  .cc-card-grid > li > a > div { padding: clamp(14px,1vw,20px); }
-  .cc-card-grid > li > a:not(.cc-cache-link) > span:last-child { display: none; }
-  .cc-card-grid .cc-item-photo { display: block; width: 100%; height: auto; aspect-ratio: 4/3; border-radius: 0; }
-  .cc-card-grid .cc-cache-link { display: grid; grid-template-columns: 1fr auto; gap: 14px; padding: clamp(18px,1.4vw,28px); }
-  .cc-card-grid .cc-cache-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; }
-  .cc-card-grid .cc-cache-name { grid-column: 1 / -1; grid-row: 2; }
-  .cc-card-grid .cc-cache-link > span:last-child { grid-column: 2; grid-row: 1; }
-  .cc-cache-layout { display: grid; grid-template-columns: minmax(0,1fr); align-items: start; gap: var(--cc-space); }
-  .cc-cache-members { display: block; margin-top: 24px; padding: 18px; border: 1px solid var(--cc-line); border-radius: 28px; background: var(--cc-card); }
-  .cc-cache-members ul { display: grid; grid-template-columns: repeat(auto-fill,minmax(9rem,1fr)); gap: 12px; }
-  .cc-cache-members li { margin: 0; }
-  .cc-item-layout, .cc-item-media, .cc-item-details { display: block; min-width: 0; }
-  .cc-item-media { margin-top: var(--cc-space); }
-  .cc-item-media .cc-item-photo { display: block; width: 100%; height: auto; max-height: min(65vh,720px); aspect-ratio: 4/3; border-radius: 28px; background: var(--cc-chip); }
-  .cc-requests-layout { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,26rem),1fr)); align-items: start; gap: var(--cc-space); }
   .cc-sheet { margin: auto; border-radius: 32px; }
-}
-@container (min-width: 68rem) {
-  .cc-cache-layout { grid-template-columns: minmax(0,1fr) clamp(240px,18vw,320px); }
-  .cc-cache-members ul { grid-template-columns: 1fr; }
 }
 @media (min-width: 1024px) {
   :root { --cc-type-page: 52px; }
@@ -263,7 +232,5 @@ dialog::backdrop { background: var(--cc-scrim); }
   .cc-tabs-mobile { display: none; }
   .cc-account-link { display: block; margin-left: auto; border-radius: 50%; }
   .cc-account-link[aria-current="page"] { box-shadow: 0 0 0 2px var(--cc-accent); }
-  .cc-item-layout { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: var(--cc-space); }
-  .cc-item-media { margin-top: 0; }
   .cc-account-layout { gap: var(--cc-space); }
 }
