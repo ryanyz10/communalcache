@@ -2,12 +2,13 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { ItemEditorPage, ItemPage } from '../pages/ItemPages'
 import { CachePage } from '../pages/CachePage'
+import { ShownIn } from '../pages/ShownIn'
 import { apiFetch, ApiError, errorMessage } from './api'
-import type { Item } from './items'
+import { libraryItemQuery, type Item } from './items'
 
 const cacheId = '11111111-1111-4111-8111-111111111111'
 const item: Item = { id: '22222222-2222-4222-8222-222222222222', cache_id: cacheId, owner_id: 'owner', owner_name: 'Neighbor', title: 'Sugar', description: 'For baking', is_consumable: true, quantity: 0, created_at: 1, photo_version: null }
@@ -140,6 +141,62 @@ it('sends cookie-auth item CRUD to nested routes, without owner assignment or ed
   expect(fetchMock.mock.calls.every(call => call[1]?.credentials === 'same-origin')).toBe(true)
   expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('owner_id')
   expect(JSON.parse(fetchMock.mock.calls[3][1]?.body as string)).not.toHaveProperty('is_consumable')
+})
+
+it('defines only the account-scoped private item key and exact cookie-auth path', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ ...item, cache_id: null, caches: [], pending_count: 0 }))
+  const query = libraryItemQuery('owner', item.id)
+  expect(query.queryKey).toEqual(['library-item', 'owner', item.id])
+  expect(libraryItemQuery(undefined, item.id).queryKey).toEqual(['library-item', undefined, item.id])
+  expect(Object.keys(query).sort()).toEqual(['queryFn', 'queryKey'])
+  await query.queryFn()
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/me/items/${item.id}`, expect.objectContaining({ method: 'GET', credentials: 'same-origin', body: undefined }))
+})
+
+it.each([
+  ['private detail', false, false, true], ['cache detail', true, false, true],
+  ['private edit', false, true, true], ['cache edit', true, true, true],
+  ['private create', false, true, false], ['cache create', true, true, false],
+] as const)('preserves exact keys, paths and disabled reads for %s', async (_label, inCache, editor, editing) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(['me'], { id: 'owner', display_name: 'Neighbor' })
+  const prefix = inCache ? `/caches/${cacheId}` : ''
+  const path = `${prefix}/items/${item.id}`
+  const route = `${inCache ? '/caches/:cacheId' : ''}/items/:itemId`
+  const element = editor ? createElement(ItemEditorPage, { editing }) : createElement(ItemPage)
+  renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [path] }, createElement(Routes, null, createElement(Route, { path: route, element }))) })))
+  const key = inCache ? ['item', cacheId, item.id] : ['library-item', 'owner', item.id]
+  const detail = client.getQueryCache().find({ queryKey: key, exact: true })!
+  const cache = client.getQueryCache().find({ queryKey: ['cache', inCache ? cacheId : undefined], exact: true })!
+  expect(detail.options).toMatchObject({ enabled: !editor || editing, retry: false })
+  expect(cache.options).toMatchObject({ enabled: inCache, retry: false })
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(item))
+  const stops = [detail, cache].map(query => new QueryObserver(client, { ...query.options, queryKey: query.queryKey }).subscribe(() => {}))
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(Number(!editor || editing) + Number(inCache)))
+  expect(fetch.mock.calls.map(call => call[0]).sort()).toEqual([
+    ...(!editor || editing ? [inCache ? `/api/caches/${cacheId}/items/${item.id}` : `/api/me/items/${item.id}`] : []),
+    ...(inCache ? [`/api/caches/${cacheId}`] : []),
+  ].sort())
+  stops.forEach(stop => stop()); client.clear()
+})
+
+it.each(['detail', 'edit', 'sharing'] as const)('makes zero item/cache requests in unnamed and signed-out %s contexts', async page => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(item))
+  for (const me of [null, { id: 'owner', display_name: null }]) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['me'], me)
+    const element = page === 'detail' ? createElement(ItemPage) : page === 'edit' ? createElement(ItemEditorPage, { editing: true }) : createElement(ShownIn, { item })
+    const children = createElement(MemoryRouter, { initialEntries: [`/caches/${cacheId}/items/${item.id}`] }, createElement(Routes, null, createElement(Route, { path: '/caches/:cacheId/items/:itemId', element })))
+    renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children })))
+    const queries = client.getQueryCache().getAll().filter(query => query.queryKey[0] !== 'me')
+    expect(queries.length).toBeGreaterThan(0)
+    for (const query of queries) expect(query.options).toMatchObject({ enabled: false })
+    const stops = queries.map(query => new QueryObserver(client, { ...query.options, queryKey: query.queryKey }).subscribe(() => {}))
+    await Promise.resolve()
+    expect(queries.every(query => query.state.fetchStatus === 'idle')).toBe(true)
+    expect(fetch).not.toHaveBeenCalled()
+    stops.forEach(stop => stop()); client.clear()
+  }
 })
 
 it('uses separate private global-delete and attachment-detach routes without choosing an owner', async () => {

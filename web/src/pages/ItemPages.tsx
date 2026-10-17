@@ -3,8 +3,8 @@ import { Link,Navigate,useLocation,useNavigate,useParams } from 'react-router'
 import { useMutation,useQuery,useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch,errorMessage } from '../lib/api'
-import type { CacheDetail } from '../lib/caches'
-import type { Item,LibraryItem } from '../lib/items'
+import { cacheDetailQuery } from '../lib/caches'
+import { libraryItemQuery,type Item,type LibraryItem } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { OnboardingPage } from './OnboardingPage'
 import { ItemPhoto,PhotoUpload } from './ItemPhoto'
@@ -50,8 +50,8 @@ function ItemAvailability({item}:{item:Item}) {
 export function ItemPage() {
   const {cacheId,itemId=''}=useParams(),{me}=useAuth(),location=useLocation()
   const [askOpen,setAskOpen]=useState(false)
-  const query=useQuery({queryKey:cacheId?['item',cacheId,itemId]:['library-item',me?.id,itemId],queryFn:()=>apiFetch<Item & Partial<Pick<LibraryItem,'caches'>>>(`${cacheId?`/api/caches/${cacheId}/items`:'/api/me/items'}/${itemId}`),enabled:!!me?.display_name})
-  const cache=useQuery({queryKey:['cache',cacheId],queryFn:()=>apiFetch<CacheDetail>(`/api/caches/${cacheId}`),enabled:!!cacheId && !!me?.display_name})
+  const query=useQuery<Item & Partial<Pick<LibraryItem,'caches'>>>({...(cacheId?{queryKey:['item',cacheId,itemId],queryFn:()=>apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`)}:libraryItemQuery(me?.id,itemId)),enabled:!!me?.display_name})
+  const cache=useQuery({...cacheDetailQuery(cacheId),enabled:!!cacheId && !!me?.display_name})
   useEffect(()=>{if(query.isSuccess && location.hash==='#sharing')document.getElementById('sharing')?.scrollIntoView()},[query.isSuccess,location.hash])
   const back=cacheId?`/caches/${cacheId}`:'/items',cacheName=cache.data?.name ?? 'Cache'
   if(!me) return <Navigate to="/login" replace />
@@ -80,8 +80,8 @@ export function ItemPage() {
 
 export function ItemEditorPage({editing=false}:{editing?:boolean}) {
   const {cacheId,itemId=''}=useParams(),{me}=useAuth(),navigate=useNavigate()
-  const cache=useQuery({queryKey:['cache',cacheId],queryFn:()=>apiFetch<CacheDetail>(`/api/caches/${cacheId}`),enabled:!!cacheId && !!me?.display_name})
-  const item=useQuery({queryKey:cacheId?['item',cacheId,itemId]:['library-item',me?.id,itemId],queryFn:()=>apiFetch<Item>(`${cacheId?`/api/caches/${cacheId}/items`:'/api/me/items'}/${itemId}`),enabled:editing && !!me?.display_name})
+  const cache=useQuery({...cacheDetailQuery(cacheId),enabled:!!cacheId && !!me?.display_name})
+  const item=useQuery<Item>({...(cacheId?{queryKey:['item',cacheId,itemId],queryFn:()=>apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`)}:libraryItemQuery(me?.id,itemId)),enabled:editing && !!me?.display_name})
   const back=cacheId?`/caches/${cacheId}`:'/items'
   if(!me) return <Navigate to="/login" replace />
   if(!me.display_name) return <OnboardingPage />
