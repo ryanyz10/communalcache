@@ -2,12 +2,13 @@ import { afterEach, it, expect, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { CachePage } from '../pages/CachePage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { HomePage } from '../pages/HomePage'
 import { apiFetch, ApiError, errorMessage } from './api'
+import { cacheDetailQuery, cacheItemsQuery } from './caches'
 
 const id='11111111-1111-4111-8111-111111111111'
 const cache={id,name:'Tools',owner_id:'owner',requires_approval:false,invite_token:id+'.'+'a'.repeat(43),members:[{user_id:'owner',display_name:'Neighbor'},{user_id:'member',display_name:'Member neighbor'}]}
@@ -117,6 +118,33 @@ it('posts voluntary leave without choosing another member and explains the owner
   await apiFetch(`/api/caches/${id}/leave`,{body:{}})
   expect(fetchMock).toHaveBeenCalledWith(`/api/caches/${id}/leave`,expect.objectContaining({method:'POST',credentials:'same-origin',body:'{}'}))
   expect(errorMessage(new ApiError(409,'owner_cannot_leave'))).toContain('owner cannot leave')
+})
+
+it('shares exact cache prefetch keys and paths without owning caller lifecycle policy',async()=>{
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>Response.json(cache))
+  expect(cacheDetailQuery(id).queryKey).toEqual(['cache',id])
+  expect(cacheItemsQuery(id).queryKey).toEqual(['items',id])
+  expect(cacheDetailQuery(undefined).queryKey).toEqual(['cache',undefined])
+  expect(Object.keys(cacheDetailQuery(id)).sort()).toEqual(['queryFn','queryKey'])
+  await cacheDetailQuery(id).queryFn(); await cacheItemsQuery(id).queryFn()
+  expect(fetch.mock.calls.map(call=>call[0])).toEqual([`/api/caches/${id}`,`/api/caches/${id}/items`])
+})
+
+it('keeps settings cache reads disabled for unnamed and signed-out callers',async()=>{
+  const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json(cache))
+  for(const me of [null,{id:'owner',display_name:null}]) {
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
+    client.setQueryData(['me'],me)
+    const children=createElement(MemoryRouter,{initialEntries:[`/caches/${id}/settings`]},createElement(Routes,null,createElement(Route,{path:'/caches/:cacheId/settings',element:createElement(CacheSettingsPage)})))
+    renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children})))
+    const query=client.getQueryCache().find({queryKey:['cache',id],exact:true})!
+    expect(query.options).toMatchObject({enabled:false,retry:false})
+    const stop=new QueryObserver(client,{...query.options,queryKey:query.queryKey}).subscribe(()=>{})
+    await Promise.resolve()
+    expect(query.state.fetchStatus).toBe('idle')
+    expect(fetch).not.toHaveBeenCalled()
+    stop();client.clear()
+  }
 })
 
 it('distinguishes invalid names and unavailable cache data in the UI',()=>{

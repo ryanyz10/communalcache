@@ -3,7 +3,7 @@ import { Link,Navigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch,errorMessage } from '../lib/api'
-import type { Item } from '../lib/items'
+import { libraryItemQuery,type Item } from '../lib/items'
 import { relativeWhen,stockAfterApproval,useRequests,type ItemRequest } from '../lib/requests'
 import { useHomeSummary } from '../lib/caches'
 import { useOwnContact } from '../lib/contacts'
@@ -19,7 +19,7 @@ import { SkeletonRows, Shimmer, LoadingStatus } from '../components/Skeleton'
 export { ApprovedContact } from './RequestContact'
 
 function OwnerStock({request,callerId}:{request:ItemRequest;callerId:string}) {
-  const query=useQuery({queryKey:['library-item',callerId,request.item_id],queryFn:()=>apiFetch<Item>(`/api/me/items/${request.item_id}`),enabled:request.owner_id===callerId && request.status==='pending' && request.quantity!==null})
+  const query=useQuery({...libraryItemQuery(callerId,request.item_id),enabled:request.owner_id===callerId && request.status==='pending' && request.quantity!==null})
   if(query.isPending)return <span className="cc-skeleton-inline"><LoadingStatus label="Checking stock…" /><Shimmer width={90} height={12} /></span>
   if(query.isError)return <span> · stock unavailable <button type="button" className="cc-stock-retry" onClick={()=>void query.refetch()}>Retry stock</button></span>
   if(query.data.owner_id!==callerId || typeof query.data.quantity!=='number' || request.quantity===null)return null

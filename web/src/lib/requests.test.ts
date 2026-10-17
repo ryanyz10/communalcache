@@ -2,9 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
-import { ItemRequests, RequestsPage } from '../pages/RequestsPage'
+import { ItemRequests, RequestCard, RequestsPage } from '../pages/RequestsPage'
 import { AskSheet } from '../pages/AskSheet'
 import { ApiError, apiFetch, errorMessage } from './api'
 import { invalidateRequestViews, type ItemRequest, type RequestsPageData } from './requests'
@@ -130,6 +130,25 @@ it('uses nested cookie-auth mutations without forged party IDs and invalidates e
   await invalidateRequestViews(client)
   expect(invalidate.mock.calls.map(call => call[0]?.queryKey)).toEqual([['item-requests'], ['requests'], ['item'], ['items'], ['library'], ['library-item'], ['home-summary'], ['caches'], ['cache'], ['request-detail'], ['request-contact']])
   client.clear()
+})
+
+it('reads owner stock only for pending incoming consumable requests with the private account key', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(item))
+  for (const [callerId, row, readsStock] of [
+    ['owner', request, true], ['member', request, false],
+    ['owner', { ...request, quantity: null }, false],
+    ['owner', { ...request, status: 'approved' as const }, false],
+    ['owner', { ...request, status: 'rejected' as const }, false],
+  ] as const) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(MemoryRouter, null, createElement(RequestCard, { request: row, callerId }))))
+    const queries = client.getQueryCache().getAll().filter(query => query.queryKey[0] === 'library-item')
+    expect(queries.map(query => query.queryKey)).toEqual(readsStock ? [['library-item', 'owner', item.id]] : [])
+    const stops = queries.map(query => new QueryObserver(client, { ...query.options, queryKey: query.queryKey }).subscribe(() => {}))
+    if (readsStock) await vi.waitFor(() => expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/me/items/item', expect.objectContaining({ method: 'GET', credentials: 'same-origin' })))
+    else expect(fetch).not.toHaveBeenCalled()
+    stops.forEach(stop => stop()); client.clear(); fetch.mockClear()
+  }
 })
 
 it('explains request quantity, stock races, already-decided conflicts and required rejection reasons', () => {

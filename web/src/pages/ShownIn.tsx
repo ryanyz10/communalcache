@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { CacheSummary } from '../lib/caches'
-import type { Item, LibraryItem } from '../lib/items'
+import { libraryItemQuery, type Item, type LibraryItem } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { SkeletonRows } from '../components/Skeleton'
 
@@ -12,7 +12,7 @@ export function ShownIn({ item }: { item: Item }) {
   const { me } = useAuth()
   const client = useQueryClient(), navigate = useNavigate(), dialog = useRef<HTMLDialogElement>(null)
   const [target, setTarget] = useState<CacheSummary | null>(null)
-  const detail = useQuery({ queryKey: ['library-item',me?.id,item.id], queryFn: () => apiFetch<LibraryItem>(`/api/me/items/${item.id}`), enabled: !!me?.display_name })
+  const detail = useQuery({ ...libraryItemQuery(me?.id,item.id), enabled: !!me?.display_name })
   const caches = useQuery({ queryKey: ['caches'], queryFn: () => apiFetch<CacheSummary[]>('/api/caches'), enabled: !!me?.display_name })
   const change = useMutation({
     mutationFn: ({ cache, checked }: { cache: CacheSummary; checked: boolean }) => apiFetch<void>(`/api/me/items/${item.id}/attachments/${cache.id}`, { method: checked ? 'PUT' : 'DELETE' }),

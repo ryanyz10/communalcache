@@ -2,13 +2,13 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { createElement, createRef, type ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { LibraryPage } from '../pages/LibraryPage'
 import { AddItemSheet } from '../pages/AddItemSheet'
 import { ItemEditorPage, ItemPage } from '../pages/ItemPages'
 import { ApiError } from './api'
-import { attachSelected, sharingHint, type LibraryItem } from './items'
+import { attachSelected, libraryItemQuery, sharingHint, type LibraryItem } from './items'
 import { uploadPhoto } from './photos'
 import { invalidateRequestViews } from './requests'
 
@@ -51,6 +51,26 @@ it('separates empty, loading and error states, and does not display another acco
   const other = render(createElement(LibraryPage),{caller:'other'})
   expect(other).not.toContain('Sugar')
   expect(other).not.toContain('Bring a jar')
+})
+
+it('does not reuse another account or cache-context detail through denial, refetch and account switch', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(['item', cacheId, item.id], { ...item, title: 'Cache-only data' })
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(item))
+  const observer = new QueryObserver(client, { ...libraryItemQuery('owner', item.id), enabled: false })
+  expect((await observer.refetch()).data).toEqual(item)
+  observer.setOptions({ ...libraryItemQuery('other', item.id), enabled: false })
+  expect(observer.getCurrentResult().data).toBeUndefined()
+  fetch.mockResolvedValue(Response.json({ error: 'not_found' }, { status: 404 }))
+  const denied = await observer.refetch()
+  expect(denied.data).toBeUndefined()
+  expect(denied.error).toMatchObject({ status: 404 })
+  expect(client.getQueryData(['library-item', 'owner', item.id])).toEqual(item)
+  fetch.mockResolvedValue(Response.json({ ...item, owner_id: 'other', title: 'Other account item' }))
+  expect((await observer.refetch()).data?.title).toBe('Other account item')
+  expect(fetch.mock.calls.map(call => call[0])).toEqual(Array(3).fill(`/api/me/items/${item.id}`))
+  expect(client.getQueryData(['item', cacheId, item.id])).toMatchObject({ title: 'Cache-only data' })
+  observer.destroy(); client.clear()
 })
 
 it('offers existing/new sources in one labeled native sheet, with attached items checked and disabled and other sharing hints', () => {
