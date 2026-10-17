@@ -641,6 +641,89 @@
   font-size: 14px;
 }
 
+.cc-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font: 400 14px/1.5 var(--font-body);
+}
+
+.cc-legal-links a, .cc-legal-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--cc-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cc-landing-footer > .cc-legal-links {
+  flex-basis: 100%;
+}
+
+.cc-signin .cc-legal-links {
+  justify-content: center;
+  margin: 16px 24px 24px;
+}
+
+.cc-legal .cc-legal-content {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px 24px 0;
+  box-sizing: border-box;
+  font: 400 16px/1.7 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.cc-legal h1 {
+  margin: 24px 0 8px;
+  font: 400 clamp(40px,6vw,60px)/1.1 var(--font-heading);
+}
+
+.cc-legal .cc-legal-date {
+  margin: 0 0 24px;
+  color: var(--cc-sub);
+  font-size: 14px;
+}
+
+.cc-legal .cc-legal-intro {
+  font-size: 19px;
+}
+
+.cc-legal section {
+  margin-top: 32px;
+}
+
+.cc-legal h2 {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.cc-legal p, .cc-legal ul {
+  margin: 14px 0 0;
+}
+
+.cc-legal ul {
+  padding-left: 24px;
+  list-style: disc;
+}
+
+.cc-legal li + li {
+  margin-top: 10px;
+}
+
+.cc-legal article a {
+  color: var(--cc-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cc-legal .cc-landing-footer {
+  max-width: 760px;
+  padding-inline: 24px;
+}
+
 @media (hover:hover) {
   .cc-landing-primary:hover {
     background: #b2622d;
