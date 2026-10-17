@@ -1,5 +1,6 @@
 // Stable public database API; domain modules keep each guarded batch together.
 export { consumeWriteLimit } from './limits'
+export { featureEnabled } from './flags'
 export { getProfile, updateProfile, setDisplayName, type Profile } from './profiles'
 export { profilePhotoKey, finishProfilePhoto, removeProfilePhoto, finishItemPhoto } from './photos'
 export { ownContact, saveContact, removeContact, requestContact } from './contacts'

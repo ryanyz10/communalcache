@@ -797,6 +797,18 @@ Define/test suspension's server-side effects before enabling it; merely hiding a
 user in the admin UI is not enforcement. Access policy/JWT settings and the exact
 app user-ID allowlist need owner setup and explicit external approval.
 
+Owner feature switches live in D1 `feature_flags`, initially `google_sign_in`.
+The admin Switches section lists current values and PATCHes a boolean through the
+same Access/app-ID/Origin gates, with current-session SQL guarding the write and
+recording the admin ID/time. Effective Google sign-in requires both credentials
+and the enabled row; missing rows fail closed. Fresh `/api/config`, Google start
+and Google callback checks enforce it server-side without a redeploy. Account
+linking remains unexposed. The migration seeds enabled to preserve existing
+behavior; the owner must turn Google off after approved rollout while consent
+approval is pending. Existing sessions and already-admitted handlers are not
+revoked; an already-open sign-in page may need config refetch, but cannot bypass
+the server check. No generic rollout engine, new audit stream or provider setup.
+
 **Supporter tips.** A configured **Support Communal Cache** link may open a hosted
 payment page, for example a Stripe Payment Link. Hide it while unconfigured. No
 webhooks, app payment/supporter records, entitlement updates or other storage;

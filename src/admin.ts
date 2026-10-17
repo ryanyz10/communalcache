@@ -1,7 +1,7 @@
 import { createAuth } from './auth'
 import { verifyAccessJwt } from './access'
 import { HttpError, json, readBody, requireOrigin } from './http'
-import { adminCachePlan, adminCaches, adminFailedOutbox, adminOverview, adminUserPlan, adminUsers, type AdminActor } from './db/admin'
+import { adminCachePlan, adminCaches, adminFailedOutbox, adminFlags, adminOverview, adminSetFlag, adminUserPlan, adminUsers, type AdminActor } from './db/admin'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -28,6 +28,19 @@ export async function serveAdmin(request: Request, env: Env) {
     headers.set('Cache-Control', 'no-store')
     headers.set('Referrer-Policy', 'no-referrer')
     return new Response(response.body, { status: response.status, headers })
+  }
+  if (path === '/api/admin/flags') {
+    if (method !== 'GET') throw new HttpError(405, 'method_not_allowed')
+    return json({ flags: await adminFlags(env.DB, actor) })
+  }
+  const flagRoute = path.match(/^\/api\/admin\/flags\/([^/]+)$/)
+  if (flagRoute) {
+    if (flagRoute[1] !== 'google_sign_in') throw new HttpError(404, 'not_found')
+    if (method !== 'PATCH') throw new HttpError(405, 'method_not_allowed')
+    const body = await readBody(request)
+    if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'invalid_enabled')
+    await adminSetFlag(env.DB, actor, flagRoute[1], body.enabled)
+    return json({ key: flagRoute[1], enabled: body.enabled })
   }
   const planRoute = path.match(/^\/api\/admin\/(caches|users)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/plan$/i)
   if (planRoute) {

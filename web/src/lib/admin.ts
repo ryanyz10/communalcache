@@ -1,6 +1,7 @@
 import { apiFetch } from './api'
 
 export type AdminPlan = { plan: 'free' | 'plus' }
+export type AdminFlag = { key: 'google_sign_in'; enabled: boolean; updated_at: number }
 export type AdminOverview = {
   users: number; caches: number; items: number; pending_requests: number
   outbox_pending: number; outbox_failed: number; outbox_oldest_age_ms: number | null
@@ -21,6 +22,10 @@ export type AdminOutbox = { id: string; kind: string; created_at: number; failed
 
 export function adminListPath(kind: 'caches' | 'users' | 'failed-outbox', after: string | null) {
   return `/api/admin/${kind}` + (after ? `?after=${encodeURIComponent(after)}` : '')
+}
+
+export function setAdminFlag(key: AdminFlag['key'], enabled: boolean) {
+  return apiFetch(`/api/admin/flags/${key}`, { method: 'PATCH', body: { enabled } })
 }
 
 export function setAdminPlan(kind: 'caches' | 'users', id: string, plan: string) {
