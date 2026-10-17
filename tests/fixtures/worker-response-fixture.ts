@@ -1,5 +1,6 @@
 // Parent 66862db: exact headers and SHA-256 of each raw JSON/text/binary body.
 // Full response records remain in the parent parity receipt; no response normalization.
+// Google sign-in adds only google_sign_in:false to the unconfigured /api/config body.
 const encodedCells = [
   'AAABAQICAgICAwMCAgMCAgICAgMCAgIEBQYHCAgCCAgCCAgCAggCAggCCAICCAgCCAICCAIIAgIIAggIAggCCAIICAIIAggCCAIIAgIIAggCCAIIAggICAIIAggCCAkICggLCAwICA0IAwMDAggCCAUGBw==',
   'AAABAQ4PEBESExMUAwMVFgMXGBMZAwMaBQYHCAgbCAgcCAgdHQgcHAgcCBwcCAgcCBwcCBwIHBwIHAgIHAgcCBwICBwIHAgcCBwIHBwIHAgcCBwIHAgICBwIHAgcCAkICggLCAwICA0IAwMDHAgeCAUGBw==',
@@ -27,7 +28,7 @@ export const workerResponseFixture: { headers: unknown[]; templates: [number, nu
   ],
   templates: [
     [200,0,'a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288'],
-    [200,0,'1df06f4600639cbfec28dc38105d07bfabfbe8d382d9ba1d1d5a77462845d305'],
+    [200,0,'5e5d2fd39cb72ae699d28a8ddec158c3fa126e6e8bd5009d8ac52aa142808d55'],
     [401,0,'782eeaa7f1915f6783146f8180751785584f0f24bd4e503165c7fc4a597da600'],
     [404,0,'d2dfdc9511fbeaa0701d1f8730f4989313b062ca1b61a2bd8bed8f4f5d654b5d'],
     [200,0,'74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b'],

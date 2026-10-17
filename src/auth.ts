@@ -12,6 +12,17 @@ export type AuthEnv = {
   BETTER_AUTH_SECRET: string
   RESEND_API_KEY: string
   EMAIL_FROM: string
+  GOOGLE_CLIENT_ID?: string
+  GOOGLE_CLIENT_SECRET?: string
+}
+
+export function googleConfigured(env: Pick<AuthEnv, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>) {
+  return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
+}
+
+// 1.7.7 merges hook data before every account write; omission would retain tokens.
+async function discardOAuthTokens() {
+  return { data: { accessToken: null, refreshToken: null, idToken: null, accessTokenExpiresAt: null, refreshTokenExpiresAt: null } }
 }
 
 export type DeliveryResult = { status: 'not_called' | 'sent' | 'failed' }
@@ -30,7 +41,30 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
     secret: env.BETTER_AUTH_SECRET,
     database: env.DB,
     trustedOrigins: [env.APP_BASE_URL],
+    // Provider exceptions can contain credentials; never log their raw payloads.
+    logger: { disabled: true },
+    socialProviders: googleConfigured(env) ? {
+      google: {
+        clientId: env.GOOGLE_CLIENT_ID!,
+        clientSecret: env.GOOGLE_CLIENT_SECRET!,
+        mapProfileToUser: () => ({ name: '', image: undefined }),
+      },
+    } : {},
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ['google'],
+        requireLocalEmailVerified: true,
+        allowDifferentEmails: false,
+        updateUserInfoOnLink: false,
+      },
+      storeStateStrategy: 'database',
+      skipStateCookieCheck: false,
+      storeAccountCookie: false,
+    },
+    databaseHooks: { account: { create: { before: discardOAuthTokens }, update: { before: discardOAuthTokens } } },
     onAPIError: {
+      errorURL: env.APP_BASE_URL + '/login',
       onError(error) {
         // ponytail: 1.7.7 restores a wrong OTP after consuming it; a newer resend
         // wins our partial unique index. PR #10443 will classify this as INVALID_OTP upstream.
@@ -44,6 +78,12 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
     },
     emailAndPassword: { enabled: false },
     user: {
+      validateUserInfo({ user, source }) {
+        // trustedProviders alone bypasses the provider verification check in 1.7.7.
+        if (source.method === 'oauth' && (source.oauth?.providerId !== 'google' || user.emailVerified !== true || source.oauth.profile?.email_verified !== true)) {
+          return { error: 'email_not_verified' }
+        }
+      },
       changeEmail: { enabled: false },
       deleteUser: { enabled: false },
       additionalFields: {
