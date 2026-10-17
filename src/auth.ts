@@ -4,6 +4,7 @@ import { magicLink } from 'better-auth/plugins/magic-link'
 import { magicLandingUrl } from './magic-links'
 import { escapeHtml } from './notifications'
 import { APIError } from 'better-auth/api'
+import { featureEnabled } from './db/flags'
 
 export type AuthEnv = {
   DB: D1Database
@@ -18,6 +19,10 @@ export type AuthEnv = {
 
 export function googleConfigured(env: Pick<AuthEnv, 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>) {
   return !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
+}
+
+export async function googleSignInEnabled(env: Pick<AuthEnv, 'DB' | 'GOOGLE_CLIENT_ID' | 'GOOGLE_CLIENT_SECRET'>) {
+  return googleConfigured(env) && await featureEnabled(env.DB, 'google_sign_in')
 }
 
 // 1.7.7 merges hook data before every account write; omission would retain tokens.

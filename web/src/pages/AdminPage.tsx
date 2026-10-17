@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch } from '../lib/api'
-import { adminListPath, setAdminPlan, type AdminCache, type AdminOutbox, type AdminOverview, type AdminPageRows, type AdminPlan, type AdminUser } from '../lib/admin'
+import { adminListPath, setAdminFlag, setAdminPlan, type AdminCache, type AdminFlag, type AdminOutbox, type AdminOverview, type AdminPageRows, type AdminPlan, type AdminUser } from '../lib/admin'
 
 function PlanControl({ kind, id, plan, plans, onSaved }: { kind: 'caches' | 'users'; id: string; plan: string; plans: AdminPlan[]; onSaved: () => Promise<void> }) {
   const [selected, setSelected] = useState(plan)
@@ -28,6 +28,26 @@ function PlanControl({ kind, id, plan, plans, onSaved }: { kind: 'caches' | 'use
   </form>
 }
 
+export function FlagControl({ flag, onSaved }: { flag: AdminFlag; onSaved: () => Promise<void> }) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  async function change() {
+    setPending(true)
+    setError('')
+    try {
+      await setAdminFlag(flag.key, !flag.enabled)
+      await onSaved()
+    } catch { setError('Could not change switch. Refresh and try again.') }
+    finally { setPending(false) }
+  }
+  return <div className="cc-admin-plan">
+    <label htmlFor={`flag-${flag.key}`}>Google sign-in</label>
+    <input id={`flag-${flag.key}`} type="checkbox" role="switch" aria-label="Google sign-in" aria-checked={flag.enabled} checked={flag.enabled} disabled={pending} onChange={() => void change()} className="cc-switch" />
+    {pending && <span role="status">Saving…</span>}
+    {error && <span role="alert">{error}</span>}
+  </div>
+}
+
 function Pager({ label, after, next, pending, change }: { label: string; after: string | null; next?: string | null; pending: boolean; change: (cursor: string | null) => void }) {
   return <div className="cc-admin-pager">
     <button className="cc-outline" disabled={!after || pending} onClick={() => change(null)}>First {label} page</button>
@@ -50,6 +70,7 @@ export function AdminPage() {
   const caches = useQuery({ queryKey: [...prefix, 'caches', cacheAfter], queryFn: () => apiFetch<AdminPageRows<AdminCache>>(adminListPath('caches', cacheAfter)), enabled, retry: false })
   const users = useQuery({ queryKey: [...prefix, 'users', userAfter], queryFn: () => apiFetch<AdminPageRows<AdminUser>>(adminListPath('users', userAfter)), enabled, retry: false })
   const outbox = useQuery({ queryKey: [...prefix, 'failed-outbox', outboxAfter], queryFn: () => apiFetch<AdminPageRows<AdminOutbox>>(adminListPath('failed-outbox', outboxAfter)), enabled, retry: false })
+  const flags = useQuery({ queryKey: [...prefix, 'flags'], queryFn: () => apiFetch<{ flags: AdminFlag[] }>('/api/admin/flags'), enabled, retry: false })
   async function refresh() { await client.invalidateQueries({ queryKey: prefix }) }
   if (!me || overview.isError) return <main className="cc-admin-page"><p role="alert">This page is not available.</p><Link to="/">Back to Home</Link></main>
   if (!overview.data) return <main className="cc-admin-page" aria-busy="true"><p role="status">Loading…</p></main>
@@ -63,6 +84,17 @@ export function AdminPage() {
     </section>
     <p className="cc-admin-backlog">Outbox: <b>{totals.outbox_pending}</b> pending · <b>{totals.outbox_failed}</b> failed · oldest pending age: <b>{totals.outbox_oldest_age_ms === null ? 'None' : `${Math.floor(totals.outbox_oldest_age_ms / 60_000)} min`}</b></p>
     <p className="cc-admin-backlog">Photo cleanup: <b>{totals.cleanup_pending}</b> pending · oldest pending age: <b>{totals.cleanup_oldest_age_ms === null ? 'None' : `${Math.floor(totals.cleanup_oldest_age_ms / 60_000)} min`}</b></p>
+    <section aria-labelledby="admin-switches-heading">
+      <h2 id="admin-switches-heading">Switches</h2>
+      <p>Switches take effect on the server without a redeploy. Google still requires configured credentials.</p>
+      {flags.isPending && <p role="status">Loading switches…</p>}
+      {flags.isError && <p role="alert">Could not load switches. Use Refresh to retry.</p>}
+      {flags.data?.flags.map(flag => <FlagControl key={flag.key} flag={flag} onSaved={async () => {
+        await client.invalidateQueries({ queryKey: [...prefix, 'flags'] }, { throwOnError: true })
+        await client.invalidateQueries({ queryKey: ['config'] })
+      }} />)}
+      {flags.data && !flags.data.flags.length && <p>No switches configured.</p>}
+    </section>
     <section aria-labelledby="admin-caches-heading">
       <h2 id="admin-caches-heading">Caches</h2>
       {caches.isPending && <p role="status">Loading caches…</p>}

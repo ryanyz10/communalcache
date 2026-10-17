@@ -2,7 +2,7 @@ import { beforeAll, expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
 import worker from '../src/index'
 import { createCache, createItem, createRequest, joinCache } from '../src/db'
-import { adminCachePlan, adminOverview, adminUserPlan } from '../src/db/admin'
+import { adminCachePlan, adminFlags, adminOverview, adminSetFlag, adminUserPlan } from '../src/db/admin'
 import { appRequest, base, login } from './helpers'
 
 const issuer = 'https://fixture-team.cloudflareaccess.com', audience = 'a'.repeat(64), kid = 'fixture-access-key'
@@ -178,6 +178,59 @@ it('guards the plan write and operational read against a session revoked after a
   await expect(adminCachePlan(env.DB, f.actor, cache.id, 'plus')).rejects.toThrow('not_found')
   await expect(adminOverview(env.DB, f.actor)).rejects.toThrow('not_found')
   expect(await env.DB.prepare('SELECT plan FROM caches WHERE id=?').bind(cache.id).first('plan')).toBe('free')
+})
+
+it('protects feature-switch GET/PATCH with Access, the app allowlist and alternate-host checks', async () => {
+  const f = await fixture()
+  const original = await env.DB.prepare('SELECT * FROM feature_flags').first()
+  for (const host of [base, 'https://unprotected.workers.dev']) for (const path of ['/api/admin/flags', '/api/admin/flags/google_sign_in']) {
+    const options = path.endsWith('google_sign_in') ? { method: 'PATCH', body: { enabled: false }, host } : { host }
+    await hidden(await f.call(path, { ...options, token: null }))
+    await hidden(await f.call(path, { ...options, cookie: null }))
+    await hidden(await f.call(path, options, { ...f.bindings, ADMIN_USER_IDS: crypto.randomUUID() }))
+    await hidden(await worker.fetch(appRequest(path, { ...options, cookie: f.admin.cookie }), env))
+  }
+  expect(await env.DB.prepare('SELECT * FROM feature_flags').first()).toEqual(original)
+  const allowed = await f.call('/api/admin/flags', { host: 'https://unprotected.workers.dev' })
+  expect(allowed.status).toBe(200)
+  expect(allowed.headers.get('Cache-Control')).toBe('no-store')
+  const result = await allowed.json() as { flags: { key: string; enabled: boolean; updated_at: number }[] }
+  expect(result.flags[0]).toMatchObject({ key: 'google_sign_in', enabled: true })
+  expect(Object.keys(result.flags[0]).sort()).toEqual(['enabled', 'key', 'updated_at'])
+  expect(JSON.stringify(result)).not.toMatch(/email|admin-private|updated_by/)
+})
+
+it('updates feature switches in one current-session-guarded write with actor metadata and strict Origin/body checks', async () => {
+  const f = await fixture(), path = '/api/admin/flags/google_sign_in'
+  const original = await env.DB.prepare('SELECT * FROM feature_flags').first()
+  for (const origin of [null, 'null', 'https://foreign.test']) {
+    const response = await f.call(path, { method: 'PATCH', origin, body: { enabled: false } })
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ error: 'invalid_origin' })
+  }
+  for (const enabled of [null, 0, 1, 'true', undefined]) {
+    const response = await f.call(path, { method: 'PATCH', body: { enabled } })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'invalid_enabled' })
+  }
+  await hidden(await f.call('/api/admin/flags/unknown', { method: 'PATCH', body: { enabled: false } }))
+  expect(await env.DB.prepare('SELECT * FROM feature_flags').first()).toEqual(original)
+  for (const enabled of [false, true]) {
+    const response = await f.call(path, { method: 'PATCH', body: { enabled, updated_by: 'forged-actor', updated_at: 1 } })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ key: 'google_sign_in', enabled })
+    expect(await env.DB.prepare('SELECT enabled,updated_by FROM feature_flags').first()).toEqual({ enabled: enabled ? 1 : 0, updated_by: f.admin.id })
+    const listed = await (await f.call('/api/admin/flags')).json() as { flags: { enabled: boolean; updated_at: number }[] }
+    expect(listed.flags[0].enabled).toBe(enabled)
+    expect(Number.isInteger(listed.flags[0].updated_at)).toBe(true)
+    expect(listed.flags[0].updated_at).toBeGreaterThan(1_000_000_000_000)
+  }
+  expect((await f.call(path)).status).toBe(405)
+  expect((await f.call('/api/admin/flags', { method: 'POST', body: {} })).status).toBe(405)
+  await env.DB.prepare('DELETE FROM session WHERE token=?').bind(f.admin.token).run()
+  await expect(adminSetFlag(env.DB, f.actor, 'google_sign_in', false)).rejects.toThrow('not_found')
+  expect(await adminFlags(env.DB, f.actor)).toEqual([])
+  expect(await env.DB.prepare('SELECT enabled FROM feature_flags').first('enabled')).toBe(1)
 })
 
 it('paginates all three lists without overlap, validates cursors and keeps unknown/method/suspend routes closed', async () => {
