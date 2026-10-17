@@ -135,6 +135,7 @@ function fixture(flow: Flow) {
     './JoinRequests': { JoinRequests: () => null },
     '../components/WideBreadcrumbs': { WideBreadcrumbs: ({ children }: { children: ReactNode }) => createElement('nav', null, children) },
     '../components/Avatar': { Avatar: () => null },
+    '../components/Toast': { Toast: () => null, useToast: () => ({ toast: null, showToast: vi.fn(), dismissToast: () => trace.push(['dismiss-toast']) }) },
     '../components/skeletons/CacheSkeleton': { CacheSettingsSkeleton: () => null },
   }
   const module = { exports: {} as { CacheSettingsPage: () => ReactElement } }
@@ -228,7 +229,7 @@ for (const flow of ['rotate', 'remove', 'leave'] as const) {
     const label = flow === 'rotate' ? 'rotate-heading' : flow === 'remove' ? `remove-${memberId}` : 'leave-cache-heading'
     const expected: unknown[][] = [['close', label]]
     if (flow === 'rotate') {
-      expected.push(['state', ''], ['state', 'Invite rotated. The old link no longer works.'], ['invalidate', ['cache', cacheId]])
+      expected.push(['dismiss-toast'], ['state', 'Invite rotated. The old link no longer works.'], ['invalidate', ['cache', cacheId]])
       expect(page.render()).toContain('Invite rotated. The old link no longer works.')
     } else {
       if (flow === 'leave') expected.push(['remove', ['cache', cacheId]], ['remove', ['join-requests', cacheId]])
