@@ -36,7 +36,7 @@ export async function sweepPhotoCleanup(env: Env) {
     } catch {
       // A failed completion keeps its lease for retry; do not spend a second D1 call.
       if (!finishing) await finishCleanup(env.DB, id, token, false).catch(() => {})
-      console.error(JSON.stringify({ event: 'photo_cleanup_failed', cleanup_id: id, oldest_pending_age_ms: Math.max(0, Date.now() - row.created_at) }))
+      console.error({ event: 'photo_cleanup_failed', cleanup_id: id, oldest_pending_age_ms: Math.max(0, Date.now() - row.created_at) })
     }
   }
   await advanceCleanupCursor(env.DB, cursor, page.length === cleanupPageSize ? page.at(-1)!.id : null)

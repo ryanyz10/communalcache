@@ -108,7 +108,7 @@ export async function deliverNotification(env: Env, id: string): Promise<'ack' |
   catch {
     const terminal = row.attempts >= 6
     const result = await recordOutboxFailure(env.DB, id, token, Date.now(), terminal)
-    if (result.meta.changes > 0) console.warn(JSON.stringify({ event: 'notification_delivery_failed', outbox_id: id, attempts: row.attempts, terminal }))
+    if (result.meta.changes > 0) console.warn({ event: 'notification_delivery_failed', outbox_id: id, attempts: row.attempts, terminal })
     return terminal && result.meta.changes > 0 ? 'ack' : 'retry'
   }
   const result = await markOutboxSent(env.DB, id, token, Date.now())
@@ -132,7 +132,7 @@ export async function consumeNotifications(batch: MessageBatch<unknown>, env: En
       if (result === 'ack') message.ack()
       else message.retry({ delaySeconds: 60 })
     } catch {
-      console.error('Notification processing failed; durable outbox retained')
+      console.error({ event: 'notification_processing_failed' })
       message.retry({ delaySeconds: 60 })
     }
   }
