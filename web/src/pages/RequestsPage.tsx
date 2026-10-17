@@ -38,8 +38,8 @@ export function RequestsPage() {
           callerId={me!.id}
           compactAnswered={heading === 'Answered for your things'}
         />)}
+        {!groupRequests.length && <li className="cc-list-empty">{emptyMessage}{mayBeIncomplete ? ' This list may be incomplete.' : ''}</li>}
       </ul>
-      {!groupRequests.length && <p className="cc-form-hint">{emptyMessage}{mayBeIncomplete ? ' This list may be incomplete.' : ''}</p>}
     </section>
   }
 

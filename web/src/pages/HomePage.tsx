@@ -103,8 +103,8 @@ export function HomePage() {
         <p role="alert">{errorMessage(cachesQuery.error)} Previously loaded caches may be out of date.</p>
         <button type="button" onClick={() => void cachesQuery.refetch()}>Try caches again</button>
       </div>}
-      {!!cachesQuery.data?.length && <ul className="cc-home-boxes">
-        {cachesQuery.data.map(cache => <li key={cache.id}>
+      {(!!cachesQuery.data?.length || cachesQuery.isSuccess) && <ul className="cc-home-boxes">
+        {cachesQuery.data?.map(cache => <li key={cache.id}>
           <MemberCats members={cache.member_preview ?? []} total={cache.active_member_count} />
           <Link to={`/caches/${cache.id}`} className="cc-labelled-cache" onPointerDown={() => {
             void client.prefetchQuery(cacheDetailQuery(cache.id))
@@ -116,14 +116,14 @@ export function HomePage() {
             {!!cache.pending_answer_count && <span className="cc-box-asks"><Stamp tone="warn">{cache.pending_answer_count} {cache.pending_answer_count === 1 ? 'ask' : 'asks'}</Stamp></span>}
           </Link>
         </li>)}
-      </ul>}
-      {cachesQuery.isSuccess && !cachesQuery.data.length && <div className="cc-home-empty">
+      {cachesQuery.isSuccess && !cachesQuery.data.length && <li className="cc-list-empty cc-home-empty">
         <p>No caches yet. Create one to start sharing.</p>
         <div className="cc-inline-actions">
           <button type="button" className="cc-profile-primary" onClick={openCreate}>New cache</button>
           <button type="button" className="cc-profile-secondary" onClick={openJoin}>Join with an invite</button>
         </div>
-      </div>}
+      </li>}
+      </ul>}
     </section>
     <div className="cc-home-slips">
       <section aria-labelledby="your-things-heading">
@@ -133,7 +133,7 @@ export function HomePage() {
           <p role="alert">{errorMessage(libraryQuery.error)} Previously loaded items may be out of date.</p>
           <button type="button" onClick={() => void libraryQuery.refetch()}>Try your items again</button>
         </div>}
-        {!!previewItems.length && <ul className="cc-packing-slip cc-home-things">
+        {(!!previewItems.length || libraryQuery.isSuccess) && <ul className="cc-packing-slip cc-home-things">
           {previewItems.map(item => <li key={item.id}>
             <Link to={`/items/${item.id}`}>
               <ThingTile item={item} library tone="deep" />
@@ -142,13 +142,13 @@ export function HomePage() {
               <ThingStatus item={item} pending={item.is_consumable ? 0 : item.pending_count} compact />
             </Link>
           </li>)}
+          {libraryQuery.isSuccess && !previewItems.length && <li className="cc-list-empty"><p>No things yet.</p><div><Link to="/items/new">+ New item</Link></div></li>}
         </ul>}
-        {libraryQuery.isSuccess && !previewItems.length && <div className="cc-packing-slip cc-empty-slip"><p>No things yet.</p><Link to="/items/new">+ New item</Link></div>}
       </section>
       <section aria-labelledby="your-asks-heading">
         <div className="cc-slip-title"><h2 id="your-asks-heading">Your asks</h2></div>
         {summaryQuery.isPending && <SkeletonRows label="Loading your asks…" kind="requests" count={2} />}
-        {!!summary?.outgoing.length && <ul className="cc-packing-slip cc-home-asks">
+        {summary && <ul className="cc-packing-slip cc-home-asks">
           {summary.outgoing.map(ask => {
             let statusLabel = 'Approved'
             if (ask.status === 'pending') statusLabel = 'Waiting'
@@ -165,8 +165,8 @@ export function HomePage() {
               <Stamp tone={ask.status === 'approved' ? 'ok' : 'muted'}>{statusLabel}</Stamp>
             </li>
           })}
+          {!summary.outgoing.length && <li className="cc-list-empty"><p>No asks in your current caches.</p><div><Link to="/requests">See all asks</Link></div></li>}
         </ul>}
-        {summary && !summary.outgoing.length && <div className="cc-packing-slip cc-empty-slip"><p>No asks in your current caches.</p><Link to="/requests">See all asks</Link></div>}
       </section>
     </div>
     <dialog ref={actionsDialog} className="cc-cache-actions" aria-labelledby="cache-actions-heading">

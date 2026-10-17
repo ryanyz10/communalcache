@@ -82,7 +82,6 @@ export function PushControls({ userId }: { userId: string }) {
       <p role="alert" className="text-red-700">Could not load notification configuration.</p>
       <button type="button" disabled={configQuery.isFetching} onClick={() => void configQuery.refetch()} className="mt-2 underline">Try notification configuration again</button>
     </div>}
-    {configQuery.isSuccess && !configQuery.data.vapid_public_key && <p className="mt-3 text-slate-600">Push is not configured yet. Email notifications remain available.</p>}
     {pending && <p role="status" className="mt-3 text-sm">Updating notifications…</p>}
     {error && <p role="alert" className="mt-3 text-red-700">{error}</p>}
     {status && <p role="status" className="mt-3 text-emerald-700">{status}</p>}

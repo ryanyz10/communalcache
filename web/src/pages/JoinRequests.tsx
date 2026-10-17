@@ -26,12 +26,12 @@ export function JoinRequests({ cacheId }: { cacheId: string }) {
       <p role="alert" className="text-red-700">{errorMessage(joinRequestsQuery.error)} Previously loaded join requests may be out of date.</p>
       <button type="button" className="mt-2 text-sm underline" disabled={joinRequestsQuery.isFetching} onClick={() => void joinRequestsQuery.refetch()}>Try join requests again</button>
     </div>}
-    {joinRequestsQuery.isSuccess && joinRequestsQuery.data.length === 0 && <p className="mt-3 text-slate-600">No pending join requests.</p>}
     {decideJoin.isPending && <p role="status" className="mt-3">Saving join decision…</p>}
     {decideJoin.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(decideJoin.error)}</p>}
     {decideJoin.isSuccess && <p role="status" className="mt-3 text-emerald-700">Join request decided.</p>}
-    {!!joinRequestsQuery.data?.length && <ul className="cc-list lg:border-0">
-      {joinRequestsQuery.data.map(request => <li key={request.user_id} className="cc-row flex-wrap">
+    {(!!joinRequestsQuery.data?.length || joinRequestsQuery.isSuccess) && <ul className="cc-list lg:border-0">
+      {joinRequestsQuery.isSuccess && !joinRequestsQuery.data.length && <li className="cc-list-empty">No pending join requests.</li>}
+      {joinRequestsQuery.data?.map(request => <li key={request.user_id} className="cc-row flex-wrap">
         <Avatar userId={request.user_id} name={request.display_name ?? 'Neighbor'} photoVersion={request.profile_photo_version} coat={request.cat_coat} />
         <div className="min-w-0 flex-1">
           <p className="break-words font-semibold">{request.display_name ?? 'Neighbor'}</p>
