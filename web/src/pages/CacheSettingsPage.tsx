@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import type { CacheDetail, CacheInfo } from '../lib/caches'
+import { cacheDetailQuery, type CacheDetail, type CacheInfo } from '../lib/caches'
 import { invalidateRequestViews } from '../lib/requests'
 import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
@@ -90,7 +90,7 @@ export function CacheSettingsPage() {
   const dialog = useRef<HTMLDialogElement>(null)
   const [copyStatus, setCopyStatus] = useState('')
   const [rotationStatus, setRotationStatus] = useState('')
-  const query = useQuery({ queryKey: ['cache', cacheId], queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`), enabled: !!me?.display_name })
+  const query = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me?.display_name })
   const rotate = useMutation({
     mutationFn: () => apiFetch<CacheInfo>(`/api/caches/${cacheId}/invite/rotate`, { body: {} }),
     onSuccess: async () => {

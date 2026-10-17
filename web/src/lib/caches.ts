@@ -19,8 +19,8 @@ export type HomeSummary = {
   incoming: (AskPreview & { quantity: number | null })[]
   outgoing: (AskPreview & { status: 'pending' | 'approved' | 'rejected' })[]
 }
-// Shared by CachePage and the Home box prefetch so both warm the same cache entries.
-export const cacheDetailQuery = (cacheId: string) => ({ queryKey: ['cache', cacheId], queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`) })
+// Home prefetch and cache-context pages share the same cache entries.
+export const cacheDetailQuery = (cacheId: string | undefined) => ({ queryKey: ['cache', cacheId], queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`) })
 export const cacheItemsQuery = (cacheId: string) => ({ queryKey: ['items', cacheId], queryFn: () => apiFetch<(Item & { pending_count: number })[]>(`/api/caches/${cacheId}/items`) })
 export function useHomeSummary(enabled: boolean) {
   return useQuery({ queryKey: ['home-summary'], queryFn: () => apiFetch<HomeSummary>('/api/me/summary'), enabled })
