@@ -131,6 +131,16 @@ approval does not clear it. No current-holder/return table or new request status
   profile-photo finalization in the same post-R2 D1 batch. See the approved
   [quota policy](plan.md#plans-foundation-and-launch-limits) and
   [owner-only assignment runbook](deploy.md#manual-plan-assignment-owner-run).
+- `feature_flags`: owner-controlled D1 switches, currently key `google_sign_in`
+  only, with 0/1 `enabled`, integer Unix-ms `updated_at` and nullable admin app-ID
+  `updated_by`. Migration 0017 seeds enabled=1 with no actor to retain existing
+  behavior; a missing row reads disabled. Public effective config and Google
+  start/callback read D1 fresh and additionally require configured credentials.
+  Access-gated admin GET exposes only key/boolean/time; PATCH is one UPDATE with
+  the current D1 app session in its WHERE clause, stamping the server actor/time.
+  No email or raw payload is selected. Unknown keys cannot be created through
+  this API; updates do not UPSERT a missing row. Switches are not plan quotas,
+  copied authorization, a session revocation mechanism or per-isolate policy.
 - `user_photos`: one current immutable path and fresh operation token per user,
   FK to app user; no photo path is added to Better Auth's user output. Profile
   reads and nullable avatar-version enrichment require self or a currently shared
@@ -407,6 +417,14 @@ Migration **0016_photo_upload_limit** rebuilds only `write_limits` to extend its
 route CHECK with `photo_upload`, preserving all old counters and its user cascade.
 It also indexes cleanup creation time for oldest-age metadata. It changes no plan
 limits, auth challenges, photo pointer/finalization or durable cleanup contents.
+
+Migration **0017_feature_flags** adds the constrained feature-switch table and
+compatibility seed only. Its text primary key is explicitly NOT NULL because
+SQLite otherwise permits NULL text primary keys. Existing users, sessions,
+plans/counters and durable state are untouched. Apply the migration before the
+new Worker; an unavailable table fails Google entry closed rather than bypassing
+policy. The owner performs any desired production toggle in protected admin
+following approved rollout; this feature performs no remote assignment.
 
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Do not point it at legacy `internal/db/migrations/`.

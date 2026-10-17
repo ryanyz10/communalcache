@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import { env } from 'cloudflare:workers'
 import worker from '../src/index'
 import { authOptions } from '../src/auth'
-import { appRequest, base, login } from './helpers'
+import { appRequest, authRequest, base, login, mailMock, turnstileMock } from './helpers'
 
 const configured = { ...env, GOOGLE_CLIENT_ID: 'fixture-google.apps.googleusercontent.com', GOOGLE_CLIENT_SECRET: 'test-only-public-google-fixture' }
 const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
@@ -56,6 +56,71 @@ it('advertises Google only when both credentials exist, without exposing credent
       expect(denied.status).toBe(404)
     }
   }
+})
+
+it('reads the live D1 switch for effective config and rejects Google before Better Auth while off or missing', async () => {
+  const fetch = googleMock().fetch
+  for (const enabled of [false, true, false]) {
+    await env.DB.prepare("UPDATE feature_flags SET enabled=? WHERE key='google_sign_in'").bind(enabled ? 1 : 0).run()
+    for (const bindings of [configured, { ...configured, GOOGLE_CLIENT_SECRET: '' }]) {
+      const response = await worker.fetch(appRequest('/api/config'), bindings)
+      expect(await response.json()).toMatchObject({ google_sign_in: enabled && !!bindings.GOOGLE_CLIENT_SECRET })
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+    }
+    if (!enabled) for (const request of [
+      appRequest('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google' } }),
+      appRequest('/api/auth/callback/google?state=untrusted&code=untrusted'),
+    ]) {
+      const response = await worker.fetch(request, configured)
+      expect(response.status).toBe(404)
+      expect(await response.json()).toEqual({ error: 'not_found' })
+    }
+  }
+  await env.DB.prepare("DELETE FROM feature_flags WHERE key='google_sign_in'").run()
+  expect(await (await worker.fetch(appRequest('/api/config'), configured)).json()).toMatchObject({ google_sign_in: false })
+  expect((await worker.fetch(appRequest('/api/auth/sign-in/social', { method: 'POST', body: { provider: 'google' } }), configured)).status).toBe(404)
+  expect(fetch).not.toHaveBeenCalled()
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM verification').first('n')).toBe(0)
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM session').first('n')).toBe(0)
+})
+
+it('rechecks the switch at callback after an allowed Google start and reaches Better Auth only when enabled', async () => {
+  const mock = googleMock(), flow = await start()
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM verification').first('n')).toBe(1)
+  await env.DB.prepare("UPDATE feature_flags SET enabled=0 WHERE key='google_sign_in'").run()
+  const denied = await callback(flow)
+  expect(denied.status).toBe(404)
+  expect(await denied.json()).toEqual({ error: 'not_found' })
+  expect(denied.headers.get('Referrer-Policy')).toBe('no-referrer')
+  expect(mock.fetch).not.toHaveBeenCalled()
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM user').first('n')).toBe(0)
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM session').first('n')).toBe(0)
+  await env.DB.prepare("UPDATE feature_flags SET enabled=1 WHERE key='google_sign_in'").run()
+  expect((await callback(flow)).headers.get('Location')).toBe(base + '/')
+  expect(mock.exchanges).toHaveLength(1)
+  for (const enabled of [0, 1]) {
+    await env.DB.prepare("UPDATE feature_flags SET enabled=? WHERE key='google_sign_in'").bind(enabled).run()
+    expect((await worker.fetch(appRequest('/api/auth/link-social', { method: 'POST', body: { provider: 'google' } }), configured)).status).toBe(404)
+  }
+})
+
+it('keeps email-code and explicit magic-link sign-in available while Google is switched off', async () => {
+  await env.DB.prepare("UPDATE feature_flags SET enabled=0 WHERE key='google_sign_in'").run()
+  const codes = mailMock()
+  expect((await worker.fetch(authRequest('/email-otp/send-verification-otp', { email: 'code-fallback@example.test', type: 'sign-in' }), configured)).status).toBe(200)
+  expect((await worker.fetch(authRequest('/sign-in/email-otp', { email: 'code-fallback@example.test', otp: codes[0] }), configured)).status).toBe(200)
+  let landing = ''
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const verdict = turnstileMock(input, init)
+    if (verdict) return verdict
+    expect(String(input)).toBe('https://api.resend.com/emails')
+    landing = JSON.parse(init!.body as string).text.match(/https:\/\/[^\s]+/)[0]
+    return Response.json({ id: 'fixture-mail' })
+  })
+  expect((await worker.fetch(authRequest('/sign-in/magic-link', { email: 'link-fallback@example.test' }), configured)).status).toBe(200)
+  const token = new URLSearchParams(new URL(landing).hash.slice(1)).get('token')
+  expect((await worker.fetch(authRequest('/magic-link/verify', { token }), configured)).status).toBe(200)
+  expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM session').first('n')).toBe(2)
 })
 
 it('uses exact origins, trusted Google plus strict verified-email linking, D1 state and private Lax cookies', async () => {

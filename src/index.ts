@@ -1,4 +1,4 @@
-import { createAuth, googleConfigured, type DeliveryResult } from './auth'
+import { createAuth, googleSignInEnabled, type DeliveryResult } from './auth'
 import { magicCallbacks } from './magic-links'
 import {
   attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest,
@@ -56,7 +56,7 @@ async function dispatch(request: Request, env: Env) {
   if (path.startsWith('/api/auth/')) {
     if (!authMethods[path]) throw new HttpError(404, 'not_found')
     if (method !== authMethods[path]) throw new HttpError(405, 'method_not_allowed')
-    if ((path === '/api/auth/sign-in/social' || path === '/api/auth/callback/google') && !googleConfigured(env)) throw new HttpError(404, 'not_found')
+    if ((path === '/api/auth/sign-in/social' || path === '/api/auth/callback/google') && !await googleSignInEnabled(env)) throw new HttpError(404, 'not_found')
     if (method === 'POST') {
       const body = await readBody(request)
       if (path.endsWith('/send-verification-otp') && body.type !== 'sign-in') throw new HttpError(400, 'invalid_type')
@@ -116,7 +116,7 @@ async function dispatch(request: Request, env: Env) {
       better_auth_url: env.BETTER_AUTH_URL,
       vapid_public_key: env.VAPID_PUBLIC_KEY,
       turnstile_site_key: env.TURNSTILE_SITE_KEY,
-      google_sign_in: googleConfigured(env),
+      google_sign_in: await googleSignInEnabled(env),
     })
   }
 
