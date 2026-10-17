@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { BoxMark } from '../components/Box'
 import { LegalLinks } from '../components/LegalLinks'
 import { legalCopy as copy } from '../lib/legalCopy'
+import { siteTitle } from '../lib/siteName'
 
 type Section = { heading: string; paragraphs: readonly string[]; list?: readonly string[] }
 
@@ -10,7 +11,7 @@ export function LegalPage({ policy }: { policy: 'privacy' | 'terms' }) {
   const page = copy[policy]
   useEffect(() => {
     const previousTitle = document.title
-    document.title = `${page.title} — ${copy.brand}`
+    document.title = siteTitle(`${page.title} — ${copy.brand}`)
     window.scrollTo(0, 0)
     return () => { document.title = previousTitle }
   }, [page.title])
