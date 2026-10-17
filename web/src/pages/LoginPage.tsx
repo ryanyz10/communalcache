@@ -8,6 +8,7 @@ import { AuthScreen, AuthBrand, SignInBox } from '../components/AuthScreen'
 import { CodeInput } from '../components/CodeInput'
 import { landingCopy } from '../lib/landingCopy'
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
+import { LegalLinks } from '../components/LegalLinks'
 
 export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: string; inviteHint?: boolean }) {
   const { refresh } = useAuth()
@@ -61,6 +62,7 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
       {sent && <button type="button" disabled={pending} onClick={() => { setSent(null); setCode(''); setError(null); botCheck.current?.reset(); emailInput.current?.focus() }} className="cc-login-wrong-email">Wrong email? Change it</button>}
     </form>
     {!sent && !inviteToken && <p className="cc-signin-privacy">Your email stays private. Neighbors only see the name you choose.</p>}
+    <LegalLinks />
   </AuthScreen>
 }
 
