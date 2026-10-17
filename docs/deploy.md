@@ -59,6 +59,76 @@ canonical D1 behavior and populated retirement upgrade preservation, not remote
 class deletion. Smoke health/config, SPA deep links and JSON API
 errors. A dry-run validates bundle/bindings, not live deploy/data/provider success.
 
+## Security headers — verify in each environment
+
+The Worker applies one baseline at its final fetch boundary, including JSON,
+errors, admin denials and private photo streams. Workers static assets may bypass
+that boundary, so `web/public/_headers` supplies the same baseline without changing
+`assets.run_worker_first`. Vite copies it to `web/dist`; pinned Wrangler 4.145.0
+reads the file and its asset worker replaces the first matching header value.
+Local installed-runtime tests verify actual SVG/font/SW asset bytes and headers,
+not just that a file exists. Keep the two policies aligned; tests check this.
+
+| Header | Policy |
+| --- | --- |
+| X-Content-Type-Options | `nosniff` |
+| X-Frame-Options | `DENY` |
+| Content-Security-Policy | Enforced `frame-ancestors 'none'` only |
+| Content-Security-Policy-Report-Only | Intended resource policy below; not resource enforcement |
+| Referrer-Policy | `strict-origin-when-cross-origin`; retain stricter `no-referrer` on `/join/*`, `/auth/link`, Google callback and existing private admin HTML |
+| Permissions-Policy | Deny camera, microphone, geolocation, payment, USB, accelerometer, gyroscope, magnetometer and fullscreen; allow same-origin clipboard-write/web-share used by invite controls |
+| Strict-Transport-Security | `max-age=31536000` on configured non-local HTTPS app hosts; Worker also suppresses it on HTTP/local requests; no includeSubDomains/preload |
+
+Static HSTS is host-scoped to the committed production and staging HTTPS hosts;
+it is absent on localhost. Tests require that list to match configured origins.
+Update it deliberately if an approved environment host changes. Worker local
+HTTP/localhost/loopback responses remove any upstream HSTS value, even when local
+dev accidentally retains a public APP_BASE_URL. Baseline headers
+overwrite weaker upstream values and never replace Content-Type, Cache-Control,
+private/no-store photo behavior, body bytes or session cookies. Cloudflare edge
+policies can still alter the final wire response and must be verified after rollout.
+
+The **report-only** resource policy permits same-origin resources, Turnstile script/
+frame/connect at `https://challenges.cloudflare.com`, the app's inline styles,
+same-origin fonts/manifest/service worker and same-origin/data/blob images; it
+denies objects, base URLs and foreign form actions. Google uses a top-level
+redirect, not an embedded Google script/frame. Private R2 photos remain same-origin
+cookie-authorized URLs. No CSP reporting collector or new external data destination
+is configured. Do not collect invite/auth URLs or private payloads in a future
+reporting service without separately reviewed privacy controls.
+
+File photo inputs and canvas image processing do not use getUserMedia or require
+web camera permission. Push/Notification API calls remain explicit-gesture flows;
+no `push` or `notifications` Permissions-Policy directive is added. Same-origin
+clipboard/write and native sharing are intentionally retained. Header/unit/runtime
+checks do not certify native browser permission behavior.
+
+**Browser acceptance is pending.** The security-header PR's isolated local Wrangler
+HTTP smoke passed, but browser routing reached Pax rather than that local app and
+host-browser routing lacked approval. No Turnstile widget rendering, live provider
+flow or enforced full-resource CSP compatibility is claimed. Keep the resource
+policy report-only until the following owner check is recorded:
+
+1. **Verify headers + Turnstile widget on staging after deploy**, after separate
+   deployment/provider approval. In a real browser inspect Network responses for
+   landing, sign-in, a signed-in app page, hashed JS/CSS, font/favicon/SW, JSON API,
+   error/admin-404 and an authorized private photo. Confirm the table above, the
+   candidate report-only policy, no weaker duplicate headers and unchanged cache/
+   MIME/cookie behavior. Repeat on the approved production revision/environment.
+2. Confirm no-referrer on invite/magic-link landing and Google callback (including
+   failures); never capture token/cookie values. Verify one-year HSTS on staging/
+   production, and absence on local HTTP/localhost. No preload/subdomain policy is
+   implied for the shared workers.dev parent or other hosts.
+3. Let the real configured Turnstile script and iframe render; try the approved
+   sign-in/create-cache bot flows and error recovery. Verify inline-style layouts,
+   image selection/private photos, service-worker registration and installed-device
+   notifications, invite copy/share and Google redirect/return. Do not relax Origin,
+   siteverify or authorization checks to make this pass.
+4. Before enforcing the full resource policy, review the intended directives against
+   these real flows and any report-only browser diagnostics. Record only redacted
+   policy/directive details, not private URLs/auth/provider bodies. Add the resulting
+   regression proof and rerun parity/security/release gates for the changed revision.
+
 ## Pipeline
 
 Release pipeline behavior is unchanged by this retirement draft. Personal Cloudflare
