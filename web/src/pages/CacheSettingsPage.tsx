@@ -9,7 +9,7 @@ import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { Avatar } from '../components/Avatar'
-import { CacheSettingsSkeleton } from '../components/PageSkeletons'
+import { CacheSettingsSkeleton } from '../components/skeletons/CacheSkeleton'
 
 function OwnerSettings({ cache }: { cache: CacheDetail }) {
   const client = useQueryClient()

@@ -14,7 +14,7 @@ import { RequestDetailPage } from './pages/RequestDetailPage'
 import { AccountPage } from './pages/AccountPage'
 import { CacheSettingsPage } from './pages/CacheSettingsPage'
 import { AppHeader } from './components/AppHeader'
-import { RouteSkeleton } from './components/PageSkeletons'
+import { RouteSkeleton } from './components/skeletons/RouteSkeleton'
 import { LoadingStatus } from './components/Skeleton'
 import { hasSessionHint } from './lib/sessionHint'
 

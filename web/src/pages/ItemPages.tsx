@@ -15,7 +15,7 @@ import { Stamp } from '../components/Stamp'
 import { boxColor } from '../components/Box'
 import { ItemForm } from './ItemForm'
 import { ShownIn } from './ShownIn'
-import { ItemSkeleton, ItemEditorSkeleton } from '../components/PageSkeletons'
+import { ItemSkeleton, ItemEditorSkeleton } from '../components/skeletons/ItemSkeletons'
 
 function DeleteItem({item}:{item:Item}) {
   const dialog=useRef<HTMLDialogElement>(null),client=useQueryClient(),navigate=useNavigate()

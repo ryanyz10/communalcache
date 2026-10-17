@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createElement, type ReactElement } from 'react'
+import { createHash } from 'node:crypto'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Ready } from '../App'
 import { AuthProvider, useAuth } from '../auth/AuthProvider'
-import { HomeSkeleton, CacheSkeleton, LibrarySkeleton, ItemSkeleton, ItemEditorSkeleton, RequestsSkeleton, RequestDetailSkeleton, AccountSkeleton, CacheSettingsSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheLoadingChips } from '../components/PageSkeletons'
+import { HomeSkeleton, HomeBoxesSkeleton } from '../components/skeletons/HomeSkeleton'
+import { CacheSkeleton, CacheSettingsSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheLoadingChips, CacheSettingsIcon } from '../components/skeletons/CacheSkeleton'
+import { LibrarySkeleton } from '../components/skeletons/LibrarySkeleton'
+import { ItemSkeleton, ItemEditorSkeleton } from '../components/skeletons/ItemSkeletons'
+import { RequestsSkeleton, RequestDetailSkeleton } from '../components/skeletons/RequestSkeletons'
+import { AccountSkeleton } from '../components/skeletons/AccountSkeleton'
+import { RouteSkeleton } from '../components/skeletons/RouteSkeleton'
 import { InviteBox } from '../components/InviteBox'
 import { LoadingStatus, Shimmer, SkeletonRows } from '../components/Skeleton'
 import { hasSessionHint, setSessionHint } from './sessionHint'
@@ -43,6 +50,42 @@ for (const [name, element] of [
     expect(fetch).not.toHaveBeenCalled()
   })
 }
+
+it('retains the pre-split markup fingerprint for every exported skeleton', () => {
+  vi.spyOn(Date.prototype, 'getHours').mockReturnValue(14)
+  const retry = () => {}
+  const examples: [string, ReactElement][] = [
+    ['CacheSettingsIcon', createElement(CacheSettingsIcon)],
+    ['CacheLoadingChips', createElement(CacheLoadingChips, { slow: false })],
+    ['CacheLoadingChips', createElement(CacheLoadingChips, { slow: true })],
+    ['CacheContentsSkeleton', createElement(CacheContentsSkeleton)],
+    ['CacheErrorCard', createElement(CacheErrorCard, { message: 'Original read error', retry })],
+    ['CacheEmptyCard', createElement(CacheEmptyCard, { onAdd: retry })],
+    ['CacheSkeleton', createElement(CacheSkeleton, { cacheId: id })],
+    ['HomeBoxesSkeleton', createElement(HomeBoxesSkeleton)],
+    ['HomeSkeleton', createElement(HomeSkeleton)],
+    ['LibrarySkeleton', createElement(LibrarySkeleton)],
+    ['ItemSkeleton', createElement(ItemSkeleton)],
+    ['ItemEditorSkeleton', createElement(ItemEditorSkeleton)],
+    ['RequestsSkeleton', createElement(RequestsSkeleton)],
+    ['RequestDetailSkeleton', createElement(RequestDetailSkeleton)],
+    ['AccountSkeleton', createElement(AccountSkeleton)],
+    ['CacheSettingsSkeleton', createElement(CacheSettingsSkeleton, { cacheId: id })],
+    ['RouteSkeleton', createElement(RouteSkeleton, { pathname: `/caches/${id}` })],
+  ]
+  const hash = createHash('sha256')
+  for (const [name, element] of examples) hash.update(name + '\0' + render(element) + '\0')
+  expect(hash.digest('hex')).toBe('4b3e445bd51eded27f237ccc42a010b8e0c3f6cda84e8dad5b4550df98fb0ad8')
+})
+
+it.each([undefined, 0, 1, 30, 100])('preserves member rows and the missing-count fallback for %s', count => {
+  const summary = count === undefined ? undefined : {
+    id, name: 'Known cache', owner_id: 'owner', requires_approval: false,
+    active_member_count: count, attached_item_count: 0, pending_answer_count: 0, member_preview: [],
+  }
+  const html = render(createElement(CacheSkeleton, { cacheId: id, summary }))
+  expect(html.match(/class="cc-skeleton-row"/g)).toHaveLength(4 + (count ?? 4))
+})
 
 it('keeps the authorized Home summary real while only contents/member details shimmer', () => {
   const summary: CacheSummary = { id, name: 'Known cache', owner_id: 'owner', requires_approval: true, active_member_count: 6, attached_item_count: 24, pending_answer_count: 1, member_preview: [] }
