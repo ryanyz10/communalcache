@@ -8,6 +8,26 @@ export function json(value: unknown, status = 200) {
   return Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } })
 }
 
+export function securityHeaders(response: Response, appBaseUrl: string, path: string, requestUrl = appBaseUrl) {
+  const headers = new Headers(response.headers)
+  headers.set('X-Content-Type-Options', 'nosniff')
+  headers.set('X-Frame-Options', 'DENY')
+  headers.set('Content-Security-Policy', "frame-ancestors 'none'")
+  // Resource restrictions remain report-only until real provider/device flows are proved.
+  headers.set('Content-Security-Policy-Report-Only', "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'")
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), fullscreen=(), clipboard-write=(self), web-share=(self)')
+  const privateReferrer = path.startsWith('/join/') || path === '/auth/link' || path === '/api/auth/callback/google'
+  headers.set('Referrer-Policy', privateReferrer || headers.get('Referrer-Policy')?.toLowerCase() === 'no-referrer' ? 'no-referrer' : 'strict-origin-when-cross-origin')
+  let https = false
+  try {
+    const origins = [new URL(appBaseUrl), new URL(requestUrl)]
+    https = origins.every(origin => origin.protocol === 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) && !origin.hostname.endsWith('.localhost'))
+  } catch { /* Invalid configuration must not suppress baseline headers on an error. */ }
+  if (https) headers.set('Strict-Transport-Security', 'max-age=31536000')
+  else headers.delete('Strict-Transport-Security')
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
+}
+
 export function requireOrigin(request: Request, origin: string) {
   if (request.headers.get('Origin') !== origin) throw new HttpError(403, 'invalid_origin')
 }
