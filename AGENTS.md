@@ -182,9 +182,10 @@ weaken them while Fly/Supabase is live.
   Cache context includes `/api/caches/{cacheId}`. Private library routes use the
   authenticated caller, never a body-supplied owner. IDs never grant permission.
 - Hand-written bound SQL. Global D1 queries and their authorization/stock guards
-  stay in one auditable module (`src/db.ts`). Use guarded statements and token-gated
-  atomic batches, not interactive JS transactions or SQL changes(). R2/Queue are
-  outside D1 atomicity. A no-op primary write must make all dependent writes no-op.
+  stay in auditable domain modules under `src/db/`, with a stable index export.
+  Keep each guarded statement and token-gated atomic batch together; no interactive
+  JS transactions or SQL changes(). R2/Queue are outside D1 atomicity. A no-op
+  primary write must make all dependent writes no-op.
 - UUID app keys; Better Auth user.id is the app identity (`generateId: 'uuid'`).
   App timestamps are integer Unix milliseconds; auth columns follow its reviewed
   generated schema. SQLite booleans have 0/1 checks; nullable columns are explicit.
