@@ -9,14 +9,14 @@ import { HomePage } from '../pages/HomePage'
 import { AccountPage } from '../pages/AccountPage'
 import { CachePage } from '../pages/CachePage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
-import { pendingIncomingCount, type ItemRequest, type RequestsPageData } from './requests'
+import type { ItemRequest, RequestsPageData } from './requests'
 import { shareInvite } from './invites'
 import { apiFetch } from './api'
 
 const id = '11111111-1111-4111-8111-111111111111'
 const cache = { id, name: 'Maple Street', owner_id: 'owner', requires_approval: true, invite_token: `${id}.${'a'.repeat(43)}`, members: [{ user_id: 'owner', display_name: 'Ryan' }, { user_id: 'member', display_name: 'Priya' }] }
 const row: ItemRequest = { id: 'incoming', cache_id: id, cache_name: cache.name, item_id: 'item', item_title: 'Starter', owner_id: 'owner', owner_name: 'Ryan', requester_id: 'member', requester_name: 'Priya', quantity: 1, status: 'pending', decision_reason: null, decided_at: null, created_at: 1 }
-function render(element: ReactElement, options: { caller?: string; path?: string; route?: string; pages?: RequestsPageData[] } = {}) {
+function render(element: ReactElement, options: { caller?: string; path?: string; route?: string; pages?: RequestsPageData[]; answerCount?: number } = {}) {
   vi.stubGlobal('location', { origin: 'https://communalcache.com' })
   vi.stubGlobal('sessionStorage', { getItem: () => null })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -27,7 +27,7 @@ function render(element: ReactElement, options: { caller?: string; path?: string
   client.setQueryData(['items', id], [])
   const pages = options.pages ?? [{ requests: [row], unavailable_cache_ids: [], next_cursor: null }]
   client.setQueryData(['requests'], { pages, pageParams: pages.map(() => null) })
-  client.setQueryData(['home-summary'], {owned_item_count:0,pending_answer_count:pages.flatMap(page=>page.requests).filter(row=>row.owner_id==='owner' && row.status==='pending').length,incoming:[],outgoing:[]})
+  client.setQueryData(['home-summary'], {owned_item_count:0,pending_answer_count:options.answerCount ?? 1,incoming:[],outgoing:[]})
   const routed = createElement(Routes, null, createElement(Route, { path: options.route ?? '/', element }))
   const result = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [options.path ?? '/'] }, routed) })))
   client.clear()
@@ -35,25 +35,28 @@ function render(element: ReactElement, options: { caller?: string; path?: string
 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-it('counts only pending incoming requests for the profile badge', () => {
+it('uses the server summary badge independently of loaded incoming, outgoing and answered history', () => {
   const outgoing = { ...row, id: 'outgoing', requester_id: 'owner', owner_id: 'member', status: 'approved' as const, decided_at: 2 }
   const decidedIncoming = { ...row, id: 'decided', status: 'rejected' as const, decided_at: 3 }
   const second = { ...row, id: 'second' }, third = { ...outgoing, id: 'third', status: 'rejected' as const }
   const rows = [outgoing, decidedIncoming, row, third, second]
-  expect(pendingIncomingCount(rows, 'owner')).toBe(2)
-  expect(pendingIncomingCount(rows, 'outsider')).toBe(0)
+  const pages = [{ requests: rows, unavailable_cache_ids: [], next_cursor: 'more' }]
+  const header = render(createElement(AppHeader), { pages, answerCount: 7 })
+  expect(header).toContain('Requests, 7 asks need your answer')
+  expect(header).not.toContain('first page')
+  expect(render(createElement(AppHeader), { caller: 'outsider', pages, answerCount: 0 })).not.toContain('asks need your answer')
 })
 
 it('renders accessible header destinations, avatar and the exact summary badge, hidden at zero', () => {
   const pages: RequestsPageData[] = [{ requests: [row], unavailable_cache_ids: [], next_cursor: 'next' }, { requests: [{ ...row, id: 'later' }], unavailable_cache_ids: [], next_cursor: null }]
-  const markup = render(createElement(AppHeader), { pages })
+  const markup = render(createElement(AppHeader), { pages, answerCount: 2 })
   expect(markup).toContain('aria-label="Home"')
   expect(markup).toContain('href="/account"')
   expect(markup).toContain('aria-label="Account"')
   expect(markup).toContain('Requests, 2 asks need your answer')
   expect(markup).not.toContain('first page')
   expect(markup).not.toContain('private@example.test')
-  const empty = render(createElement(AppHeader), { pages: [{ requests: [], unavailable_cache_ids: [], next_cursor: null }] })
+  const empty = render(createElement(AppHeader), { pages: [{ requests: [], unavailable_cache_ids: [], next_cursor: null }], answerCount: 0 })
   expect(empty).not.toContain('asks need your answer')
   expect(render(createElement(AppHeader), { route: '/login', path: '/login' })).toBe('')
 })

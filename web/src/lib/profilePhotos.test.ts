@@ -10,7 +10,7 @@ import { AccountPage } from '../pages/AccountPage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { ItemPage } from '../pages/ItemPages'
 import { RequestCard } from '../pages/RequestsPage'
-import { initials, profilePhotoSrc } from './avatars'
+import { profilePhotoSrc } from './avatars'
 import { PHOTO_READ_ERROR, resizePhoto, uploadProfilePhoto } from './photos'
 import { errorMessage } from './api'
 import type { ItemRequest } from './requests'
@@ -35,10 +35,15 @@ function render(element: ReactElement, options: {version?: string|null;route?:st
 }
 
 it('keeps identity/version-specific private image paths and uses id-derived cats for avatar fallback', () => {
-  expect(initials('  Ryan Zhou ')).toBe('RZ')
-  expect(initials('Priya')).toBe('P')
-  expect(initials('😀 Neighbor')).toBe('😀N')
-  expect(initials('   ')).toBe('?')
+  const traits = renderToStaticMarkup(createElement(Avatar,{userId:owner,name:'Ryan Zhou'})).match(/data-coat="[^"]+" data-pattern="[^"]+"/)?.[0]
+  expect(traits).toBeDefined()
+  for (const name of ['  Ryan Zhou ', 'Priya', '😀 Neighbor', '   ']) {
+    const avatar = renderToStaticMarkup(createElement(Avatar,{userId:owner,name}))
+    expect(avatar).toContain(`<span class="sr-only">${name}</span>`)
+    expect(avatar).toContain(traits!)
+    expect(avatar).toContain('cc-avatar-cat')
+    expect(avatar).not.toContain('<img')
+  }
   expect(profilePhotoSrc(owner,null)).toBeNull()
   expect(profilePhotoSrc(owner,'a/b?x')).toBe(`/api/users/${owner}/photo?v=a%2Fb%3Fx`)
   expect(profilePhotoSrc(owner,'version')).not.toBe(profilePhotoSrc(member,'version'))
