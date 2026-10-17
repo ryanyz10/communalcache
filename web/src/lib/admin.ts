@@ -3,7 +3,8 @@ import { apiFetch } from './api'
 export type AdminPlan = { plan: 'free' | 'plus' }
 export type AdminOverview = {
   users: number; caches: number; items: number; pending_requests: number
-  outbox_pending: number; outbox_failed: number; outbox_oldest_age_ms: number | null; plans: AdminPlan[]
+  outbox_pending: number; outbox_failed: number; outbox_oldest_age_ms: number | null
+  cleanup_pending: number; cleanup_oldest_age_ms: number | null; plans: AdminPlan[]
 }
 export type AdminPageRows<T> = { rows: T[]; next_cursor: string | null }
 export type AdminCache = {

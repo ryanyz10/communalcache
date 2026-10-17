@@ -191,6 +191,16 @@ it('photo decode/upload errors retain the selection, retry replaces via the exac
   expect(page.fileInput.value).toBe(''); expect(page.dialogModel.open).toBe(false)
 })
 
+it('photo admission errors keep the sheet and selection with clear retry-later copy', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'rate_limited', limit: 'photo_upload' }, { status: 429 }))
+  const page = fixture('ProfilePhotoControls')
+  page.click('Change photo'); page.change('profile-photo-file', new File(['png'], 'photo.png')); page.fileInput.value = 'photo.png'
+  page.submit(); await page.settled()
+  expect(page.render()).toContain('Too many photo uploads, try again later.')
+  expect(page.dialogModel.open).toBe(true)
+  expect(page.fileInput.value).toBe('photo.png')
+})
+
 it('photo removal sends a bodyless self DELETE, while missing photos keep removal disabled', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
   const absent = fixture('ProfilePhotoControls', { noPhoto: true }); expect(absent.button('Remove photo').props.disabled).toBe(true)

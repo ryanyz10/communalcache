@@ -126,6 +126,8 @@ it('returns names/IDs, live usage/quota counts and safe failed-outbox metadata w
     .bind(crypto.randomUUID(), crypto.randomUUID(), JSON.stringify({ recipient: 'outbox-private@example.test', contact: 'private-contact', message: 'private-message' }), Date.now() - 600_000, Date.now()).run()
   await env.DB.prepare("INSERT INTO outbox(id,kind,dedupe_key,payload,created_at) VALUES (?,'request_created',?,?,?)")
     .bind(crypto.randomUUID(), crypto.randomUUID(), '{}', Date.now() - 300_000).run()
+  await env.DB.prepare("INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at,scope) VALUES (?,?,NULL,'exact',?,?,'profile')")
+    .bind(crypto.randomUUID(), f.admin.id, `users/${f.admin.id}/${crypto.randomUUID()}`, Date.now() - 420_000).run()
   const responses: Record<string, any> = {}
   for (const path of ['overview', 'caches', 'users', 'failed-outbox']) {
     const response = await f.call('/api/admin/' + path)
@@ -136,6 +138,8 @@ it('returns names/IDs, live usage/quota counts and safe failed-outbox metadata w
   }
   expect(responses.overview).toMatchObject({ users: 2, caches: 1, items: 1, pending_requests: 1, outbox_pending: 2, outbox_failed: 1 })
   expect(responses.overview.outbox_oldest_age_ms).toBeGreaterThanOrEqual(300_000)
+  expect(responses.overview.cleanup_pending).toBe(1)
+  expect(responses.overview.cleanup_oldest_age_ms).toBeGreaterThanOrEqual(420_000)
   expect(responses.caches.rows[0]).toMatchObject({ id: cache.id, owner_id: f.admin.id, owner_name: 'Owner name', member_count: 2, member_limit: 30, item_count: 1 })
   expect(responses.users.rows.find((row: any) => row.id === f.admin.id)).toMatchObject({ owned_caches: 1, owned_cache_limit: 1, owned_items: 1, owned_item_limit: 100, new_caches_24h: 1 })
   expect(responses.users.rows.find((row: any) => row.id === member)).toMatchObject({ pending_outgoing: 1, pending_limit: 20, memberships: 1, membership_limit: 20 })
