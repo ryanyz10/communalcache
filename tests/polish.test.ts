@@ -107,8 +107,9 @@ it('reports durable notification failures without names, payloads, invite secret
   const log = vi.spyOn(console,'warn').mockImplementation(() => {})
   vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('private provider detail',{status:503}))
   expect(await deliverNotification(env,joined.notificationId!)).toBe('retry')
-  const message = String(log.mock.calls[0][0])
-  expect(JSON.parse(message)).toEqual({event:'notification_delivery_failed',outbox_id:joined.notificationId,attempts:1,terminal:false})
+  const event = log.mock.calls[0][0]
+  const message = JSON.stringify(event)
+  expect(event).toEqual({event:'notification_delivery_failed',outbox_id:joined.notificationId,attempts:1,terminal:false})
   for (const privateValue of ['Private cache name','private provider detail','example.test',cache.invite_token.split('.')[1]]) expect(message).not.toContain(privateValue)
 })
 

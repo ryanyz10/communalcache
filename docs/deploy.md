@@ -59,6 +59,45 @@ canonical D1 behavior and populated retirement upgrade preservation, not remote
 class deletion. Smoke health/config, SPA deep links and JSON API
 errors. A dry-run validates bundle/bindings, not live deploy/data/provider success.
 
+## Logs
+
+After a separately approved rollout, open Cloudflare dashboard → Workers & Pages
+→ `communalcache` (or `communalcache-staging`) → Observability → Logs. Named staging
+and production configs explicitly enable custom logs at head sampling **1 (100%)**;
+traces and invocation logs are off. Pinned Wrangler treats observability as
+inheritable, but each environment is explicit; the unnamed/default config is
+unchanged. Static assets that bypass the Worker produce no custom request event.
+
+Invocation logs are disabled because they include full request URLs, including
+invite secrets in `/join/*` and OAuth callback query credentials. Query-string
+redaction is also enabled as defense in depth. Application events never include
+raw URLs/query strings, auth/contact emails, display names, OTPs/tokens/session IDs,
+push endpoints/keys, R2 photo keys, Turnstile tokens, IPs, request/response bodies,
+or raw exception messages/stacks. Routes and methods use closed label allowlists;
+unknown paths become fixed wildcards. `request` includes method/route/status/elapsed
+milliseconds; `unhandled_error` uses fixed name `Error`; `queue` and `scheduled`
+summaries contain counts only. `failed_batches` counts escaped consumer failures;
+`failed_jobs` counts rejected sweeps, not per-row failures. Existing delivery/cleanup failures retain only
+opaque operation IDs, counters/age and terminal outcome. Better Auth logging stays
+disabled; escaped queue errors are replaced with a fixed generic exception.
+
+Cloudflare currently includes 200,000 log events/day and **3-day retention** on
+Workers Free, versus **7 days** on Paid. Pricing moves to Cloudflare Observability
+pricing on **2026-12-01**; check the [current Workers Logs docs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)
+before changing sampling or plan. These are account-level/provider limits, not an
+application retention guarantee. Live Cloudflare enrichment/storage behavior has
+not been verified by local tests: after approved staging deployment inspect a
+redacted sample, including platform metadata, before claiming live privacy proof.
+
+Live tail is a remote operation requiring separate approval; it may expose platform
+request metadata, so never paste raw output or secret-bearing URLs:
+
+```bash
+CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler tail -e production
+```
+
+No tail, deployment or account change is performed by the logging PR.
+
 ## Security headers — verify in each environment
 
 The Worker applies one baseline at its final fetch boundary, including JSON,
