@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { errorMessage } from '../lib/api'
-import { useLibrary, type LibraryFilter } from '../lib/items'
+import { filterLibraryItems, useLibrary, type LibraryFilter } from '../lib/items'
 import { useHomeSummary } from '../lib/caches'
 import { OnboardingPage } from './OnboardingPage'
 import { Cat } from '../components/Cat'
@@ -16,13 +16,14 @@ import { LoadingStatus, Shimmer } from '../components/Skeleton'
 export function LibraryPage() {
   const { me } = useAuth()
   const [filter, setFilter] = useState<LibraryFilter>('all')
-  const libraryQuery = useLibrary(me?.display_name ? me.id : undefined, filter)
+  const libraryQuery = useLibrary(me?.display_name ? me.id : undefined)
   const summaryQuery = useHomeSummary(!!me?.display_name)
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
   if (libraryQuery.isPending) return <LibrarySkeleton user={me} filter={filter} pendingAnswerCount={summaryQuery.isError ? undefined : summaryQuery.data?.pending_answer_count} />
 
-  const items = libraryQuery.data?.pages.flatMap(page => page.items) ?? []
+  const loadedItems = libraryQuery.data?.pages.flatMap(page => page.items) ?? []
+  const items = filterLibraryItems(loadedItems, filter)
   const totals = libraryQuery.data?.pages[0]?.totals
   const filters = [
     ['all', 'All', 'All', totals?.total_count],
@@ -95,10 +96,11 @@ export function LibraryPage() {
           </li>
         })}</ul>
       </div>
-      {libraryQuery.isSuccess && !items.length && <div className="cc-empty-slip">
+      {libraryQuery.isSuccess && !items.length && !libraryQuery.hasNextPage && <div className="cc-empty-slip">
         <p>{totals?.total_count ? 'No items match this filter.' : 'No items yet. Add something you can lend or give away.'}</p>
         <Link to="/items/new" className="cc-text-action">+ New item</Link>
       </div>}
+      {libraryQuery.hasNextPage && <p role="status" className="cc-form-hint">Showing matches from {loadedItems.length} loaded items. Load more to include the rest.</p>}
       {libraryQuery.hasNextPage && <button type="button" disabled={libraryQuery.isFetchingNextPage} onClick={() => void libraryQuery.fetchNextPage()} className="cc-profile-secondary cc-library-more">
         {libraryQuery.isFetchingNextPage ? <><LoadingStatus label="Loading more items…" /><Shimmer width={110} height={18} /></> : 'Load more items'}
       </button>}
