@@ -140,8 +140,6 @@
 .cc-pending-ask-row + .cc-pending-ask-row { margin-top: 10px; }
 .cc-pending-ask-row > .cc-avatar { width: 26px !important; height: 26px !important; }
 .cc-pending-ask-row .cc-stamp { margin-left: auto; padding: 3px 9px; font-size: 10px; color: var(--cc-sub); }
-.cc-detail-history-link { display: flex; align-items: center; min-height: 44px; color: var(--cc-accent-text); font-size: 12px; }
-.cc-inline-ask-form:not([hidden]) { padding: 18px; border-radius: 24px; background: var(--cc-card); margin-bottom: 16px; }
 .cc-owner-item-controls { display: flex; flex-direction: column; gap: 18px; }
 .cc-owner-item-controls > .cc-inline-actions { margin-top: 6px; }
 .cc-owner-item-controls h2 { margin: 0 0 12px; font: 400 24px/1.1 var(--font-heading); }
