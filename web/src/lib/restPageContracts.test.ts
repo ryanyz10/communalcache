@@ -14,6 +14,7 @@ import * as pendingJoin from './pendingJoin'
 import * as magicLinks from './magicLinks'
 import * as googleSignIn from './googleSignIn'
 import { refreshProfileViews } from './profile'
+import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
 type Page = 'HomePage' | 'AccountPage' | 'JoinInviteSheet' | 'JoinRequests' | 'LoginPage' | 'MagicLinkPage' | 'JoinPage' | 'OnboardingPage'
@@ -34,7 +35,8 @@ function nodeText(node: Element): string {
   return React.Children.toArray(node.props.children as ReactNode).map(child => React.isValidElement(child) ? nodeText(child as Element) : String(child)).join('')
 }
 
-function fixture(page: Page, options: { inviteToken?: string; invalidLink?: boolean } = {}) {
+function fixture(page: Page, options: { inviteToken?: string; invalidLink?: boolean; googleError?: boolean } = {}) {
+  const toasts = toastFixture()
   const trace: unknown[][] = [], states: unknown[] = [], refs: { current: unknown }[] = [], effects: (() => void)[] = []
   const queries: Record<string, unknown>[] = [], storage = new Map<string, string>()
   let elements: Element[] = [], stateIndex = 0, refIndex = 0, mounted = false
@@ -89,6 +91,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
   const Null = () => null
   const Container = ({ children }: { children: ReactNode }) => createElement('div', null, children)
   const modules: Record<string, unknown> = {
+    ...toasts.modules,
     react: {
       ...React,
       useState(initial: unknown) {
@@ -100,7 +103,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
       useEffect(effect: () => void) { if (!mounted) effects.push(effect) },
     },
     'react/jsx-runtime': { jsx: record(jsx), jsxs: record(jsxs), Fragment: React.Fragment },
-    'react-router': { ...Router, useParams: () => ({ token: options.inviteToken ?? token }), useNavigate: () => (...args: unknown[]) => trace.push(['navigate', ...args]), useSearchParams: () => [new URLSearchParams()] },
+    'react-router': { ...Router, useParams: () => ({ token: options.inviteToken ?? token }), useNavigate: () => (...args: unknown[]) => trace.push(['navigate', ...args]), useSearchParams: () => [new URLSearchParams(options.googleError ? 'error=access_denied&error_description=private-provider-detail' : '')] },
     '@tanstack/react-query': {
       useQueryClient: () => client, useMutation,
       useQuery(configuration: Record<string, unknown>) {
@@ -149,7 +152,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
   const props = page === 'JoinInviteSheet' ? { dialog: { current: dialog('join-invite-heading') } } : page === 'JoinRequests' ? { cacheId } : {}
   function render() {
     elements = []; queries.length = 0; stateIndex = 0; refIndex = 0
-    const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(Component, props)))
+    const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(React.Fragment, null, createElement(Component, props), toasts.element())))
     for (const node of elements) {
       if (node.type === 'dialog') (node.props.ref as { current: unknown }).current = dialog(node.props['aria-labelledby'] as string)
       if (node.type === 'input' && node.props.id === 'email') (node.props.ref as { current: unknown }).current = email
@@ -183,7 +186,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
   }
   render()
   return {
-    trace, render, queries, query, client, auth, email, bot, dialog, button, click, change, submit, escape,
+    toasts, trace, render, queries, query, client, auth, email, bot, dialog, button, click, change, submit, escape,
     field: (id: string) => elements.find(node => node.props.id === id)!,
     token(value = 'public-local-bot-token') { (elements.find(node => node.props.action === 'create_cache' || node.props.action === 'signin')!.props.onToken as (value: string) => void)(value); render() },
     code(value: string) { (elements.find(node => node.props.onChange && node.props.value === '')!.props.onChange as (value: string) => void)(value); render() },
@@ -256,6 +259,13 @@ it.each(['approve', 'reject'] as const)('join %s preserves exact POST and sequen
   expect(page.render()).toContain('Join request decided.')
   expect(fetch.mock.calls[0]).toEqual([`/api/caches/${cacheId}/join-requests/member/${decision}`, expect.objectContaining({ method: 'POST', credentials: 'same-origin', body: '{}' })])
   expect(page.trace).toEqual(Array.from({ length: 2 }, () => [['invalidate', ['join-requests', cacheId]], ['invalidate', ['cache', cacheId]], ['invalidate', ['caches']]]).flat())
+})
+
+it('uses an error toast for a Google callback failure without reflecting provider details', () => {
+  const page = fixture('LoginPage', { googleError: true })
+  expect(page.toasts.notice).toMatchObject({ message: googleSignIn.googleSignInError, tone: 'error' })
+  expect(page.render()).not.toContain('private-provider-detail')
+  expect(page.render()).toContain('cc-toast-error')
 })
 
 it('Login validates before send, retains errors, transitions link→code, verifies code then refreshes, and resets on wrong email', async () => {

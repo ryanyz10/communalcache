@@ -5,6 +5,8 @@ import type { Item } from '../lib/items'
 import { invalidateRequestViews, type ItemRequest } from '../lib/requests'
 import { Cat } from '../components/Cat'
 import { LoadingLines } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function AskSheet({ item, cacheName = 'This cache', onClose }: {
   item: Item
@@ -14,6 +16,7 @@ export function AskSheet({ item, cacheName = 'This cache', onClose }: {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const client = useQueryClient()
+  const { showToast } = useToast()
   const [quantity, setQuantity] = useState('1')
   const currentItemQuery = useQuery({
     queryKey: ['item', item.cache_id, item.id],
@@ -33,6 +36,8 @@ export function AskSheet({ item, cacheName = 'This cache', onClose }: {
     mutationFn: () => apiFetch<ItemRequest>(`/api/caches/${item.cache_id}/items/${item.id}/requests`, {
       body: { quantity: currentItem.is_consumable ? Number(quantity) : null },
     }),
+    onSuccess: () => showToast('Request sent. Arrange the handoff in person if approved.'),
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: () => invalidateRequestViews(client),
   })
   useEffect(() => {
@@ -66,7 +71,6 @@ export function AskSheet({ item, cacheName = 'This cache', onClose }: {
         <h2 id="ask-sheet-heading">Ask sent</h2>
         <p>{item.title} · {cacheName}</p>
       </div>
-      <p role="status">Request sent. Arrange the handoff in person if approved.</p>
       <button type="button" autoFocus className="cc-profile-primary" onClick={() => dialogRef.current?.close()}>Done</button>
     </div> : <form className="cc-action-sheet-body" onSubmit={submit}>
       <div className="cc-sheet-heading">
@@ -110,7 +114,7 @@ export function AskSheet({ item, cacheName = 'This cache', onClose }: {
       {!currentItemQuery.isError && currentItem.is_consumable && (availableQuantity === undefined || availableQuantity === null) && <p className="cc-form-hint">Refresh the item to see current availability.</p>}
       {!currentItemQuery.isError && currentItem.is_consumable && typeof availableQuantity === 'number' && availableQuantity <= 0 && <p className="cc-form-hint">No stock available now.</p>}
       <p className="cc-ask-privacy">If {ownerName} says yes, you'll both see how to reach each other. The handoff happens in person.</p>
-      {askMutation.isError && <p role="alert" className="cc-form-error">{errorMessage(askMutation.error)}</p>}
+      {askMutation.isError && !transientActionFailure(askMutation.error) && <p role="alert" className="cc-form-error">{errorMessage(askMutation.error)}</p>}
       <button
         type="submit"
         className="cc-profile-primary"

@@ -9,11 +9,13 @@ import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { Avatar } from '../components/Avatar'
-import { Toast, useToast } from '../components/Toast'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 import { CacheSettingsSkeleton } from '../components/skeletons/CacheSkeleton'
 
 function OwnerSettings({ cache }: { cache: CacheDetail }) {
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   const [cacheName, setCacheName] = useState(cache.name)
   const [isEditingName, setIsEditingName] = useState(false)
   const editNameButton = useRef<HTMLButtonElement>(null)
@@ -26,11 +28,13 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
         queryClient.invalidateQueries({ queryKey: ['cache', cache.id] }),
         queryClient.invalidateQueries({ queryKey: ['caches'] }),
       ])
+      showToast('Settings saved.')
       if (changes.name !== undefined) {
         setIsEditingName(false)
         editNameButton.current?.focus()
       }
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
   function saveName(event: FormEvent) {
@@ -118,10 +122,9 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
         />
       </label>
     </div>
-    {updateSettings.isError && <p role="alert" className="mt-3 text-sm text-red-700">
+    {updateSettings.isError && !transientActionFailure(updateSettings.error) && <p role="alert" className="mt-3 text-sm text-red-700">
       {errorMessage(updateSettings.error)}
     </p>}
-    {updateSettings.isSuccess && <p role="status" className="mt-3 text-sm text-emerald-700">Settings saved.</p>}
   </section>
 }
 
@@ -129,6 +132,7 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
   const removeDialog = useRef<HTMLDialogElement>(null)
   const queryClient = useQueryClient()
   const memberName = member.display_name ?? 'this member'
+  const { showToast } = useToast()
   const removeMember = useMutation({
     mutationFn: () => apiFetch<void>(`/api/caches/${cache.id}/members/${member.user_id}`, { method: 'DELETE' }),
     onSuccess: async () => {
@@ -138,9 +142,11 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
         queryClient.invalidateQueries({ queryKey: ['caches'] }),
         invalidateRequestViews(queryClient),
       ])
+      showToast('Member removed.')
       // Removal unmounts its trigger; focus the surviving section heading.
       document.getElementById('members-heading')?.focus()
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
   return <>
@@ -167,7 +173,7 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
         <li>Their pending requests here, and pending requests on their items here, are rejected.</li>
         <li>Their items stop being shared here. Their library, photos and other caches are kept.</li>
       </ul>
-      {removeMember.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(removeMember.error)}</p>}
+      {removeMember.isError && !transientActionFailure(removeMember.error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(removeMember.error)}</p>}
       <div className="mt-6 flex gap-3">
         <button
           type="button"
@@ -192,6 +198,7 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
 }
 
 function LeaveCache({ cache }: { cache: CacheDetail }) {
+  const { showToast } = useToast()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const leaveDialog = useRef<HTMLDialogElement>(null)
@@ -205,8 +212,10 @@ function LeaveCache({ cache }: { cache: CacheDetail }) {
         queryClient.invalidateQueries({ queryKey: ['caches'] }),
         invalidateRequestViews(queryClient),
       ])
+      showToast('Left cache.')
       navigate('/')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
   return <section className="mt-6">
@@ -233,7 +242,7 @@ function LeaveCache({ cache }: { cache: CacheDetail }) {
         <li>Your library, photos and other caches are kept; your items stop being shared here.</li>
         <li>You may rejoin with a current invite; approval still applies. Old items are not re-shared automatically.</li>
       </ul>
-      {leaveCache.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(leaveCache.error)}</p>}
+      {leaveCache.isError && !transientActionFailure(leaveCache.error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(leaveCache.error)}</p>}
       <div className="mt-6 flex gap-3">
         <button
           type="button"
@@ -262,17 +271,16 @@ export function CacheSettingsPage() {
   const { me } = useAuth()
   const queryClient = useQueryClient()
   const rotateDialog = useRef<HTMLDialogElement>(null)
-  const { toast, showToast, dismissToast } = useToast()
-  const [rotationStatus, setRotationStatus] = useState('')
+  const { showToast } = useToast()
   const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me?.display_name })
   const rotateInvite = useMutation({
     mutationFn: () => apiFetch<CacheInfo>(`/api/caches/${cacheId}/invite/rotate`, { body: {} }),
     onSuccess: async () => {
       rotateDialog.current?.close()
-      dismissToast()
-      setRotationStatus('Invite rotated. The old link no longer works.')
+      showToast('Invite rotated. The old link no longer works.')
       await queryClient.invalidateQueries({ queryKey: ['cache', cacheId] })
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
   if (!me) return <Navigate to="/login" replace />
@@ -293,12 +301,11 @@ export function CacheSettingsPage() {
       await navigator.clipboard.writeText(inviteUrl)
       showToast('Invite copied.')
     } catch {
-      showToast('Could not copy automatically. Select the invite link and copy it.')
+      showToast('Could not copy automatically. Select the invite link and copy it.', 'error')
     }
   }
 
   return <main className="cc-page cc-cache-settings-page">
-    <Toast toast={toast} />
     <WideBreadcrumbs>
       <Link to="/">Caches</Link>
       <span aria-hidden="true">›</span>
@@ -391,7 +398,6 @@ export function CacheSettingsPage() {
               <span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span>
             </button>}
           </div>
-          {rotationStatus && <p role="status" className="mt-3 text-sm text-emerald-700">{rotationStatus}</p>}
         </section>
         {isOwner ? <OwnerSettings cache={cache} /> : <LeaveCache cache={cache} />}
         {isOwner && <dialog
@@ -402,7 +408,7 @@ export function CacheSettingsPage() {
         >
           <h2 id="rotate-heading" className="text-xl font-semibold">Reset this invite?</h2>
           <p className="mt-3">The old link will stop working. Existing members keep access.</p>
-          {rotateInvite.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(rotateInvite.error)}</p>}
+          {rotateInvite.isError && !transientActionFailure(rotateInvite.error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(rotateInvite.error)}</p>}
           <div className="mt-6 flex gap-3">
             <button
               type="button"

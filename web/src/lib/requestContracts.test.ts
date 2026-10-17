@@ -10,12 +10,14 @@ import { ApiError, apiFetch, errorMessage } from './api'
 import * as requests from './requests'
 import * as contacts from './contacts'
 import type { Item } from './items'
+import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
 type Kind = 'ask' | 'decision' | 'contact'
 type MutationOptions = {
   mutationFn: (variables?: unknown) => Promise<unknown>
-  onSuccess?: (data: unknown) => unknown
+  onSuccess?: (data: unknown, variables?: unknown) => unknown
+  onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
 const parent = 'c9c06db17817e6d49e5d5cfbbdd7f021ffcb3656'
@@ -45,6 +47,7 @@ function text(node: Element): string {
 }
 
 function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequest; callerId?: string } = {}) {
+  const toasts = toastFixture()
   const trace: unknown[][] = [], states: unknown[] = [], refs: { current: unknown }[] = []
   const effects: (() => void)[] = []
   const queryOptions: Record<string, unknown>[] = []
@@ -72,9 +75,9 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
       lastMutation = (async () => {
         try {
           const data = await mutationOptions.mutationFn(variables)
-          await mutationOptions.onSuccess?.(data)
+          await mutationOptions.onSuccess?.(data, variables)
           mutation.success = true
-        } catch (error) { mutation.error = error }
+        } catch (error) { mutation.error = error; await mutationOptions.onError?.(error, variables) }
         finally { await mutationOptions.onSettled?.(); mutation.pending = false }
       })()
     },
@@ -100,6 +103,7 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
   }
   const Null = () => null
   const modules: Record<string, unknown> = {
+    ...toasts.modules,
     react: {
       ...React,
       useState(initial: unknown) {
@@ -138,7 +142,7 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
   function dialog() { return elements.find(node => node.type === 'dialog')! }
   function render() {
     elements = []; queryOptions.length = 0; stateIndex = 0; refIndex = 0
-    const html = renderToStaticMarkup(createElement(Component, props))
+    const html = renderToStaticMarkup(createElement(React.Fragment, null, createElement(Component, props), toasts.element()))
     for (const node of elements.filter(node => node.type === 'dialog')) (node.props.ref as { current: unknown }).current = dialogModel
     for (const node of elements.filter(node => node.type === 'button' && node.props.ref)) (node.props.ref as { current: unknown }).current = cancelModel
     if (!mounted) { effects.forEach(effect => effect()); mounted = true }
@@ -166,7 +170,7 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
   }
   render()
   return {
-    trace, render, button, click, change, submit, escape, query, queryOptions, queryClient, dialogModel, cancelModel,
+    toasts, trace, render, button, click, change, submit, escape, query, queryOptions, queryClient, dialogModel, cancelModel,
     field: (id: string) => elements.find(node => node.props.id === id)!,
     buttons: () => descendants(dialog().props.children as ReactNode).filter(node => node.type === 'button'),
     settled: () => lastMutation, focus: () => focus,
@@ -298,6 +302,7 @@ it('counts approval message/note Unicode code points and preserves note edited v
   page.trace.length = 0; page.submit(); await page.settled()
   expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).toEqual({ approval_message: 'See you soon', mark_lent_out: true, unavailable_note: 'With a neighbor' })
   expect(page.trace).toEqual([['close'], ...invalidations.map(key => ['invalidate', [key]])])
+  expect(page.toasts.notice).toMatchObject({ message: 'Request approved.', tone: 'success' })
   page.click('Approve request from Neighbor'); page.submit(); await page.settled()
   expect(JSON.parse(fetch.mock.calls[1][1]?.body as string)).toEqual({ approval_message: '', mark_lent_out: true })
   page.click('Approve request from Neighbor'); page.change('approval-note-request', '  '); page.submit(); await page.settled()

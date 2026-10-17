@@ -15,7 +15,7 @@ import { Avatar } from '../components/Avatar'
 import { boxColor } from '../components/Box'
 import { MemberCats } from '../components/MemberCats'
 import { Stamp } from '../components/Stamp'
-import { Toast, useToast } from '../components/Toast'
+import { useToast } from '../components/Toast'
 import { ThingTile, ThingStatus } from '../components/ThingTile'
 import {
   CacheSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheSettingsIcon,
@@ -24,7 +24,7 @@ import {
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams()
   const { me } = useAuth()
-  const { toast, showToast } = useToast()
+  const { showToast } = useToast()
   const [contentsFilter, setContentsFilter] = useState<ContentsFilter>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -85,7 +85,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
 
   async function shareCacheInvite() {
     try { showToast(await shareInvite(new URL(`/join/${cache.invite_token}`, location.origin).href)) }
-    catch { showToast('Could not share or copy. Open Cache settings to select the invite link.') }
+    catch { showToast('Could not share or copy. Open Cache settings to select the invite link.', 'error') }
   }
 
   const cacheControls = <>
@@ -244,7 +244,6 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
       </div>
     </div>
     <div className="cc-cache-phone-controls">{cacheControls}</div>
-    <Toast toast={toast} />
     <div className="cc-contents-layout">
       <section aria-label="Contents" className="cc-contents">{contents}</section>
       <aside className="cc-in-the-box" aria-labelledby="cache-members-heading">

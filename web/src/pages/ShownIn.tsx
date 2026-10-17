@@ -7,10 +7,13 @@ import type { CacheSummary } from '../lib/caches'
 import { libraryItemQuery, type Item, type LibraryItem } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { SkeletonRows } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function ShownIn({ item }: { item: Item }) {
   const { me } = useAuth()
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   const navigate = useNavigate()
   const detachDialog = useRef<HTMLDialogElement>(null)
   const [detachTarget, setDetachTarget] = useState<CacheSummary | null>(null)
@@ -33,7 +36,9 @@ export function ShownIn({ item }: { item: Item }) {
       })
       detachDialog.current?.close()
       if (!checked && item.cache_id === cache.id) navigate(`/items/${item.id}`, { replace: true })
+      showToast('Sharing saved.')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: () => invalidateRequestViews(queryClient),
   })
   const readError = libraryItem.error ?? cachesQuery.error
@@ -75,9 +80,8 @@ export function ShownIn({ item }: { item: Item }) {
     </>}
     {changeSharing.isPending && <p role="status" className="mt-2">Updating sharing…</p>}
     {changeSharing.isError && <p role="alert" className="mt-2 text-red-700">
-      {errorMessage(changeSharing.error)} Could not confirm sharing. Refresh or try the checkbox again.
+      {!transientActionFailure(changeSharing.error) && errorMessage(changeSharing.error)} Could not confirm sharing. Refresh or try the checkbox again.
     </p>}
-    {changeSharing.isSuccess && <p role="status" className="mt-2 text-emerald-700">Sharing saved.</p>}
     <dialog
       ref={detachDialog}
       onCancel={event => { if (changeSharing.isPending) event.preventDefault() }}
@@ -91,7 +95,7 @@ export function ShownIn({ item }: { item: Item }) {
         <li>Your library item, photos, stock and other caches are kept.</li>
       </ul>
       {changeSharing.isError && <p role="alert" className="mt-3 text-red-700">
-        {errorMessage(changeSharing.error)} You can retry here.
+        {!transientActionFailure(changeSharing.error) && errorMessage(changeSharing.error)} You can retry here.
       </p>}
       <div className="mt-6 flex gap-3">
         <button type="button" autoFocus disabled={changeSharing.isPending} onClick={() => detachDialog.current?.close()} className="cc-outline">

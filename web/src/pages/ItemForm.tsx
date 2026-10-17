@@ -9,6 +9,8 @@ import { usePhotoSelection } from '../lib/usePhotoSelection'
 import { PhotoPreview } from '../components/PhotoPreview'
 import { invalidateRequestViews } from '../lib/requests'
 import { LoadingStatus, Shimmer } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 type ItemFormProps = {
   cacheId: string | null
@@ -21,6 +23,7 @@ type ItemFormProps = {
 
 export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = false }: ItemFormProps) {
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   const { me } = useAuth()
   const [title, setTitle] = useState(item?.title ?? '')
   const [description, setDescription] = useState(item?.description ?? '')
@@ -53,7 +56,8 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
         body: itemChanges,
       }, () => setSaveSnapshot({ ...saveProgress.current }))
     },
-    onSuccess: persisted => onSaved(persisted),
+    onSuccess: persisted => { showToast(item ? 'Item saved.' : 'Item added.'); onSaved(persisted) },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: async () => {
       onBusy?.(false)
       await invalidateRequestViews(queryClient)
@@ -209,7 +213,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
         Still to share in: {saveSnapshot.remainingCacheIds.map(id => cachesQuery.data?.find(cache => cache.id === id)?.name ?? 'selected cache').join(', ')}. Already shared caches are kept.
       </p>}
     </div>}
-    {saveItem.isError && <p role="alert" className="cc-form-error">{saveError}</p>}
+    {saveItem.isError && !transientActionFailure(saveItem.error) && <p role="alert" className="cc-form-error">{saveError}</p>}
     {(embedded || saveSnapshot?.item) && <div className="cc-item-save-actions" data-recovery={saveItem.isError && !!recoveryAction}>
       <button type="submit" disabled={submitDisabled} className="cc-profile-primary">{saveItem.isPending ? 'Saving…' : submitLabel}</button>
       {recoveryAction}

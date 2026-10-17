@@ -709,6 +709,13 @@ dialog::backdrop {
 
 .cc-toast-region {
   position: fixed;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  right: auto;
+  bottom: auto;
   z-index: 1100;
   top: calc(12px + env(safe-area-inset-top,0px));
   left: 50%;
@@ -729,6 +736,17 @@ dialog::backdrop {
   text-align: center;
   overflow-wrap: anywhere;
   animation: cc-toast-enter 160ms ease-out;
+}
+
+.cc-toast-region::backdrop {
+  background: transparent;
+  pointer-events: none;
+}
+
+.cc-toast-error {
+  background: var(--cc-bad-bg);
+  color: var(--cc-bad);
+  border: 1px solid currentColor;
 }
 
 @keyframes cc-toast-enter {

@@ -10,6 +10,7 @@ import { Toast, type useToast } from '../components/Toast'
 import * as caches from './caches'
 import { apiFetch, errorMessage } from './api'
 import { shareInvite } from './invites'
+import { transientActionFailure } from './feedback'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
@@ -18,7 +19,7 @@ function page(name: 'CachePage' | 'CacheSettingsPage') {
   const cache = { id: cacheId, name: 'Tools', owner_id: 'owner', requires_approval: false, invite_token: `${cacheId}.${'A'.repeat(43)}`, members: [{ user_id: 'owner', display_name: 'Owner', attached_item_count: 0 }] }
   const elements: ReactElement<Record<string, unknown>>[] = []
   let notice: ReturnType<typeof useToast>['toast'] = null
-  const showToast = vi.fn((message: string) => { notice = { message, sequence: (notice?.sequence ?? 0) + 1 } })
+  const showToast = vi.fn((message: string, tone: 'success' | 'error' = 'success') => { notice = { message, tone, sequence: (notice?.sequence ?? 0) + 1 } })
   const record = (factory: typeof jsx) => (...args: Parameters<typeof jsx>) => { const node = factory(...args) as ReactElement<Record<string, unknown>>; elements.push(node); return node }
   const Null = () => null
   const modules: Record<string, unknown> = {
@@ -30,6 +31,7 @@ function page(name: 'CachePage' | 'CacheSettingsPage') {
       useMutation: () => ({ isPending: false, isError: false, isSuccess: false, reset: vi.fn(), mutate: vi.fn() }),
     },
     '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }) },
+    '../lib/feedback': { transientActionFailure },
     '../lib/api': { apiFetch, errorMessage }, '../lib/caches': caches, '../lib/invites': { shareInvite }, '../lib/requests': {},
     './OnboardingPage': { OnboardingPage: Null }, './AddItemSheet': { AddItemSheet: Null }, './JoinRequests': { JoinRequests: Null },
     '../components/Toast': { Toast, useToast: () => ({ toast: notice, showToast, dismissToast: () => { notice = null } }) },
@@ -49,7 +51,7 @@ function page(name: 'CachePage' | 'CacheSettingsPage') {
   vi.stubGlobal('location', { origin: 'https://communalcache.com' })
   function render() {
     elements.length = 0
-    return renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(module.exports[name])))
+    return renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(React.Fragment, null, createElement(module.exports[name]), createElement(Toast, { toast: notice }))))
   }
   render()
   return {
@@ -83,6 +85,7 @@ it.each(['CachePage', 'CacheSettingsPage'] as const)('%s keeps copy failures vis
   screen.copy()
   await vi.waitFor(() => expect(screen.showToast).toHaveBeenCalledOnce())
   expect(screen.showToast.mock.calls[0][0]).toContain('Could not')
+  expect(screen.showToast.mock.calls[0][1]).toBe('error')
   expect(screen.render()).toContain('cc-toast-message')
   expect(screen.render()).not.toContain('Invite copied.')
 })
