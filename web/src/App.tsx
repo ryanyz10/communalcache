@@ -9,6 +9,7 @@ import { ItemPage } from './pages/ItemPage'
 import { ItemEditorPage } from './pages/ItemEditorPage'
 import { JoinPage } from './pages/JoinPage'
 import { LoginPage } from './pages/LoginPage'
+import { LegalPage } from './pages/LegalPage'
 import { MagicLinkPage } from './pages/MagicLinkPage'
 import { RequestsPage } from './pages/RequestsPage'
 import { RequestDetailPage } from './pages/RequestDetailPage'
@@ -24,6 +25,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false,
 export function Ready({ children }: { children: ReactNode }) {
   const { ready, error } = useAuth()
   const { pathname } = useLocation()
+  if (pathname === '/privacy' || pathname === '/terms') return children
   if (!ready) {
     if (!hasSessionHint() || pathname === '/login' || pathname === '/auth/link' || pathname.startsWith('/join/')) return <main className="cc-neutral-loading" aria-busy="true"><LoadingStatus label="Loading…" /></main>
     return <div className="cc-app-shell"><AppHeader loading /><RouteSkeleton pathname={pathname} /></div>
@@ -34,6 +36,8 @@ export function Ready({ children }: { children: ReactNode }) {
 
 export function AppRoutes() {
   return <Routes>
+    <Route path="/privacy" element={<LegalPage policy="privacy" />} />
+    <Route path="/terms" element={<LegalPage policy="terms" />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/auth/link" element={<MagicLinkPage />} />
     <Route path="/join/:token" element={<JoinPage />} />
