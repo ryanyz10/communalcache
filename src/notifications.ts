@@ -13,20 +13,33 @@ export function escapeHtml(value: string) {
 export function notificationContent(row: OutboxRow, appBaseUrl: string) {
   const data = JSON.parse(row.payload) as Record<string, unknown>
   const titles: Record<string, string> = {
-    join_requested: 'A neighbor asked to join your cache', join_approved: 'Your join request was approved',
-    join_rejected: 'Your join request was declined', request_created: 'A neighbor asked to use your item',
-    request_approved: 'Your item request was approved', request_rejected: 'Your item request was declined',
-    item_deleted: 'An item you requested was deleted', member_removed: 'A request was closed after a member left',
+    join_requested: 'A neighbor asked to join your cache',
+    join_approved: 'Your join request was approved',
+    join_rejected: 'Your join request was declined',
+    request_created: 'A neighbor asked to use your item',
+    request_approved: 'Your item request was approved',
+    request_rejected: 'Your item request was declined',
+    item_deleted: 'An item you requested was deleted',
+    member_removed: 'A request was closed after a member left',
   }
   const subject = titles[row.kind]
-  if (!subject || data.event !== row.kind || typeof data.recipient_id !== 'string' || !data.recipient_id || typeof data.cache_id !== 'string' || !uuid.test(data.cache_id) || typeof data.cache_name !== 'string') throw new Error('Invalid notification payload')
+  if (
+    !subject || data.event !== row.kind || typeof data.recipient_id !== 'string' || !data.recipient_id ||
+    typeof data.cache_id !== 'string' || !uuid.test(data.cache_id) || typeof data.cache_name !== 'string'
+  ) throw new Error('Invalid notification payload')
   const itemId = typeof data.item_id === 'string' && uuid.test(data.item_id) ? data.item_id : null
   const requestId = typeof data.request_id === 'string' && uuid.test(data.request_id) ? data.request_id : null
-  const path = row.kind === 'request_approved' && requestId ? `/requests/${requestId}`
-    : row.kind === 'request_rejected' && data.item_detached === true ? '/requests'
-    : ['join_rejected', 'member_removed'].includes(row.kind) ? '/' : itemId && row.kind !== 'item_deleted' ? `/caches/${data.cache_id}/items/${itemId}` : `/caches/${data.cache_id}`
+  let path: string
+  if (row.kind === 'request_approved' && requestId) path = `/requests/${requestId}`
+  else if (row.kind === 'request_rejected' && data.item_detached === true) path = '/requests'
+  else if (['join_rejected', 'member_removed'].includes(row.kind)) path = '/'
+  else if (itemId && row.kind !== 'item_deleted') path = `/caches/${data.cache_id}/items/${itemId}`
+  else path = `/caches/${data.cache_id}`
+
   const base = new URL(appBaseUrl)
-  if (base.origin !== appBaseUrl || (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(base.hostname)))) throw new Error('Invalid app origin')
+  if (base.origin !== appBaseUrl || (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(base.hostname)))) {
+    throw new Error('Invalid app origin')
+  }
   const link = new URL(path, base).href
   const lines = [subject, `Cache: ${data.cache_name}`]
   if (typeof data.item_title === 'string') lines.push(`Item: ${data.item_title}`)
@@ -70,7 +83,8 @@ async function sendNotification(env: Env, row: OutboxRow, signal: AbortSignal) {
   const subscriptions = (await pushSubscriptions(env.DB, content.recipientId)).results
   signal.throwIfAborted()
   if (subscriptions.length > 3) throw new Error('Push subscription limit exceeded')
-  let live = false, failed = false
+  let live = false
+  let failed = false
   for (const subscription of subscriptions) {
     try {
       const result = await sendPush(env, subscription, { title: content.subject, body: content.pushBody, path: content.path }, signal)
@@ -105,8 +119,14 @@ export async function consumeNotifications(batch: MessageBatch<unknown>, env: En
   // ponytail: three rows with up to three browsers each leave room for D1 and provider binding calls.
   for (let index = 0; index < batch.messages.length; index++) {
     const message = batch.messages[index]
-    if (typeof message.body !== 'string' || !uuid.test(message.body)) { message.ack(); continue }
-    if (index >= 3) { message.retry({ delaySeconds: 60 }); continue }
+    if (typeof message.body !== 'string' || !uuid.test(message.body)) {
+      message.ack()
+      continue
+    }
+    if (index >= 3) {
+      message.retry({ delaySeconds: 60 })
+      continue
+    }
     try {
       const result = await deliverNotification(env, message.body)
       if (result === 'ack') message.ack()
