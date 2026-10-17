@@ -87,7 +87,7 @@ async function sendNotification(env: Env, row: OutboxRow, signal: AbortSignal) {
   let failed = false
   for (const subscription of subscriptions) {
     try {
-      const result = await sendPush(env, subscription, { title: content.subject, body: content.pushBody, path: content.path }, signal)
+      const result = await sendPush(env, subscription, { title: content.subject, body: content.pushBody, path: content.path, recipient_id: content.recipientId }, signal)
       if (result === 'sent') live = true
     } catch {
       signal.throwIfAborted()

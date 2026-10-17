@@ -16,7 +16,7 @@ export class ApiError extends Error {
 
 export type Me = { id: string; email: string; display_name: string | null; cat_coat?: CatCoat | null; profile_photo_version?: string | null }
 
-type ApiOptions = { method?: string; body?: unknown; turnstileToken?: string; headers?: Record<string,string> }
+type ApiOptions = { method?: string; body?: unknown; turnstileToken?: string; headers?: Record<string,string>; signal?: AbortSignal }
 
 export function turnstileHeaders(token: string) {
   if (!token.trim() || token.length > 2048) throw new ApiError(403, 'turnstile_failed')
@@ -27,6 +27,7 @@ export async function apiFetch<T>(path: string, opts: ApiOptions = {}): Promise<
   const res = await fetch(path, {
     method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
     credentials: 'same-origin',
+    ...(opts.signal ? { signal: opts.signal } : {}),
     headers: { Accept: 'application/json', ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.turnstileToken !== undefined ? turnstileHeaders(opts.turnstileToken) : {}), ...opts.headers },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   })

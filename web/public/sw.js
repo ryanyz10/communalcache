@@ -14,9 +14,23 @@ self.addEventListener('push', event => {
   let data = {}
   try { data = event.data?.json() ?? {} } catch { /* A malformed payload still gets a visible notification. */ }
   if (!data || typeof data !== 'object') data = {}
-  const title = typeof data.title === 'string' ? data.title.slice(0, 120) : 'Communal Cache'
-  const body = typeof data.body === 'string' ? data.body.slice(0, 2000) : 'Open Communal Cache to see what changed.'
-  event.waitUntil(self.registration.showNotification(title, { body, icon: '/favicon.svg', data: { path: notificationPath(data.path) } }))
+  event.waitUntil((async () => {
+    let matches = false
+    try {
+      const cache = await caches.open('communalcache-push-account')
+      const account = await cache.match('/__push-account')
+      const userId = await account?.text()
+      if (typeof data.recipient_id === 'string' && data.recipient_id && data.recipient_id === userId) {
+        // A stale tab must not turn an old cached identity into notification permission.
+        const response = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(5000) })
+        matches = response.ok && (await response.json()).id === userId
+      }
+    } catch { /* Missing identity, offline or failed checks always use generic text. */ }
+    const title = matches && typeof data.title === 'string' ? data.title.slice(0, 120) : 'Communal Cache'
+    const body = matches && typeof data.body === 'string' ? data.body.slice(0, 2000) : 'You have an update in Communal Cache'
+    const path = matches ? notificationPath(data.path) : '/'
+    await self.registration.showNotification(title, { body, icon: '/favicon.svg', data: { path } })
+  })())
 })
 
 self.addEventListener('notificationclick', event => {
