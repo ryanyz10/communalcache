@@ -109,7 +109,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 5c | Fluid responsive layout | Implemented; in review: full-bleed Home/cache sky and repeated terrain, shared clamp gutters/1920px content cap, intrinsic card grids, readable 72ch prose/forms, room-aware cache sidebar and integer 3–7px artwork above 640px. 390px phone visuals are unchanged; 449–639px keeps phone content geometry while extending only decorative background bands. Native viewport receipts stay in the PR body. No API/dependency changes. |
 | Readiness 6 | Turnstile and bot setup | Implemented; in review: one strict Worker siteverify guard for magic-link/OTP sends and cache creation, explicit action/theme widgets, one-use token reset and fail-closed errors. Owner-approved shared public sitekey with separate staging/production hostname lists; secrets remain owner-managed. Real-token staging validation pending after deploy; Bot Fight Mode remains separate. |
 | Readiness 7 | Google sign-in | Implemented; in review, stacked on Readability 9: conditional Better Auth 1.7.7 Google provider and branded sign-in/invite button; exact-Origin social POST and state/PKCE GET callback only. Explicit fresh Google verified-email gate plus verified local email for linking; no imported name/photo, no stored OAuth tokens, existing onboarding and pending invite return preserved. Mocked Google token endpoint + real-D1 and UI tests cover admission/linking/denial, callbacks/cookies/PKCE, feature hiding and errors. Public client ID/registered redirects supplied; staging secret owner-reported, production secret/live smoke remain owner-managed. Apple deferred; no remote operation or release approval. |
-| Readiness 8 | Owner admin | not started — needs owner setup; Access + Worker JWT verification + allowlisted app user ID; names/IDs only, plan/usage/failed-outbox/suspend controls |
+| Readiness 8 | Owner admin | Implemented; in review, stacked on Google sign-in: /admin HTML and every backing API require Worker-verified RS256 Access issuer/JWKS/audience/time plus a current allowlisted D1 app session, including alternate hosts. Names/IDs-only paginated operational tables, counts/backlog and same-write session/policy-guarded user/cache plan editing. Staging public settings supplied; production allowlist empty, local/default unset. Real-D1/generated-key tests cover denials, privacy, policy/downgrade and session revocation; existing matrix/response cells stay frozen with admin-only additions. Suspension and classified delivery errors are deferred; unavailable error class is null / Not recorded. No migration, dependency, remote operation or release approval. |
 | Readiness 9 | Supporter tips link | Implemented; in review: owner-approved Buy Me a Coffee anchor on Account and quiet signed-in/landing footers, one URL constant, new-tab noopener/noreferrer. No provider script/widget/iframe, tracking params, webhooks, payment storage or unlocks; hidden when unconfigured. |
 | Readiness | Signed-out landing page | Implemented; in review: public `/` uses the cozy landing mock and shared pixel art, centralized copy/metadata and sign-in CTAs. Session resolution gates rendering; signed-in Home and invite/magic-link paths are unchanged. No new dependencies or public cache data. |
 | Fix | Invite sign-in continuity / paste-to-join | Implemented; in review: strict invite callback survives magic-link tab changes, one-hour session/local intent fallback, clear-on-join/sign-out/expiry, and Home paste sheet. Explicit Continue + Join and gated pending flow remain; general same-origin callback contract is preserved. |
@@ -637,7 +637,7 @@ flows, state/callback/CSRF/replay failures, session revocation/profile gates and
 account switching. After owner setup, approved live Google callback/linking and
 fallback receipts; no real provider setup inferred from local test success.
 
-### Readiness 8 — Owner admin (needs owner setup)
+### Readiness 8 — Owner admin (implemented; live Access smoke pending)
 
 Owner supplies Cloudflare Access policy/JWT settings and exact allowlisted app
 user IDs. Guard `/admin` and **every backing API** with Access plus Worker JWT
@@ -654,9 +654,13 @@ not permission to expose item-owner library or request-party contact data.
 
 **Proving checks:** invalid signature/issuer/audience/time/config and missing app
 session/ID tests, direct alternate-origin API attempts, CSRF and exact-target plan
-writes; denied access has zero effects. Names/IDs-only query/response snapshots,
-suspension enforcement and operational-data redaction tests. Live Access policy
-and direct-API deny receipts need separately approved owner setup.
+writes; denied access has zero effects. Names/IDs-only query/response snapshots
+and operational-data redaction tests. The current slice deliberately exposes no
+suspension action; its complete server-side enforcement remains a follow-up gate.
+Failed-outbox error_class is null / Not recorded because delivery does not persist
+classifications; no payload inference or notification/schema change is included.
+Live Access policy and direct-API deny receipts remain owner-run after approved
+merge/deploy; supplied public config is not a live acceptance receipt.
 
 ### Readiness 9 — Supporter tips (implemented)
 

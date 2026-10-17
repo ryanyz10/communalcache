@@ -209,7 +209,10 @@ open_requests 20, photos_per_item 1 and profile_photos 1. Plus keeps owned_cache
 cache_members 100; every other value intentionally equals free until the owner
 decides otherwise. Migration 0013's profile-photo endpoint now consumes the
 profile_photos allowance in its guarded finalization.
-There is no plan UI, upgrade flow, billing or automatic assignment job.
+There is no user-facing plan UI, upgrade flow, billing or automatic assignment job.
+The private owner admin now supports the same exact-target manual assignments;
+see [Private owner admin](#private-owner-admin-live-access-smoke-pending). The
+commands below remain an approval-gated operator alternative.
 
 **No remote plan command is run by this feature PR.** The owner must approve each
 exact environment/database, cache/user UUID, previous plan and target plan before
@@ -342,6 +345,85 @@ signin@send.communalcache.com on verified send.communalcache.com; domain ownersh
 alone is not verification. Auth success does not prove notification delivery.
 No legacy Supabase Auth/SMTP/provider settings change with this target.
 
+### Private owner admin (live Access smoke pending)
+
+`/admin` and `/api/admin/*` require **both** a valid Cloudflare Access assertion
+and a current D1 app session on the exact owner-supplied ADMIN_USER_IDS allowlist.
+No navigation link advertises the page. The SPA HTML paths are in
+`assets.run_worker_first`, so static asset serving cannot bypass the Worker gate.
+The Worker performs the same checks on custom domains and alternate workers.dev
+hosts, not only behind the edge policy. Missing config/assertion/app session or a
+non-allowlisted ID returns private/no-store JSON 404, including admin OPTIONS.
+Admin mutations also require Origin exactly APP_BASE_URL; valid admins with a bad
+Origin receive 403. Authorization failures never expose an admin login bypass.
+
+Only `Cf-Access-Jwt-Assertion` is accepted. There is **no CF_Authorization cookie
+fallback**, email/header-identity comparison or impersonation route. WebCrypto
+checks RS256 against the fixed configured team's `/cdn-cgi/access/certs` JWKS,
+with manual redirects and a five-second timeout. Issuer and environment audience
+must match, exp is required, nbf is checked when present, with 30 seconds of clock
+skew. Token-supplied iss/jku/x5u never chooses an outbound URL. Public keys are
+fetched fresh for this low-traffic owner tool; a bounded public-key cache is a
+possible later optimization, not a cached authorization grant.
+
+Public configuration (not secrets):
+
+| Environment | CF_ACCESS_TEAM_DOMAIN | CF_ACCESS_AUD | ADMIN_USER_IDS |
+| --- | --- | --- | --- |
+| local/default | unset | unset | unset — disabled |
+| staging | https://cool-hill-c184.cloudflareaccess.com | 2b600fcaf92b0e490eaf51becb083fae422aeeb97df2e6ddcdc0c86952477ade | 1afaa0f3-6c78-430f-ad4c-60e86c976bc6 |
+| production | https://cool-hill-c184.cloudflareaccess.com | 2f87c35679b9acffa9f9ca447ced84fa2a498fcd90626b86fd7a6b01a76afbea | empty — disabled until owner app signup |
+
+Owner-supplied Access setup covers all of the staging Worker and production
+`admin*` / `api/admin*` paths. These facts are configuration inputs, not independent
+live policy verification. No Access/account/resource/secret command runs in this
+PR. Tests inject generated RSA keys and mock JWKS; local/default stays disabled.
+The local UI fixture is presentation-only, never an authorization bypass in the
+application.
+
+The API shows names/IDs, plans, live counts vs the single plan_limits policy,
+outbox backlog age and failed-outbox IDs/kinds/timestamps/attempts only. It never
+selects authentication/contact email columns or raw outbox/contact contents.
+Better Auth authenticates only the caller's own session; no returned admin data
+contains its user/session object. Each operational SQL statement rechecks the
+current session, and each exact-target plan UPDATE also requires the requested
+plan in plan_limits. Free/plus downgrade changes only the plan field; no data,
+reservation or attachment is deleted. No SQL is accepted from the browser.
+
+The existing delivery schema has no error classification: error_class is NULL and
+the table says **Not recorded**. Classified delivery metadata is deferred rather
+than inferred from private payloads. Suspension is also deferred: there is no
+suspend endpoint/control until its effects are enforced across all server-side
+reads/writes/sessions. No audit table or migration was required by this slice.
+
+After approved merge and successful staging deploy:
+
+1. Open https://communalcache-staging.ryanyz10-be6.workers.dev and complete the
+   owner Cloudflare Access challenge, then sign in to the app as the allowlisted
+   staging account. Access login alone is insufficient; app sign-in alone is also
+   insufficient. Do not copy JWTs/cookies into a PR or a screenshot.
+2. Open https://communalcache-staging.ryanyz10-be6.workers.dev/admin by URL.
+   Check overview, Caches, Users and Failed outbox, including page controls and
+   phone horizontal table scrolling. Confirm only names/IDs/scoped metadata show.
+3. On an approved staging test cache/user, record the UUID/current plan, select
+   plus and Save, then Refresh and confirm plan and displayed quotas. Restore the
+   original plan. Existing items/memberships/requests must remain intact.
+4. Sign out of the app and retry /admin and its APIs (404). With Access still
+   signed in, use a non-allowlisted app account and retry (404). Verify a direct
+   alternate-host API call lacking the Access assertion is also 404; do not expose
+   JWT/cookie material while collecting this receipt.
+5. Record exact revision/environment/browser results. Edge access, real JWKS and
+   account setup need this owner-run receipt; local tests are not live acceptance.
+
+To enable production later, the owner first signs up normally on production,
+completes onboarding and obtains **their own app user ID** from authenticated
+`GET /api/me`. Approve only that UUID (no email matching and no staging-ID copy).
+Update `env.production.vars.ADMIN_USER_IDS` in a reviewed code/config change and
+perform the separately approved production deployment. Leave it empty until then;
+no bootstrap admin endpoint or automatic enrollment exists. Policy/allowlist
+changes, production rollout and final parity/security/release approvals remain
+separate.
+
 ### Google sign-in (owner-managed credentials; live smoke pending)
 
 Google is configured only when both GOOGLE_CLIENT_ID (public Worker var) and
@@ -449,7 +531,8 @@ push/production CPU require separately approved proof.
 ### Public values and secret handling
 
 Public: APP_BASE_URL, BETTER_AUTH_URL, VAPID_PUBLIC_KEY, EMAIL_FROM,
-TURNSTILE_SITE_KEY, GOOGLE_CLIENT_ID and environment-local TURNSTILE_HOSTNAMES;
+TURNSTILE_SITE_KEY, GOOGLE_CLIENT_ID, CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD,
+ADMIN_USER_IDS and environment-local TURNSTILE_HOSTNAMES;
 /api/config exposes only intended public fields (Google availability, not credentials).
 Secrets: BETTER_AUTH_SECRET, RESEND_API_KEY, VAPID_PRIVATE_KEY, TURNSTILE_SECRET
 and GOOGLE_CLIENT_SECRET, explicitly passed as Worker bindings. No target DATABASE_URL,
