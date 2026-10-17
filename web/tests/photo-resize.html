@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Native photo resize proof</title>
+<style>body{font:16px system-ui;max-width:900px;margin:24px auto;padding:16px}img{width:240px;height:180px;object-fit:contain;background:#eee;border-radius:16px}pre{white-space:pre-wrap}</style>
+<h1>Native photo resize proof</h1>
+<p>Development-only codec fixtures, not real camera photos. Run the UI fixture with UI_FIXTURE_DEV=1, then open /tests/photo-resize.html.</p>
+<label>Try a camera or library image <input id="photo-file" type="file" accept="image/*"></label>
+<pre id="picked-file" role="status"></pre>
+<div id="results" role="status">Preparing fixtures…</div>
+<script type="module">
+import { MAX_RESIZED_PHOTO_BYTES, resizePhoto } from '/src/lib/photos.ts'
+const results = document.querySelector('#results'), urls = []
+window.addEventListener('pagehide', () => urls.forEach(url => URL.revokeObjectURL(url)))
+function encode(canvas, type, quality) {
+  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Fixture encoding failed')), type, quality))
+}
+async function check(label, original, expected) {
+  const photo = await resizePhoto(original), decoded = await createImageBitmap(photo)
+  const record = { label, inputBytes: original.size, outputBytes: photo.size, type: photo.type, width: decoded.width, height: decoded.height }
+  decoded.close()
+  if ((expected && (record.width !== expected[0] || record.height !== expected[1])) || Math.max(record.width, record.height) > 1600 || record.type !== 'image/jpeg' || record.outputBytes > MAX_RESIZED_PHOTO_BYTES) throw new Error(JSON.stringify(record))
+  const url = URL.createObjectURL(photo)
+  urls.push(url)
+  const section = document.createElement('section'), text = document.createElement('pre'), image = document.createElement('img')
+  text.textContent = JSON.stringify(record, null, 2)
+  image.src = url; image.alt = label
+  section.append(text, image); results.append(section)
+}
+document.querySelector('#photo-file').onchange = async event => {
+  const file = event.target.files[0], picked = document.querySelector('#picked-file')
+  if (!file) return
+  picked.textContent = JSON.stringify({name:file.name, type:file.type, size:file.size})
+  try {
+    picked.textContent += '\n' + JSON.stringify({readableBytes:(await file.arrayBuffer()).byteLength})
+    await check('Picked image', file)
+    picked.textContent += '\nNative decoding succeeded.'
+  } catch (error) { picked.textContent += '\n' + error.name + ': ' + error.message }
+}
+try {
+  results.textContent = ''
+  const canvas = document.createElement('canvas'), context = canvas.getContext('2d')
+  canvas.width = 4032; canvas.height = 3024
+  const gradient = context.createLinearGradient(0, 0, 4032, 3024)
+  gradient.addColorStop(0, '#83b8ca'); gradient.addColorStop(.5, '#6f9c64'); gradient.addColorStop(1, '#b97e46')
+  context.fillStyle = gradient; context.fillRect(0, 0, 4032, 3024)
+  context.fillStyle = '#f2dfb5'; context.fillRect(600, 600, 1400, 1800)
+  await check('12 MP synthetic scene', new File([await encode(canvas, 'image/jpeg', .95)], 'scene.jpg', {type:'image/jpeg'}), [1600, 1200])
+
+  canvas.width = 1600; canvas.height = 1600
+  const noise = context.createImageData(1600, 1600)
+  let seed = 17
+  for (let index = 0; index < noise.data.length; index += 4) {
+    for (let channel = 0; channel < 3; channel++) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; noise.data[index + channel] = seed >>> 24 }
+    noise.data[index + 3] = 255
+  }
+  context.putImageData(noise, 0, 0)
+  await check('High-detail synthetic noise', new File([await encode(canvas, 'image/png')], 'noise.png', {type:'image/png'}), [1600, 1600])
+
+  canvas.width = 120; canvas.height = 80
+  context.fillStyle = '#83b8ca'; context.fillRect(0, 0, 120, 80)
+  context.fillStyle = '#c67139'; context.fillRect(0, 0, 40, 40)
+  const jpeg = new Uint8Array(await (await encode(canvas, 'image/jpeg', .95)).arrayBuffer())
+  const exif = new Uint8Array([255,225,0,34,69,120,105,102,0,0,73,73,42,0,8,0,0,0,1,0,18,1,3,0,1,0,0,0,6,0,0,0,0,0,0,0])
+  await check('EXIF rotate-90 with empty MIME', new File([jpeg.slice(0, 2), exif, jpeg.slice(2)], 'camera-capture'), [80, 120])
+  const done = document.createElement('p'); done.textContent = '3 native resize checks complete'; results.append(done)
+} catch (error) { results.textContent = 'FAILED: ' + error.message; console.error(error) }
+</script>
+</html>

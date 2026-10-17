@@ -2,11 +2,13 @@ import { ApiError, type Me } from './api'
 import type { Item } from './items'
 
 export const PHOTO_READ_ERROR = "Couldn't read that image, try another."
+export const PHOTO_TOO_LARGE_ERROR = 'That photo is still too large. Try another image.'
+export const MAX_RESIZED_PHOTO_BYTES = 1.5 * 1024 * 1024
 
 export async function resizePhoto(file: File): Promise<Blob> {
   try {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('unsupported')
-    const image = await createImageBitmap(file)
+    if (file.type && !file.type.startsWith('image/')) throw new Error('unsupported')
+    const image = await createImageBitmap(file, { imageOrientation: 'from-image' })
     try {
       if (!image.width || !image.height) throw new Error('empty image')
       const scale = Math.min(1, 1600 / Math.max(image.width, image.height))
@@ -18,11 +20,17 @@ export async function resizePhoto(file: File): Promise<Blob> {
       context.fillStyle = '#fff'
       context.fillRect(0, 0, canvas.width, canvas.height)
       context.drawImage(image, 0, 0, canvas.width, canvas.height)
-      return await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('encoding failed')), 'image/jpeg', 0.85)
-      })
+      for (const quality of [0.8, 0.7, 0.6]) {
+        const photo = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('encoding failed')), 'image/jpeg', quality)
+        })
+        if (photo.size <= MAX_RESIZED_PHOTO_BYTES) return photo
+      }
+      throw new Error(PHOTO_TOO_LARGE_ERROR)
     } finally { image.close() }
-  } catch { throw new Error(PHOTO_READ_ERROR) }
+  } catch (error) {
+    throw new Error(error instanceof Error && error.message === PHOTO_TOO_LARGE_ERROR ? PHOTO_TOO_LARGE_ERROR : PHOTO_READ_ERROR)
+  }
 }
 
 export function uploadPhoto(cacheId: string | null, itemId: string, photo: Blob) {

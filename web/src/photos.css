@@ -1,0 +1,60 @@
+.cc-photo-picker, .cc-owner-photo .cc-photo-picker {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 260px;
+  padding: 12px;
+  border: 1px dashed var(--cc-line);
+  border-radius: 24px;
+  background: var(--cc-card);
+  cursor: pointer;
+}
+
+.cc-photo-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--cc-chip);
+  color: var(--cc-sub);
+}
+
+.cc-photo-preview > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cc-photo-picker strong {
+  font: 600 14px var(--font-body);
+}
+
+.cc-photo-picker > span {
+  color: var(--cc-sub);
+  font: 400 12px var(--font-body);
+}
+
+.cc-photo-picker input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cc-photo-picker:focus-within {
+  outline: 2px solid var(--cc-accent);
+  outline-offset: 3px;
+}
+
+.cc-photo-picker:has(input:disabled) {
+  opacity: .65;
+  cursor: default;
+}

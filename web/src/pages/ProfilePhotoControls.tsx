@@ -3,7 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { Avatar } from '../components/Avatar'
 import { apiFetch, errorMessage } from '../lib/api'
-import { PHOTO_READ_ERROR, resizePhoto, uploadProfilePhoto } from '../lib/photos'
+import { uploadProfilePhoto } from '../lib/photos'
+import { usePhotoSelection } from '../lib/usePhotoSelection'
+import { PhotoPreview } from '../components/PhotoPreview'
 import { refreshProfileViews } from '../lib/profile'
 import { catTraits, COATS } from '../lib/cats'
 import { CoatControls } from './CoatControls'
@@ -13,17 +15,17 @@ export function ProfilePhotoControls() {
   const client = useQueryClient()
   const photoDialog = useRef<HTMLDialogElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
+  const photo = usePhotoSelection()
   const [coatBusy, setCoatBusy] = useState(false)
   const changePhoto = useMutation({
     mutationFn: async (action: 'upload' | 'remove') => {
       if (action === 'remove') return apiFetch<void>('/api/me/photo', { method: 'DELETE' })
-      return uploadProfilePhoto(await resizePhoto(file!))
+      return uploadProfilePhoto(photo.photo!)
     },
     onSuccess: async () => {
       // Refetch identity instead of restoring an upload response after an account change.
       await refreshProfileViews(client)
-      setFile(null)
+      photo.clear()
       if (fileInput.current) fileInput.current.value = ''
       photoDialog.current?.close()
     },
@@ -33,7 +35,7 @@ export function ProfilePhotoControls() {
   const coatName = COATS.find(coat => coat.key === catTraits(me.id, me.cat_coat).coat)!.name
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (file) changePhoto.mutate('upload')
+    if (photo.photo && !photo.processing) changePhoto.mutate('upload')
   }
 
   return <>
@@ -56,28 +58,40 @@ export function ProfilePhotoControls() {
     <dialog
       ref={photoDialog} id="profile-photo-sheet" className="cc-sheet lg:w-[440px] lg:rounded-2xl lg:p-6" aria-labelledby="profile-photo-heading"
       onCancel={event => { if (changePhoto.isPending || coatBusy) event.preventDefault() }}
-      onClose={() => { setFile(null); if (fileInput.current) fileInput.current.value = '' }}
+      onClose={() => { photo.clear(); if (fileInput.current) fileInput.current.value = '' }}
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="profile-photo-heading" className="text-xl font-semibold">Profile photo</h2>
         <button type="button" autoFocus disabled={changePhoto.isPending || coatBusy} className="cc-outline min-h-11" onClick={() => photoDialog.current?.close()}>Close</button>
       </div>
-      <div className="my-5 flex justify-center"><Avatar userId={me.id} name={me.display_name ?? 'You'} photoVersion={me.profile_photo_version} coat={me.cat_coat} size={110} /></div>
+
       <p className="text-sm text-slate-600">Only you and people who share an active cache with you can see it. Your cat when there is none.</p>
       <CoatControls className="cc-photo-coat-mobile" resettable disabled={changePhoto.isPending} onBusy={setCoatBusy} />
       <form className="mt-4 space-y-3" onSubmit={submit}>
-        <label htmlFor="profile-photo-file" className="block text-sm font-medium">Choose a photo</label>
-        <input
-          ref={fileInput} id="profile-photo-file" type="file" accept="image/jpeg,image/png,image/webp" disabled={changePhoto.isPending}
-          onChange={event => { setFile(event.target.files?.[0] ?? null); changePhoto.reset() }}
-          className="block w-full rounded-md border border-slate-300 p-2"
-        />
-        <p className="text-sm text-slate-600">JPEG, PNG or WebP. Resized to at most 1600 pixels; maximum 5 MB after resizing.</p>
-        <button type="submit" disabled={!file || changePhoto.isPending} className="cc-pill min-h-11">{changePhoto.isPending ? 'Saving…' : 'Save photo'}</button>
+        <label htmlFor="profile-photo-file" className="cc-photo-picker">
+          <PhotoPreview src={photo.preview} alt="Selected profile photo preview">
+            <Avatar userId={me.id} name={me.display_name ?? 'You'} photoVersion={me.profile_photo_version} coat={me.cat_coat} size={110} />
+          </PhotoPreview>
+          <strong>{photo.preview ? 'Replace selected photo' : 'Choose a photo'}</strong>
+          <span>Camera or library</span>
+          <input
+            ref={fileInput} id="profile-photo-file" type="file" accept="image/*" disabled={changePhoto.isPending}
+            onChange={event => { void photo.select(event.target.files?.[0] ?? null); changePhoto.reset() }}
+          />
+        </label>
+        {(photo.photo || photo.processing || photo.error) && <button type="button" disabled={changePhoto.isPending} className="cc-profile-secondary" onClick={() => {
+          photo.clear()
+          changePhoto.reset()
+          if (fileInput.current) fileInput.current.value = ''
+        }}>Remove selected photo</button>}
+        {photo.processing && <p role="status">Preparing photo…</p>}
+        {photo.error && <p role="alert" className="cc-form-error">{photo.error}</p>}
+        <p className="text-sm text-slate-600">Resized to at most 1600 pixels and saved as JPEG, targeting 1.5 MB or less.</p>
+        <button type="submit" disabled={!photo.photo || photo.processing || changePhoto.isPending} className="cc-pill min-h-11">{changePhoto.isPending ? 'Saving…' : 'Save photo'}</button>
       </form>
       <button type="button" disabled={!me.profile_photo_version || changePhoto.isPending} onClick={() => changePhoto.mutate('remove')} className="cc-outline mt-3 min-h-11 text-red-800">Remove photo</button>
       {changePhoto.isError && <p role="alert" className="mt-3 text-red-700">
-        {changePhoto.error instanceof Error && changePhoto.error.message === PHOTO_READ_ERROR ? PHOTO_READ_ERROR : errorMessage(changePhoto.error)}
+        {errorMessage(changePhoto.error)}
       </p>}
     </dialog>
   </>
