@@ -198,15 +198,19 @@ it('bounds prefix work to one 100-key page, retaining durable work until a later
   expect(list.mock.calls.filter(call=>call[0]?.limit===100)).toHaveLength(3)
 })
 
-it('advances a two-row cursor past repeatedly failing cleanup so later rows are not starved', async () => {
-  const f = await fixture(), ids = Array.from({length:5},()=>crypto.randomUUID()).sort(), targets: string[] = []
+it('advances a ten-row cursor past repeatedly failing cleanup so later rows are not starved', async () => {
+  const f = await fixture(), ids = Array.from({length:12},()=>crypto.randomUUID()).sort(), targets: string[] = []
   for (const id of ids) {
     const key = `${f.owner.id}/${f.item.id}/${crypto.randomUUID()}`
     targets.push(key);await env.BUCKET.put(key,'orphan');await cleanupIntent(f.owner.id,f.item.id,key,'exact',id)
   }
   const remove = env.BUCKET.delete.bind(env.BUCKET)
   const failure = vi.spyOn(env.BUCKET,'delete').mockImplementation(async key=>{if(key===targets[0])throw new Error('injected cleanup failure');await remove(key)})
-  for(let tick=0;tick<3;tick++)await sweepPhotoCleanup(env)
+  await sweepPhotoCleanup(env)
+  expect(await env.DB.prepare('SELECT cleanup_id FROM r2_cleanup_cursor').first('cleanup_id')).toBe(ids[9])
+  expect((await intents()).results.map(row=>row.id)).toEqual([ids[0],ids[10],ids[11]])
+  await sweepPhotoCleanup(env)
+  expect(await env.DB.prepare('SELECT cleanup_id FROM r2_cleanup_cursor').first('cleanup_id')).toBeNull()
   expect((await intents()).results.map(row=>row.id)).toEqual([ids[0]])
   failure.mockRestore()
   await sweepPhotoCleanup(env)
@@ -222,22 +226,32 @@ it('retains cleanup after external deletion succeeds but its D1 completion fails
   expect(await env.BUCKET.head(key)).toBeNull()
   expect((await intents()).results).toHaveLength(1)
   await env.DB.exec('DROP TRIGGER fail_cleanup_completion')
+  expect((await intents()).results[0].claim_until).not.toBeNull()
+  await env.DB.prepare('UPDATE r2_cleanup SET claim_until=?').bind(Date.now()-1).run()
   await sweepPhotoCleanup(env)
   expect((await intents()).results).toEqual([])
 })
 
-it('bounds each cleanup sweep to seven D1 queries and four R2 calls for two nonempty prefix pages', async () => {
+it('bounds ten nonempty prefix intents to 23 D1 queries and 20 R2 calls', async () => {
   const f = await fixture()
-  for(let index=0;index<2;index++) {
+  for(let index=0;index<10;index++) {
     const item = crypto.randomUUID(), prefix = `${f.owner.id}/${item}/`
     await env.BUCKET.put(prefix+crypto.randomUUID(),'orphan')
     await cleanupIntent(f.owner.id,item,prefix,'prefix')
   }
   const queries = vi.spyOn(env.DB,'prepare'), list = vi.spyOn(env.BUCKET,'list'), remove = vi.spyOn(env.BUCKET,'delete')
   await sweepPhotoCleanup(env)
-  expect(queries).toHaveBeenCalledTimes(7)
-  expect(list).toHaveBeenCalledTimes(2)
-  expect(remove).toHaveBeenCalledTimes(2)
+  expect(queries).toHaveBeenCalledTimes(23)
+  expect(list).toHaveBeenCalledTimes(10)
+  expect(remove).toHaveBeenCalledTimes(10)
+  await env.DB.exec("CREATE TRIGGER fail_page_completion BEFORE DELETE ON r2_cleanup BEGIN SELECT RAISE(ABORT,'injected completion failure'); END")
+  await env.DB.prepare('UPDATE r2_cleanup_cursor SET cleanup_id=NULL').run()
+  queries.mockClear(); list.mockClear(); remove.mockClear()
+  await sweepPhotoCleanup(env)
+  expect(queries).toHaveBeenCalledTimes(23)
+  expect(list).toHaveBeenCalledTimes(10)
+  expect(remove).not.toHaveBeenCalled()
+  expect((await intents()).results.every(row=>row.claim_token!==null)).toBe(true)
 })
 
 it('protects photo mutations with Origin/profile guards and validates uploads before R2 writes', async () => {

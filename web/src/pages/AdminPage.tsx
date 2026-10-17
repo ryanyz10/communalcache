@@ -62,6 +62,7 @@ export function AdminPage() {
       <div><strong>{totals.items}</strong><span>Items</span></div><div><strong>{totals.pending_requests}</strong><span>Pending requests</span></div>
     </section>
     <p className="cc-admin-backlog">Outbox: <b>{totals.outbox_pending}</b> pending · <b>{totals.outbox_failed}</b> failed · oldest pending age: <b>{totals.outbox_oldest_age_ms === null ? 'None' : `${Math.floor(totals.outbox_oldest_age_ms / 60_000)} min`}</b></p>
+    <p className="cc-admin-backlog">Photo cleanup: <b>{totals.cleanup_pending}</b> pending · oldest pending age: <b>{totals.cleanup_oldest_age_ms === null ? 'None' : `${Math.floor(totals.cleanup_oldest_age_ms / 60_000)} min`}</b></p>
     <section aria-labelledby="admin-caches-heading">
       <h2 id="admin-caches-heading">Caches</h2>
       {caches.isPending && <p role="status">Loading caches…</p>}

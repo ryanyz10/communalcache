@@ -56,6 +56,7 @@ export function errorMessage(error: unknown) {
     return error.limit && Object.hasOwn(messages,error.limit) ? messages[error.limit] : 'Limit reached: this action exceeds the current allowance.'
   }
   if (error.code === 'limits_unavailable') return 'Could not check the limits. Please try again later.'
+  if (error.status === 429 && error.limit === 'photo_upload') return 'Too many photo uploads, try again later.'
   if (error.status === 429) return error.retryAfter ? `Too many tries. Please wait ${error.retryAfter} seconds and try again.` : 'Too many tries. Please wait a minute and try again.'
   if (error.code === 'turnstile_failed') return 'Bot check failed or expired. Please complete the new check and try again.'
   if (error.code === 'email_unavailable') return 'Could not send the sign-in email. Your invite is saved; please try again.'

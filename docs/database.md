@@ -142,12 +142,21 @@ approval does not clear it. No current-holder/return table or new request status
   from guarded domain batches. Snapshot payloads survive deletion.
 - `push_subscriptions`: current unique endpoint, user_id, p256dh/auth, ID and
   created_at. Registration ID rotates on refresh/account reassignment.
-- `write_limits`: current four reusable per-user route counters; guarded UPSERT,
-  no isolate-memory limit. Auth/profile/origin failures do not count; attempts
-  including later invalid-body/authorization failures do. Existing route budgets:
-  join 10/min, join decisions 30/min, requests 20/min, decisions 60/min. Fixed
-  windows may admit twice the budget across a boundary. Rejected attempts do not
-  update rows. JSON 429 with 1–60s Retry-After; fail closed on D1 failure.
+- `write_limits`: five reusable per-user route counters; guarded UPSERT,
+  no isolate-memory limit. Join 10/min, join decisions 30/min, requests 20/min
+  and decisions 60/min retain their existing windows. The shared `photo_upload`
+  budget admits 20 attempts per fixed clock hour across profile, private-item and
+  cache-item upload routes, before body reading or any R2 put. Photo attempts
+  count after auth/profile/Origin and applicable item-ownership checks, including
+  later invalid images or failed finalization. GET/remove do not consume it.
+  These are code-constant abuse budgets, not plan entitlements; `plan_limits`
+  remains the sole authority for current-photo slots and other plan quotas.
+  Fixed windows can admit twice the allowance across a boundary (40 photo
+  attempts), not a strict rolling-hour guarantee. Rejected admission does not
+  update the row. JSON 429 has Retry-After (1–60s, or 1–3600s for photos); photo
+  errors add stable `limit: 'photo_upload'` with clear retry-later UI copy.
+  Admission fails closed on D1 failure; post-R2 ownership/policy/cleanup guards
+  remain unchanged.
 - `notification_sync_cursor`: bounded fair outbox rescue cursor, not event state.
   Retain/rename only via reviewed migration; the name does not imply target DO sync.
 
@@ -177,9 +186,22 @@ deletion until empty (a cursor over a changing key set can skip keys). Persist a
 fair cleanup scan cursor if needed so repeated failures cannot starve later IDs.
 External duplicates are harmless; cleanup must not delete a currently referenced
 photo. No finite retry budget silently abandons cleanup. The current sweep uses
-90-second leases, two cursor-paged intents/tick and one 100-key prefix page per
-intent. Local tests prove retry/claim/cursor behavior; production throughput and
-combined resource fit remain unverified.
+90-second leases, ten cursor-paged intents/tick and one 100-key prefix page per
+intent. Each intent gets at most one D1 completion/release call: a failed
+completion retains its lease and retries after expiry, rather than spending a
+second repair call. The page is bounded to 23 D1 calls and at most 20 R2 calls;
+notification rescue adds three D1 calls and at most one Queue batch, for 47
+binding calls in the combined worst normal prefix-page sweep. Query/call bounds
+are tested locally, not a production CPU/throughput certification.
+
+Ten successful exact-key deletions per five-minute tick can drain 120 intents
+per hour, versus 20 admitted attempts/hour per user (up to 100 MiB/hour at the
+5 MiB cap, plus a fixed-window boundary burst). This reduces individual churn;
+it is **not a hard global byte/backlog cap**. Many active users or R2 deletion
+outages can still outpace recovery. Admin overview exposes cleanup count/oldest
+age without keys or payloads; monitor capacity before release. A hard aggregate
+cap or reservation/orphan ledger remains a separate design, not silently added
+here. Pre-finalization crashes can still leave unknown objects as below.
 
 Profile cleanup uses exact `users/{owner_id}/{uploadUUID}` keys, item_id=NULL
 and scope=profile. Replacement/removal snapshots old keys in the same token batch
@@ -380,6 +402,11 @@ claims and the separate cursor. Old item writers keep the default item scope.
 Profile finalization checks user + current plan allowance and a fresh token;
 removal snapshots cleanup before deleting the pointer. No auth-core schema,
 binding, dependency, public bucket or signed URL changes.
+
+Migration **0016_photo_upload_limit** rebuilds only `write_limits` to extend its
+route CHECK with `photo_upload`, preserving all old counters and its user cascade.
+It also indexes cleanup creation time for oldest-age metadata. It changes no plan
+limits, auth challenges, photo pointer/finalization or durable cleanup contents.
 
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Do not point it at legacy `internal/db/migrations/`.
