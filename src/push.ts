@@ -41,7 +41,7 @@ export async function pushSubscription(body: Record<string, unknown>) {
   return { endpoint, p256dh: keys.p256dh as string, auth: keys.auth as string }
 }
 
-export async function sendPush(env: Env, row: PushRow, message: { title: string; body: string; path: string }, signal: AbortSignal) {
+export async function sendPush(env: Env, row: PushRow, message: { title: string; body: string; path: string; recipient_id: string }, signal: AbortSignal) {
   const subscription = await pushSubscription({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } })
   signal.throwIfAborted()
   const payload = await buildPushPayload({ data: message, options: { ttl: 300, urgency: 'normal' } }, {

@@ -440,7 +440,13 @@ pending. Clear intent on successful join/cancel/sign-out and discard expired or
 malformed records. A different browser can follow the callback without prior
 storage; Home also offers paste-link/code entry if needed. Pasted HTTP(S) origins
 are discarded and only the validated `/join/<token>` path is opened on this app.
-Account changes still clear private queries and reconcile push registration.
+Account identity resolution is centralized for OTP, magic links and Google return.
+Sign-in/sign-out changes notify other tabs through BroadcastChannel (storage-event
+fallback); peer messages are only revalidation hints. A returned visible tab hides
+private views while `/api/me` is rechecked. Identity changes/logout cancel and clear
+private queries while retaining public config, and reconcile any existing browser
+push registration without requesting permission. An obsolete identity check cannot
+finish push cleanup for a newer account.
 Live mobile mail-client handoff and Resend delivery stay **UNVERIFIED** pending
 approved smoke. SMS remains deferred; a proposal must address provider compliance,
 sender registration, costs, rate limits and pumping protection before provisioning.
@@ -504,8 +510,16 @@ most three registrations/account; stale 410 cleanup matches captured registratio
 ID/user so it cannot erase a refresh/reassignment. Queue consumer processes three
 rows sequentially to bound binding work. Installed PWA + explicit gesture is
 required for iOS permission; render Share → Add to Home Screen instructions.
-Service worker displays push and opens same-origin paths, with no fetch/cache
-handler. Local RFC 8291/VAPID proof does not certify live iOS/provider delivery.
+Push data includes the recipient app user ID, never contact/auth email or a private
+approval message. Cache Storage holds only the browser's current user-ID marker,
+not private API/photo responses or an authorization grant. Before displaying
+identifying text the service worker requires recipient/marker agreement and a
+fresh cookie-authenticated `/api/me` match (five-second bound). Missing/mismatched
+identity, offline or failed checks show generic “You have an update in Communal
+Cache” text linking to Home; this also contains already-in-flight old-account
+messages. Opening a notification still reauthorizes the destination normally.
+The service worker opens only same-origin paths and has no fetch handler/private
+response cache. Local RFC 8291/VAPID proof does not certify live iOS/provider delivery.
 
 ## Routes and screens
 

@@ -205,6 +205,6 @@ it('does not send a captured subscription after it has been removed or reassigne
   const captured = (await pushSubscriptions(env.DB, recipient)).results[0]
   await deletePush(env.DB, recipient, input.endpoint)
   const fetchMock = vi.spyOn(globalThis, 'fetch')
-  expect(await sendPush(pushEnv, captured, { title: 'Notice', body: 'Body', path: '/' }, new AbortController().signal)).toBe('gone')
+  expect(await sendPush(pushEnv, captured, { title: 'Notice', body: 'Body', path: '/', recipient_id: recipient }, new AbortController().signal)).toBe('gone')
   expect(fetchMock).not.toHaveBeenCalled()
 })
