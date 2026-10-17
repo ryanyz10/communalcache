@@ -111,8 +111,29 @@ async function dispatch(request: Request, env: Env) {
   const ownPhoto = path === '/api/me/photo'
   const photoRoute = ownPhoto || !!profilePhotoRoute || itemRoute?.[3] === '/photo' || libraryRoute?.[2] === '/photo'
   if (path !== '/api/me' && path !== '/api/me/summary' && path !== '/api/caches' && path !== '/api/requests' && path !== '/api/push/subscribe' && !cacheRoute && !itemRoute && !requestRoute && !memberRoute && !libraryRoute && !ownRequestRoute && !ownPhoto && !profilePhotoRoute && !ownContactRoute) throw new HttpError(404, 'not_found')
-  const methods = cacheRoute?.[2] === '/invite/preview' || path === '/api/me/summary' ? ['GET'] : ownContactRoute ? (path.endsWith('/preview') ? ['POST'] : ['GET','PUT','DELETE']) : ownRequestRoute && (!ownRequestRoute[2] || ownRequestRoute[2] === 'contact') ? ['GET'] : ownPhoto ? ['GET','POST','DELETE'] : profilePhotoRoute ? ['GET'] : libraryRoute ? (libraryRoute[3] ? ['PUT', 'DELETE'] : libraryRoute[2] || !libraryRoute[1] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE'])
-    : memberRoute ? ['DELETE'] : path === '/api/push/subscribe' ? ['POST', 'DELETE'] : requestRoute || ownRequestRoute ? ['POST'] : path === '/api/requests' ? ['GET'] : itemRoute ? (itemRoute[3] || !itemRoute[2] ? ['GET', 'POST'] : ['GET', 'PATCH', 'DELETE']) : path === '/api/caches' ? ['GET', 'POST'] : cacheRoute?.[2] === '/join-requests' ? ['GET'] : cacheRoute?.[2] ? ['POST'] : ['GET', 'PATCH']
+  let methods: string[]
+  if (cacheRoute?.[2] === '/invite/preview' || path === '/api/me/summary') methods = ['GET']
+  else if (ownContactRoute) {
+    if (path.endsWith('/preview')) methods = ['POST']
+    else methods = ['GET', 'PUT', 'DELETE']
+  } else if (ownRequestRoute && (!ownRequestRoute[2] || ownRequestRoute[2] === 'contact')) methods = ['GET']
+  else if (ownPhoto) methods = ['GET', 'POST', 'DELETE']
+  else if (profilePhotoRoute) methods = ['GET']
+  else if (libraryRoute) {
+    if (libraryRoute[3]) methods = ['PUT', 'DELETE']
+    else if (libraryRoute[2] || !libraryRoute[1]) methods = ['GET', 'POST']
+    else methods = ['GET', 'PATCH', 'DELETE']
+  } else if (memberRoute) methods = ['DELETE']
+  else if (path === '/api/push/subscribe') methods = ['POST', 'DELETE']
+  else if (requestRoute || ownRequestRoute) methods = ['POST']
+  else if (path === '/api/requests') methods = ['GET']
+  else if (itemRoute) {
+    if (itemRoute[3] || !itemRoute[2]) methods = ['GET', 'POST']
+    else methods = ['GET', 'PATCH', 'DELETE']
+  } else if (path === '/api/caches') methods = ['GET', 'POST']
+  else if (cacheRoute?.[2] === '/join-requests') methods = ['GET']
+  else if (cacheRoute?.[2]) methods = ['POST']
+  else methods = ['GET', 'PATCH']
   if (!methods.includes(method)) throw new HttpError(405, 'method_not_allowed')
   const session = await createAuth(env).api.getSession({ headers: request.headers })
   if (!session) throw new HttpError(photoRoute && method === 'GET' ? 404 : 401, photoRoute && method === 'GET' ? 'not_found' : 'unauthorized')
