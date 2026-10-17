@@ -313,7 +313,7 @@ Source: `web/src/App.tsx`, `web/src/auth/AuthProvider.tsx`,
 ## JOIN — Invites and membership admission
 
 Source: `web/src/pages/{JoinPage,JoinInviteSheet,JoinRequests}.tsx`,
-`web/src/lib/{joining,pendingJoin}.ts`, `shared/invites.ts`, `src/db.ts`.
+`web/src/lib/{joining,pendingJoin}.ts`, `shared/invites.ts`, `src/db/`.
 
 | ID / actor / entry | Journey and screen states | API, data effects and edges | Coverage / walk |
 | --- | --- | --- | --- |
