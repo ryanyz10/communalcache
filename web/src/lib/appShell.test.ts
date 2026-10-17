@@ -54,7 +54,7 @@ it('keeps account a real destination, uses authorized photos and hides the shell
 
 it('reserves mobile safe area, uses the exact desktop chrome dimensions and has no route-delay wrapper', () => {
   const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
-  expect(css).toContain('height: 78px; min-height: 78px; padding: 20px 40px')
+  expect(css).toMatch(/height: 78px;\s*min-height: 78px;\s*padding: 20px 40px/)
   expect(css).toContain('calc(84px + env(safe-area-inset-bottom,0px))')
   expect(css).toContain('env(safe-area-inset-left,0px)')
   expect(css).toContain('env(safe-area-inset-top,0px)')
