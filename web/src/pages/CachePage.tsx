@@ -15,6 +15,7 @@ import { Avatar } from '../components/Avatar'
 import { boxColor } from '../components/Box'
 import { MemberCats } from '../components/MemberCats'
 import { Stamp } from '../components/Stamp'
+import { Toast, useToast } from '../components/Toast'
 import { ThingTile, ThingStatus } from '../components/ThingTile'
 import {
   CacheSkeleton, CacheContentsSkeleton, CacheErrorCard, CacheEmptyCard, CacheSettingsIcon,
@@ -23,7 +24,7 @@ import {
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams()
   const { me } = useAuth()
-  const [inviteStatus, setInviteStatus] = useState('')
+  const { toast, showToast } = useToast()
   const [contentsFilter, setContentsFilter] = useState<ContentsFilter>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -83,8 +84,8 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const otherCaches = (cachesQuery.isError ? [] : cachesQuery.data ?? []).filter(row => row.id !== cache.id)
 
   async function shareCacheInvite() {
-    try { setInviteStatus(await shareInvite(new URL(`/join/${cache.invite_token}`, location.origin).href)) }
-    catch { setInviteStatus('Could not share or copy. Open Cache settings to select the invite link.') }
+    try { showToast(await shareInvite(new URL(`/join/${cache.invite_token}`, location.origin).href)) }
+    catch { showToast('Could not share or copy. Open Cache settings to select the invite link.') }
   }
 
   const cacheControls = <>
@@ -243,7 +244,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
       </div>
     </div>
     <div className="cc-cache-phone-controls">{cacheControls}</div>
-    {inviteStatus && <p role="status" className="cc-cache-status">{inviteStatus}</p>}
+    <Toast toast={toast} />
     <div className="cc-contents-layout">
       <section aria-label="Contents" className="cc-contents">{contents}</section>
       <aside className="cc-in-the-box" aria-labelledby="cache-members-heading">
