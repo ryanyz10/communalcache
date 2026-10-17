@@ -10,7 +10,7 @@ const userId = 'ccddeeff-3344-4556-8778-ccddeeffaabb'
 const requestId = 'ddeeffaa-4455-4667-8889-ddeeffaabbcc'
 const cachePath = `/api/caches/${cacheId}`, itemPath = `${cachePath}/items/${itemId}`
 const privateItemPath = `/api/me/items/${itemId}`, requestPath = `/api/me/requests/${requestId}`
-const routingCases: { path: string; outcomes: Record<string, RouteOutcome>; public?: boolean; photo?: boolean; unknown?: boolean }[] = [
+const routingCases: { path: string; outcomes: Record<string, RouteOutcome>; public?: boolean; photo?: boolean; unknown?: boolean; admin?: boolean }[] = [
   { path: '/api/healthz', public: true, outcomes: { GET: [200], HEAD: [200] } },
   { path: '/api/config', public: true, outcomes: { GET: [200], HEAD: [200] } },
   { path: '/api/me', outcomes: { GET: [200], PATCH: [400, 'invalid_display_name'] } },
@@ -60,6 +60,14 @@ const routingCases: { path: string; outcomes: Record<string, RouteOutcome>; publ
   { path: '/api/auth/sign-in/magic-link', public: true, outcomes: { POST: [403, 'turnstile_failed'] } },
   { path: '/api/auth/magic-link/verify', public: true, outcomes: { POST: [400, 'invalid_magic_link'] } },
   { path: '/api/auth/get-session', public: true, outcomes: { GET: [200] } },
+  // Admin is hidden before method/OPTIONS dispatch without both independent grants.
+  { path: '/admin', admin: true, outcomes: {} },
+  { path: '/api/admin/overview', admin: true, outcomes: {} },
+  { path: '/api/admin/caches', admin: true, outcomes: {} },
+  { path: '/api/admin/users', admin: true, outcomes: {} },
+  { path: '/api/admin/failed-outbox', admin: true, outcomes: {} },
+  { path: `/api/admin/caches/${cacheId}/plan`, admin: true, outcomes: {} },
+  { path: `/api/admin/users/${userId}/plan`, admin: true, outcomes: {} },
   // Sign-out comes last so the unnamed caller keeps its D1 session for every prior cell.
   { path: '/api/auth/sign-out', public: true, outcomes: { POST: [200] } },
 ]
@@ -73,7 +81,7 @@ it.each(['signed-out', 'unnamed'] as const)(`preserves ${routeMethodMatrix.lengt
   const cookie = caller === 'unnamed' ? (await login()).cookie : undefined
   for (const { route, path, method } of routeMethodMatrix) {
     const allowed = route.outcomes[method]
-    const expected: RouteOutcome = method === 'OPTIONS' ? [204]
+    const expected: RouteOutcome = route.admin ? [404, 'not_found'] : method === 'OPTIONS' ? [204]
       : route.unknown ? [404, 'not_found'] : !allowed ? [405, 'method_not_allowed']
       : route.public || cookie ? allowed : route.photo && method === 'GET' ? [404, 'not_found'] : [401, 'unauthorized']
     const response = await worker.fetch(appRequest(path, {
@@ -82,7 +90,7 @@ it.each(['signed-out', 'unnamed'] as const)(`preserves ${routeMethodMatrix.lengt
     }), env)
     const label = `${caller}: ${method} ${path}`
     expect(response.status, label).toBe(expected[0])
-    if (method === 'OPTIONS') { expect(await response.text(), label).toBe(''); continue }
+    if (method === 'OPTIONS' && !route.admin) { expect(await response.text(), label).toBe(''); continue }
     expect(response.headers.get('Content-Type'), label).toContain('application/json')
     expect(response.headers.get('Cache-Control'), label).toBe('no-store')
     const body = await response.json()

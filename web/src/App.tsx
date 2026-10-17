@@ -14,6 +14,7 @@ import { MagicLinkPage } from './pages/MagicLinkPage'
 import { RequestsPage } from './pages/RequestsPage'
 import { RequestDetailPage } from './pages/RequestDetailPage'
 import { AccountPage } from './pages/AccountPage'
+import { AdminPage } from './pages/AdminPage'
 import { CacheSettingsPage } from './pages/CacheSettingsPage'
 import { AppHeader } from './components/AppHeader'
 import { RouteSkeleton } from './components/skeletons/RouteSkeleton'
@@ -49,6 +50,7 @@ export function AppRoutes() {
     <Route path="/items/:itemId" element={<ItemPage />} />
     <Route path="/items/:itemId/edit" element={<ItemEditorPage editing />} />
     <Route path="/account" element={<AccountPage />} />
+    <Route path="/admin" element={<AdminPage />} />
     <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
     <Route path="/caches/:cacheId" element={<CachePage />} />
     <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />

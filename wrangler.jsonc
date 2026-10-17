@@ -8,7 +8,7 @@
     "directory": "./web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api", "/api/*", "/join/*", "/auth/link"]
+    "run_worker_first": ["/api", "/api/*", "/join/*", "/auth/link", "/admin", "/admin/*"]
   },
   "vars": {
     "APP_BASE_URL": "https://communalcache.com",
@@ -41,6 +41,9 @@
       "workers_dev": true,
       "vars": {
         "APP_BASE_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
+        "CF_ACCESS_TEAM_DOMAIN": "https://cool-hill-c184.cloudflareaccess.com",
+        "CF_ACCESS_AUD": "2b600fcaf92b0e490eaf51becb083fae422aeeb97df2e6ddcdc0c86952477ade",
+        "ADMIN_USER_IDS": "1afaa0f3-6c78-430f-ad4c-60e86c976bc6",
         "BETTER_AUTH_URL": "https://communalcache-staging.ryanyz10-be6.workers.dev",
         "GOOGLE_CLIENT_ID": "590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleusercontent.com",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",
@@ -68,6 +71,9 @@
       "routes": [{"pattern": "communalcache.com", "custom_domain": true}],
       "vars": {
         "APP_BASE_URL": "https://communalcache.com",
+        "CF_ACCESS_TEAM_DOMAIN": "https://cool-hill-c184.cloudflareaccess.com",
+        "CF_ACCESS_AUD": "2f87c35679b9acffa9f9ca447ced84fa2a498fcd90626b86fd7a6b01a76afbea",
+        "ADMIN_USER_IDS": "",
         "BETTER_AUTH_URL": "https://communalcache.com",
         "GOOGLE_CLIENT_ID": "590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleusercontent.com",
         "EMAIL_FROM": "Communal Cache <signin@send.communalcache.com>",

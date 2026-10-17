@@ -18,6 +18,7 @@ import { pushSubscription } from './push'
 import { requireWriteLimit, type WriteRoute } from './rate-limit'
 import { requireTurnstile } from './turnstile'
 import { isCatCoat, type CatCoat } from '../shared/cat-coats'
+import { serveAdmin } from './admin'
 
 const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
@@ -40,6 +41,7 @@ export function requireProfile(path: string, method: string, profile: Profile) {
 async function dispatch(request: Request, env: Env) {
   const path = new URL(request.url).pathname
   const method = request.method
+  if (path === '/admin' || path.startsWith('/admin/') || path === '/api/admin' || path.startsWith('/api/admin/')) return serveAdmin(request, env)
   if (path !== '/api' && !path.startsWith('/api/')) {
     const response = await env.ASSETS.fetch(request)
     if (!path.startsWith('/join/') && path !== '/auth/link') return response
