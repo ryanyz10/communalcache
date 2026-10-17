@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { createHash } from 'node:crypto'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import { expect, it } from 'vitest'
@@ -60,6 +61,24 @@ it('renders the same cat from shared preview traits as from the authenticated us
     expect(preview).toBe(signedIn)
     expect(preview).not.toContain('Mia')
   }
+})
+
+it('retains byte-identical SVG markup for all coat, pattern, ear, tail, pose and motion variants', () => {
+  const hash = createHash('sha256')
+  let cases = 0
+  for (const coat of COATS) for (const pattern of PATTERNS) {
+    for (const folded of [false, true]) for (const tip of [false, true]) {
+      for (const pose of ['sit', 'loaf', 'peek'] as const) for (const motion of [true, false]) {
+        const traits = { coat: coat.key, pattern, folded, tip, delay: .7 }
+        const markup = renderToStaticMarkup(createElement(Cat, { traits, pose, motion }))
+        hash.update(JSON.stringify({ traits, pose, motion }) + '\0' + markup + '\0')
+        cases++
+      }
+    }
+  }
+  expect(cases).toBe(720)
+  // Captured before the readability rewrite; includes attribute order and inline animation styles.
+  expect(hash.digest('hex')).toBe('3acd512a29ba7979d923206121e5051d2271417d44e7deabf55f08ad176a0fc0')
 })
 
 it('draws stable cache-colored labelled boxes without turning a cache into a person or delaying links', () => {
