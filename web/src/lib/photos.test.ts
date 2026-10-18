@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { PHOTO_READ_ERROR, resizePhoto, uploadPhoto, uploadProfilePhoto } from './photos'
+import { MAX_RESIZED_PHOTO_BYTES, PHOTO_READ_ERROR, PHOTO_TOO_LARGE_ERROR, resizePhoto, uploadPhoto, uploadProfilePhoto } from './photos'
 import { ApiError, errorMessage } from './api'
 
 const file = new File(['fixture'], 'photo.png', { type: 'image/png' })
@@ -22,12 +22,44 @@ it('resizes the longest side to 1600, paints transparency white and encodes JPEG
   expect(context.fillStyle).toBe('#fff')
   expect(context.fillRect).toHaveBeenCalledWith(0, 0, 1600, 1200)
   expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, 1600, 1200)
-  expect(canvas.toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/jpeg', 0.85)
+  expect(canvas.toBlob).toHaveBeenCalledExactlyOnceWith(expect.any(Function), 'image/jpeg', 0.8)
+  expect(createImageBitmap).toHaveBeenCalledWith(file, { imageOrientation: 'from-image' })
   expect(image.close).toHaveBeenCalledOnce()
   const small = canvasFixture(200, 300)
   await resizePhoto(file)
   expect(small.canvas.width).toBe(200)
   expect(small.canvas.height).toBe(300)
+})
+
+it.each(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', ''])('lets native decoding handle camera MIME %j with EXIF orientation', async type => {
+  const fixture = canvasFixture(2400, 3200)
+  const cameraFile = new File(['camera fixture'], 'capture', { type })
+  expect(await resizePhoto(cameraFile)).toBe(fixture.encoded)
+  expect(createImageBitmap).toHaveBeenCalledExactlyOnceWith(cameraFile, { imageOrientation: 'from-image' })
+  expect([fixture.canvas.width, fixture.canvas.height]).toEqual([1200, 1600])
+})
+
+it.each([2, 3])('steps JPEG quality down only while over the byte target (pass %i)', async passes => {
+  const { canvas, encoded, image } = canvasFixture()
+  const oversized = new Blob([new Uint8Array(MAX_RESIZED_PHOTO_BYTES + 1)], { type: 'image/jpeg' })
+  let attempt = 0
+  canvas.toBlob.mockImplementation(callback => callback(++attempt < passes ? oversized : encoded))
+  expect(await resizePhoto(file)).toBe(encoded)
+  expect(canvas.toBlob.mock.calls.map(call => call[2])).toEqual([0.8, 0.7, 0.6].slice(0, passes))
+  expect(image.close).toHaveBeenCalledOnce()
+})
+
+it('accepts the exact byte target and gives a useful error after the final oversized JPEG pass', async () => {
+  const { canvas, image } = canvasFixture()
+  const limit = new Blob([new Uint8Array(MAX_RESIZED_PHOTO_BYTES)], { type: 'image/jpeg' })
+  canvas.toBlob.mockImplementation(callback => callback(limit))
+  expect(await resizePhoto(file)).toBe(limit)
+  expect(canvas.toBlob).toHaveBeenCalledOnce()
+  canvas.toBlob.mockClear().mockImplementation(callback => callback(new Blob([limit, 'x'], { type: 'image/jpeg' })))
+  image.close.mockClear()
+  await expect(resizePhoto(file)).rejects.toThrow(PHOTO_TOO_LARGE_ERROR)
+  expect(canvas.toBlob.mock.calls.map(call => call[2])).toEqual([0.8, 0.7, 0.6])
+  expect(image.close).toHaveBeenCalledOnce()
 })
 
 it('shows a useful read-image error for decode, missing canvas, draw and toBlob failures, releasing decoded images', async () => {
@@ -42,7 +74,10 @@ it('shows a useful read-image error for decode, missing canvas, draw and toBlob 
     await expect(resizePhoto(file)).rejects.toThrow(PHOTO_READ_ERROR)
     expect(image.close).toHaveBeenCalledTimes(failure === 'decode' ? 0 : 1)
   }
-  await expect(resizePhoto(new File(['<svg/>'], 'bad.svg', { type: 'image/svg+xml' }))).rejects.toThrow(PHOTO_READ_ERROR)
+  const decoder = vi.mocked(createImageBitmap)
+  decoder.mockClear()
+  await expect(resizePhoto(new File(['pdf'], 'bad.pdf', { type: 'application/pdf' }))).rejects.toThrow(PHOTO_READ_ERROR)
+  expect(decoder).not.toHaveBeenCalled()
 })
 
 it('uploads raw JPEG with same-origin cookies and no bearer, JSON encoding or storage URL', async () => {

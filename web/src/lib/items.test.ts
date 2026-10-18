@@ -80,7 +80,7 @@ it('shows item details to members but edit, upload and confirmed delete controls
   expect(owner).toContain('Confirm deletion')
   expect(owner).toContain('Neighbors with pending requests will be notified')
   expect(owner).toContain('Upload photo')
-  expect(owner).toContain('accept="image/jpeg,image/png,image/webp"')
+  expect(owner).toContain('accept="image/*"')
 })
 
 it('renders labeled create/edit forms with immutable type and nullable reusable stock', () => {
@@ -91,7 +91,7 @@ it('renders labeled create/edit forms with immutable type and nullable reusable 
   expect(add).toContain('type="radio"')
   expect(add).toContain('Lend it')
   expect(add).toContain('Give it away')
-  expect(add).toContain('Optional. Without one, the tile shows the name.')
+  expect(add).toContain('Camera or library · optional')
   expect(add).toContain('>Save</button>')
   expect(add).not.toContain('item-quantity')
   expect(add).not.toContain('owner_id')
