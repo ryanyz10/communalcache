@@ -5,7 +5,8 @@ import { apiFetch, errorMessage } from '../lib/api'
 import { persistItem, type Item, type ItemSaveProgress } from '../lib/items'
 import type { CacheSummary } from '../lib/caches'
 import { boxColor } from '../components/Box'
-import { PHOTO_READ_ERROR, resizePhoto } from '../lib/photos'
+import { usePhotoSelection } from '../lib/usePhotoSelection'
+import { PhotoPreview } from '../components/PhotoPreview'
 import { invalidateRequestViews } from '../lib/requests'
 import { LoadingStatus, Shimmer } from '../components/Skeleton'
 
@@ -25,7 +26,8 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
   const [description, setDescription] = useState(item?.description ?? '')
   const [isConsumable, setIsConsumable] = useState(item?.is_consumable ?? false)
   const [quantityText, setQuantityText] = useState(String(item?.quantity ?? 1))
-  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null)
+  const photo = usePhotoSelection()
+  const photoInput = useRef<HTMLInputElement>(null)
   const [selectedCacheIds, setSelectedCacheIds] = useState<string[]>(cacheId ? [cacheId] : [])
   const saveProgress = useRef<ItemSaveProgress>({ item: null, remainingCacheIds: [], photoPending: false, stage: 'saving' })
   const [saveSnapshot, setSaveSnapshot] = useState<ItemSaveProgress | null>(null)
@@ -36,9 +38,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
   })
   const saveItem = useMutation({
     mutationFn: async () => {
-      const needsPhotoProcessing = selectedPhoto && (!saveProgress.current.item || saveProgress.current.photoPending)
-      let resizedPhoto: Blob | null = null
-      if (needsPhotoProcessing && selectedPhoto) resizedPhoto = await resizePhoto(selectedPhoto)
+      const pendingPhoto = !saveProgress.current.item || saveProgress.current.photoPending ? photo.photo : null
       const itemChanges = {
         title,
         description: description.trim() || null,
@@ -49,7 +49,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
         cacheId,
         itemId: item?.id,
         cacheIds: selectedCacheIds,
-        photo: resizedPhoto,
+        photo: pendingPhoto,
         body: itemChanges,
       }, () => setSaveSnapshot({ ...saveProgress.current }))
     },
@@ -62,6 +62,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
 
   function submit(event: FormEvent) {
     event.preventDefault()
+    if (photo.processing || photo.error) return
     onBusy?.(true)
     saveItem.mutate()
   }
@@ -72,12 +73,11 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
   const validQuantity = !isConsumable || (
     quantityText !== '' && Number.isInteger(quantity) && quantity >= 0 && quantity <= 9999
   )
-  const submitDisabled = saveItem.isPending || !title.trim() || !validQuantity
+  const submitDisabled = saveItem.isPending || photo.processing || !!photo.error || !title.trim() || !validQuantity
   let submitLabel = 'Save'
   if (saveSnapshot?.item) submitLabel = saveSnapshot.photoPending ? 'Retry photo' : 'Retry sharing'
   else if (embedded) submitLabel = item ? 'Save item' : 'Create and add here'
-  const saveError = saveItem.error instanceof Error && saveItem.error.message === PHOTO_READ_ERROR
-    ? PHOTO_READ_ERROR : errorMessage(saveItem.error)
+  const saveError = errorMessage(saveItem.error)
   const orderedCaches = cachesQuery.data && [...cachesQuery.data].sort((a, b) =>
     Number(selectedCacheIds.includes(b.id)) - Number(selectedCacheIds.includes(a.id)),
   )
@@ -109,15 +109,20 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
       <button type="submit" disabled={submitDisabled}>{saveItem.isPending ? 'Saving…' : submitLabel}</button>
     </div>}
     <fieldset disabled={fieldsLocked} className="cc-item-fields">
-      {!item && <label className="cc-new-photo-zone" htmlFor="new-item-photo">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-          <circle cx="12" cy="13" r="3" />
-        </svg>
-        <strong>{selectedPhoto ? selectedPhoto.name : 'Add a photo'}</strong>
-        <span>Optional. Without one, the tile shows the name.</span>
-        <input id="new-item-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => setSelectedPhoto(event.target.files?.[0] ?? null)} />
-      </label>}
+      {!item && <>
+        <label className="cc-photo-picker" htmlFor="new-item-photo">
+          <PhotoPreview src={photo.preview} alt="Selected item photo preview" />
+          <strong>{photo.preview ? 'Replace selected photo' : 'Add a photo'}</strong>
+          <span>Camera or library · optional</span>
+          <input ref={photoInput} id="new-item-photo" type="file" accept="image/*" onChange={event => void photo.select(event.target.files?.[0] ?? null)} />
+        </label>
+        {(photo.photo || photo.processing || photo.error) && <button type="button" className="cc-profile-secondary" onClick={() => {
+          photo.clear()
+          if (photoInput.current) photoInput.current.value = ''
+        }}>Remove selected photo</button>}
+        {photo.processing && <p role="status">Preparing photo…</p>}
+        {photo.error && <p role="alert" className="cc-form-error">{photo.error}</p>}
+      </>}
       {item ? <p className="cc-form-hint">
         {isConsumable ? 'Give it away' : 'Lend it'} · Item type cannot be changed.
       </p> : <fieldset className="cc-item-kind-tabs">

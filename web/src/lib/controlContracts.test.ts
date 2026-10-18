@@ -119,9 +119,15 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
     '../lib/profile': { refreshProfileViews }, '../lib/cats': cats, '../lib/push': push, '../lib/peek': peek,
     '../lib/config': { loadConfig: vi.fn() }, '../lib/contacts': { ...contacts, useOwnContact: () => ownContact },
     '../components/Avatar': { Avatar: Null }, '../components/CoatPicker': { CoatPicker: Null },
+    '../components/PhotoPreview': { PhotoPreview: Null },
     '../components/ContactLink': { ContactLink: ({ contact }: { contact: contacts.Contact }) => createElement('a', { href: contact.link }, contact.value), PlatformIcon: Null },
     '../components/Skeleton': { Shimmer: Null, LoadingStatus: Null, LoadingLines: Null }, './CoatControls': { CoatControls: Null },
   }
+  const hook = { exports: {} }
+  const hookSource = readFileSync(new URL('./usePhotoSelection.ts', import.meta.url), 'utf8')
+  const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
+  modules['../lib/usePhotoSelection'] = hook.exports
   const source = process.env.CONTROL_CONTRACT_PARENT === '1'
     ? execFileSync('git', ['show', `${parent}:web/src/pages/${page}.tsx`], { encoding: 'utf8' })
     : readFileSync(new URL(`../pages/${page}.tsx`, import.meta.url), 'utf8')
@@ -159,6 +165,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
     trace, render, button, click, change, submit, escape, client, preview, ownContact, config, resizePhoto, fileInput, dialogModel, storage, permission, subscription, registration, notification,
     field: (id: string) => elements.find(node => node.props.id === id)!, settled: () => lastMutation,
     picker: () => elements.find(node => node.props.names === true)!,
+    photoPreview: () => elements.find(node => node.props.alt === 'Selected profile photo preview')!,
     coatBusy(busy: boolean) { (elements.find(node => node.props.className === 'cc-photo-coat-mobile')!.props.onBusy as (value: boolean) => void)(busy); render() },
     toggle() { (elements.find(node => node.props.role === 'switch')!.props.onChange as () => void)(); render() },
     radio(value: string) { (elements.find(node => node.type === 'input' && node.props.value === value)!.props.onChange as () => void)(); render() },
@@ -180,22 +187,30 @@ it('photo sheet keeps Close autofocus, idle dismissal cleanup and coat-busy/pend
 
 it('photo decode/upload errors retain the selection, retry replaces via the exact self route and refreshes before clear/close', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({ error: 'invalid_photo' }, { status: 400 })).mockImplementation(async () => Response.json(me))
-  const page = fixture('ProfilePhotoControls'); page.click('Change photo'); page.change('profile-photo-file', new File(['png'], 'photo.png')); page.fileInput.value = 'photo.png'
-  page.resizePhoto.mockRejectedValueOnce(new Error(PHOTO_READ_ERROR)); page.submit(); await page.settled()
+  const page = fixture('ProfilePhotoControls'); page.click('Change photo')
+  page.resizePhoto.mockRejectedValueOnce(new Error(PHOTO_READ_ERROR))
+  page.change('profile-photo-file', new File(['png'], 'photo.png')); page.fileInput.value = 'photo.png'
+  await page.flush(); page.submit(); await page.settled()
   expect(fetch).not.toHaveBeenCalled(); expect(page.render()).toContain('Couldn&#x27;t read that image, try another.')
+  page.change('profile-photo-file', new File(['png'], 'photo.png')); await page.flush()
+  expect(page.photoPreview().props.src).toMatch(/^blob:/)
+  expect(page.render()).not.toContain('photo.png')
   page.submit(); page.render(); expect(page.escape()).toHaveBeenCalledOnce(); await page.settled()
   expect(page.fileInput.value).toBe('photo.png'); expect(page.dialogModel.open).toBe(true)
   page.trace.length = 0; page.submit(); await page.settled()
   expect(fetch.mock.calls.every(call => call[0] === '/api/me/photo' && call[1]?.method === 'POST' && call[1]?.credentials === 'same-origin' && call[1]?.body instanceof Blob)).toBe(true)
   expect(page.trace).toEqual([...['me', 'cache', 'join-requests', ...requestKeys].map(key => ['invalidate', [key]]), ['close']])
   expect(page.fileInput.value).toBe(''); expect(page.dialogModel.open).toBe(false)
+  page.render(); expect(page.photoPreview().props.src).toBeNull()
+  expect(page.resizePhoto).toHaveBeenCalledTimes(2)
+  expect(fetch.mock.calls[0][1]?.body).toBe(fetch.mock.calls[1][1]?.body)
 })
 
 it('photo admission errors keep the sheet and selection with clear retry-later copy', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'rate_limited', limit: 'photo_upload' }, { status: 429 }))
   const page = fixture('ProfilePhotoControls')
   page.click('Change photo'); page.change('profile-photo-file', new File(['png'], 'photo.png')); page.fileInput.value = 'photo.png'
-  page.submit(); await page.settled()
+  await page.flush(); page.submit(); await page.settled()
   expect(page.render()).toContain('Too many photo uploads, try again later.')
   expect(page.dialogModel.open).toBe(true)
   expect(page.fileInput.value).toBe('photo.png')
