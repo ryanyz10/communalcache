@@ -1016,6 +1016,13 @@
   margin-top: 10px;
 }
 
+@media (max-width: 1023px) {
+  .cc-item-form:not(.cc-item-form-embedded) > .cc-item-save-actions:not([data-recovery="true"]),
+  .cc-item-form:not(.cc-item-form-embedded) > .cc-item-save-actions > button[type="submit"] {
+    display: none;
+  }
+}
+
 @media (min-width: 640px) and (max-width: 1023px) {
   .organic-library {
     max-width: 800px;

@@ -55,6 +55,15 @@ it('retains shared fluid page sizing and current Home/cache layouts without reti
   expect(cache).toContain('cc-member-list')
 })
 
+it('hides duplicate mobile save submits and pending recovery rows without hiding embedded controls', () => {
+  const css = readFileSync(new URL('../items.css', import.meta.url), 'utf8')
+  const mobile = css.match(/@media \(max-width: 1023px\) \{([\s\S]*?)\n\}/)![1]
+  expect(mobile).toContain('.cc-item-form:not(.cc-item-form-embedded) > .cc-item-save-actions:not([data-recovery="true"])')
+  expect(mobile).toContain('.cc-item-form:not(.cc-item-form-embedded) > .cc-item-save-actions > button[type="submit"]')
+  expect(mobile).toContain('display: none')
+  expect(css).toContain('.cc-item-save-actions {\n  display: flex;')
+})
+
 it('uses top tabs and bottom links instead of the old account menu without exposing private email', () => {
   const markup = render(createElement(AppHeader), { path: '/requests', route: '/requests' })
   expect(markup).toContain('aria-label="Home"')
