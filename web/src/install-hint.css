@@ -1,0 +1,51 @@
+.cc-install-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--cc-line);
+  border-radius: 24px;
+  background: var(--cc-card);
+  color: var(--cc-fg);
+}
+
+.cc-install-hint > div:first-child {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.cc-install-hint .cc-install-title {
+  margin: 0 0 10px;
+  font: 400 20px/1.2 var(--font-heading);
+}
+
+.cc-install-hint p, .cc-install-instructions p {
+  margin: 6px 0 0;
+  color: var(--cc-sub);
+  font: 400 14px/1.5 var(--font-body);
+}
+
+.cc-install-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+  color: var(--cc-fg);
+}
+
+.cc-install-instructions {
+  margin-top: 10px;
+}
+
+.cc-install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+.cc-install-actions button {
+  min-height: 44px;
+}

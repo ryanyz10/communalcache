@@ -6,9 +6,13 @@ import { disablePush, enablePush, pushSupport, subscriptionForAccount } from '..
 import { LoadingLines } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
+import { IOSInstallInstructions } from '../components/InstallHint'
+import { useInstallState } from '../lib/install'
 
 export function PushControls({ userId }: { userId: string }) {
   const support = pushSupport()
+  const install = useInstallState()
+  const standalone = support.standalone || install.standalone
   const configQuery = useQuery({ queryKey: ['config'], queryFn: loadConfig })
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
   const [hasSubscription, setHasSubscription] = useState(false)
@@ -73,11 +77,11 @@ export function PushControls({ userId }: { userId: string }) {
       </div>
       <input
         type="checkbox" role="switch" aria-label="Push notifications" aria-describedby="push-help" aria-checked={hasSubscription} checked={hasSubscription}
-        disabled={pending || (!hasSubscription && (!registration || !configQuery.data?.vapid_public_key || (support.ios && !support.standalone)))}
+        disabled={pending || (!hasSubscription && (!registration || !configQuery.data?.vapid_public_key || (support.ios && !standalone)))}
         onChange={() => { if (hasSubscription) void disable(); else void enable() }} className="cc-switch"
       />
     </div>
-    {support.ios && !support.standalone && <p className="mt-3">On iPhone or iPad, tap Share, then Add to Home Screen. Open the installed app and turn on Push notifications.</p>}
+    {support.ios && !standalone && <IOSInstallInstructions />}
     {!support.supported && <p className="mt-3">Push notifications are not supported in this browser. You can still use email notifications.</p>}
     {configQuery.isPending && <LoadingLines label="Loading notification configuration…" />}
     {configQuery.isError && <div className="mt-3">
