@@ -6,7 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppRoutes, Ready } from '../App'
 import { AuthProvider } from '../auth/AuthProvider'
 import { AppHeader } from '../components/AppHeader'
-import { landingCopy } from './landingCopy'
+import { landingCopy, SOURCE_CODE_URL } from './landingCopy'
+import { readFileSync } from 'node:fs'
 import { ApiError, type Me } from './api'
 import { destinationAfterLogin, stashJoinToken } from './pendingJoin'
 
@@ -51,6 +52,24 @@ it('shows the exact mock landing copy and sign-in targets for a signed-out root 
   expect(markup).not.toContain('<form')
   expect(markup).not.toContain('Account menu')
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('links the header GitHub mark to source with an accessible new-tab notice and 44px target', () => {
+  const header = render().match(/<header class="cc-landing-header">([\s\S]*?)<\/header>/)![1]
+  const link = header.match(/<a\b(?=[^>]*class="cc-landing-source")([^>]*)>([\s\S]*?)<\/a>/)!
+  expect(SOURCE_CODE_URL).toBe('https://github.com/ryanyz10/communalcache')
+  expect(link[1]).toContain(`href="${SOURCE_CODE_URL}"`)
+  expect(link[1]).toContain('target="_blank"')
+  expect(link[1]).toContain('rel="noopener noreferrer"')
+  expect(link[2]).toContain(`${landingCopy.sourceCode} ${landingCopy.opensNewTab}`)
+  expect(link[2]).toContain('class="sr-only"')
+  expect(link[2]).toContain('fill="currentColor" aria-hidden="true" focusable="false"')
+  expect(link[2]).not.toContain('<img')
+  const css = readFileSync(new URL('../landing.css', import.meta.url), 'utf8')
+  const target = css.match(/\.cc-landing-source \{([^}]+)\}/)![1]
+  expect(target).toContain('min-width: 44px')
+  expect(target).toContain('min-height: 44px')
+  expect(target).toContain('var(--cc-sub)')
 })
 
 it('keeps title copy centralized and hoists the root description without duplicating the static title', ()=>{

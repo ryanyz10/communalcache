@@ -19,13 +19,14 @@
 }
 
 .cc-landing-header {
-  padding: 22px 28px;
+  padding: 22px clamp(16px,3vw,28px);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .cc-landing-brand {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -64,10 +65,31 @@
   color: var(--cc-fg);
 }
 
-.cc-landing-signin {
+.cc-landing-header-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+}
+
+.cc-landing-source {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
   min-height: 44px;
-  padding: 0 20px;
+  border-radius: 999px;
+  color: var(--cc-sub);
+}
+
+.cc-landing-source:hover, .cc-landing-source:focus-visible {
+  background: var(--cc-chip);
+  color: var(--cc-fg);
+}
+
+.cc-landing-signin {
+  min-height: 44px;
+  padding: 0 14px;
   font-size: 15px;
 }
 
