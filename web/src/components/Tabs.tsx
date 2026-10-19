@@ -52,7 +52,7 @@ export function Tabs({ mobile = false, count, userId, name, coat, photoVersion }
         else icon = <Shimmer width={24} height={24} round />
       }
       return <Link
-        key={tab.id} to={tab.to} aria-current={active === tab.id ? 'page' : undefined}
+        key={tab.id} to={tab.to} data-tour={tab.id === 'caches' ? undefined : tab.id === 'you' ? 'account' : tab.id} aria-current={active === tab.id ? 'page' : undefined}
         aria-label={tab.id === 'requests' && count > 0 ? `Requests, ${count} ${count === 1 ? 'ask needs' : 'asks need'} your answer` : undefined}
       >
         {icon}

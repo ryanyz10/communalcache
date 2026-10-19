@@ -24,7 +24,7 @@ export function AppHeader({ loading = false }: { loading?: boolean }) {
       <div className="cc-header-content">
         <Link to="/" aria-label="Home" className="cc-brand"><BoxMark /><span>Communal Cache</span></Link>
         <Tabs {...identity} />
-        <Link to="/account" aria-label="Account" aria-current={pathname === '/account' ? 'page' : undefined} className="cc-account-link">
+        <Link to="/account" data-tour="account" aria-label="Account" aria-current={pathname === '/account' ? 'page' : undefined} className="cc-account-link">
           {me
             ? <Avatar userId={me.id} name={me.display_name!} photoVersion={me.profile_photo_version} coat={me.cat_coat} size={38} />
             : <Shimmer width={38} height={38} round />}

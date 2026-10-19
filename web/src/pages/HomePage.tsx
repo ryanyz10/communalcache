@@ -82,7 +82,7 @@ export function HomePage() {
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
     </button>
     <section aria-labelledby="caches-heading">
-      <div className="cc-home-title">
+      <div className="cc-home-title" data-tour="caches">
         <div><p>{greeting(new Date().getHours())}, {me.display_name}</p><h1 id="caches-heading">Your caches</h1></div>
         <div className="cc-home-desktop-actions">
           <button type="button" className="cc-profile-secondary" aria-haspopup="dialog" onClick={openJoin}>Join with an invite</button>

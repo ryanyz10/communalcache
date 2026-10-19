@@ -211,7 +211,7 @@ async function dispatch(request: Request, env: Env) {
   if (path === '/api/me') {
     if (method === 'GET') return json(profile)
     const body = await readBody(request)
-    const changes: { display_name?: string; cat_coat?: CatCoat | null } = {}
+    const changes: { display_name?: string; cat_coat?: CatCoat | null; tour_completed?: boolean } = {}
     if ('display_name' in body) {
       if (typeof body.display_name !== 'string' || !body.display_name.trim() || body.display_name.trim().length > 60) {
         throw new HttpError(400, 'invalid_display_name')
@@ -221,6 +221,10 @@ async function dispatch(request: Request, env: Env) {
     if ('cat_coat' in body) {
       if (body.cat_coat !== null && !isCatCoat(body.cat_coat)) throw new HttpError(400, 'invalid_cat_coat')
       changes.cat_coat = body.cat_coat
+    }
+    if ('tour_completed' in body) {
+      if (typeof body.tour_completed !== 'boolean') throw new HttpError(400, 'invalid_tour_completed')
+      changes.tour_completed = body.tour_completed
     }
     if (!Object.keys(changes).length) throw new HttpError(400, 'invalid_display_name')
     return json(await updateProfile(env.DB, profile.id, changes))

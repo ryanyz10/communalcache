@@ -28,7 +28,7 @@ const server = createServer(async (request, response) => {
     const requestedWidth=Number(url.searchParams.get('width'))
     const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
     const height=screen==='landing'?(wide?1050:1500):(wide?1080:780), scale=wide?Math.min(960/width,600/height):0.77
-    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}"></iframe></section>`).join('')
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
   }
@@ -37,7 +37,7 @@ const server = createServer(async (request, response) => {
     const owner='11111111-1111-4111-8111-111111111111', member='22222222-2222-4222-8222-222222222222', sam='99999999-9999-4999-8999-999999999999'
     const cacheId='33333333-3333-4333-8333-333333333333', itemId='44444444-4444-4444-8444-444444444444'
     const members=['Ryan','Priya','Sam','Lee','Kai','Ana'].map((display_name,index)=>({user_id:index===0?owner:index===1?member:index===2?sam:`fixture-member-${index}`,display_name}))
-    users.set('ryan@fixture.test',{id:owner,email:'ryan@fixture.test',display_name:'Ryan'})
+    users.set('ryan@fixture.test',{id:owner,email:'ryan@fixture.test',display_name:'Ryan',tour_completed_at:url.searchParams.get('tour')==='new'?null:1})
     users.set('priya@fixture.test',{id:member,email:'priya@fixture.test',display_name:'Priya'})
     users.set('sam@fixture.test',{id:sam,email:'sam@fixture.test',display_name:'Sam'})
     for (const [id,name,cacheOwner] of [[cacheId,'Maple St',owner],['55555555-5555-4555-8555-555555555555','Garden Club',member],['66666666-6666-4666-8666-666666666666','Book Swap',sam]]) caches.set(id,{id,name,members,owner_id:cacheOwner,requires_approval:false,invite_token:`${id}.${'A'.repeat(43)}`})
@@ -182,10 +182,12 @@ const server = createServer(async (request, response) => {
       if (request.method === 'PATCH') {
         if ('display_name' in body && (typeof body.display_name!=='string' || !body.display_name.trim() || body.display_name.trim().length>60)) {json({error:'invalid_display_name'},400);return}
         if ('cat_coat' in body && body.cat_coat!==null && !isCatCoat(body.cat_coat)) {json({error:'invalid_cat_coat'},400);return}
+        if ('tour_completed' in body && typeof body.tour_completed!=='boolean') {json({error:'invalid_tour_completed'},400);return}
+        if ('tour_completed' in body) me.tour_completed_at=body.tour_completed?Date.now():null
         if ('display_name' in body) me.display_name=body.display_name.trim()
         if ('cat_coat' in body) me.cat_coat=body.cat_coat
       }
-      json({...me,cat_coat:me.cat_coat??null})
+      json({...me,cat_coat:me.cat_coat??null,tour_completed_at:me.tour_completed_at??null})
       return
     }
     if (path === '/api/me/contact' || path === '/api/me/contact/preview') {

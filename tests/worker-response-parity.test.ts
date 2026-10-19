@@ -198,7 +198,15 @@ it('matches the frozen parent response fixture across routes, methods and caller
     for (const [index, expected] of workerResponseFixture.cells.entries()) {
       const actual = templates[cells[index]] as { status: number; headers: unknown; body: unknown }
       const [status, headerIndex, bodyHash] = workerResponseFixture.templates[expected]
-      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(actual.body))))
+      let legacyBody = actual.body
+      // This feature adds exactly one own-profile field; keep the frozen legacy bytes.
+      if (actual.status === 200 && /: (GET|PATCH) profile$|: POST own-photo$/.test(labels[index])) {
+        const profile = { ...(actual.body as Record<string, unknown>) }
+        expect(profile.tour_completed_at, labels[index]).toBeNull()
+        delete profile.tour_completed_at
+        legacyBody = profile
+      }
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(legacyBody))))
       const actualHash = [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')
       expect(actual.status, labels[index]).toBe(status)
       expect(actual.headers, labels[index]).toEqual(workerResponseFixture.headers[headerIndex])
