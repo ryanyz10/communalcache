@@ -19,6 +19,7 @@ import { requireWriteLimit, type WriteRoute } from './rate-limit'
 import { requireTurnstile } from './turnstile'
 import { isCatCoat, type CatCoat } from '../shared/cat-coats'
 import { serveAdmin } from './admin'
+import { logMethod, logRoute } from './logging'
 
 const authMethods: Record<string, string> = {
   '/api/auth/email-otp/send-verification-otp': 'POST',
@@ -324,13 +325,13 @@ async function dispatch(request: Request, env: Env) {
 async function enqueueNotification(env: Env, id: string | null) {
   if (!id) return
   try { await env.NOTIFICATIONS.send(id) }
-  catch { console.error('Notification enqueue failed; durable outbox retained') }
+  catch { console.error({ event: 'notification_enqueue_failed', count: 1 }) }
 }
 
 async function enqueueNotifications(env: Env, ids: string[]) {
   if (!ids.length) return
   try { await env.NOTIFICATIONS.sendBatch(ids.map(body => ({ body }))) }
-  catch { console.error('Notification enqueue failed; durable outbox retained') }
+  catch { console.error({ event: 'notification_enqueue_failed', count: ids.length }) }
 }
 
 function cacheChanges(body: Record<string, unknown>) {
@@ -349,25 +350,44 @@ function cacheChanges(body: Record<string, unknown>) {
 
 export default {
   async queue(batch: MessageBatch<unknown>, env: Env) {
-    await consumeNotifications(batch, env)
+    let failed = 0
+    try { await consumeNotifications(batch, env) }
+    catch {
+      failed = 1
+      // Do not let a binding/provider exception put private data into runtime logs.
+      throw new Error('Queue processing incomplete')
+    } finally { console.info({ event: 'queue', messages: batch.messages.length, failed_batches: failed }) }
   },
   async scheduled(_controller: ScheduledController, env: Env) {
     // Recovery paths stay independent if one binding is temporarily unavailable.
     const results = await Promise.allSettled([sweepNotifications(env), sweepPhotoCleanup(env)])
-    if (results.some(result => result.status === 'rejected')) throw new Error('Scheduled recovery incomplete')
+    const failed = results.filter(result => result.status === 'rejected').length
+    console.info({ event: 'scheduled', jobs: results.length, failed_jobs: failed })
+    if (failed) throw new Error('Scheduled recovery incomplete')
   },
   async fetch(request: Request, env: Env): Promise<Response> {
-    let response: Response
-    try { response = await dispatch(request, env) }
-    catch (error) {
+    const started = Date.now()
+    const route = logRoute(request.url)
+    let status = 500
+    try {
+      const response = securityHeaders(await dispatch(request, env), env.APP_BASE_URL, new URL(request.url).pathname, request.url)
+      status = response.status
+      return response
+    } catch (error) {
+      let response: Response
       if (error instanceof HttpError) {
         response = json({ error: error.code, ...(error.limit ? { limit: error.limit } : {}) }, error.status)
         if (error.retryAfter !== undefined) response.headers.set('Retry-After', String(error.retryAfter))
       } else {
-        // Auth/session/body errors must not log credentials or provider request bodies.
+        // Error names/messages/stacks can contain credentials; use a fixed classification.
+        console.error({ event: 'unhandled_error', route, name: 'Error' })
         response = json({ error: 'internal_error' }, 500)
       }
+      const secured = securityHeaders(response, env.APP_BASE_URL, new URL(request.url).pathname, request.url)
+      status = secured.status
+      return secured
+    } finally {
+      console.info({ event: 'request', method: logMethod(request.method), route, status, ms: Math.max(0, Date.now() - started) })
     }
-    return securityHeaders(response, env.APP_BASE_URL, new URL(request.url).pathname, request.url)
   },
 } satisfies ExportedHandler<Env>
