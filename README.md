@@ -2,25 +2,24 @@
 
 # Communal Cache
 
-Share useful things with people you know.
+Share things among your community.
 
 Communal Cache is a small app for a close community to share household items.
-Join a cache (a group), list things you can lend or give away, and ask to use
-someone else's things; the owner approves and you hand them over in person.
-No addresses, delivery logistics or loan tracking.
+Join a cache and you'll be able to loan and borrow items with your friends, neighbors or whatever other group you are sharing items amongst.
+All communication happens outside of the app and handoff happens in person.
 
 [Visit communalcache.com](https://communalcache.com)
 
-## How it works
+## Why
 
-```mermaid
-flowchart LR
-    Join["Join a cache"] --> List["List items"]
-    List --> Ask["Someone asks"]
-    Ask --> Approve["Owner approves"]
-    Approve --> Contact["Contact shown if set"]
-    Contact --> Meet["Meet in person"]
-```
+I was making some wintermelon tea at a friend's place and asked to use their brown sugar. Their bag hadn't been touched in ages. 
+I realized I also had a mostly-full bag sitting in my cupboard at home. Ideally we would've been able to coordinate what we had ahead of time 
+and avoided each having a bag of brown sugar that is mostly relegated to clump together over months and years.
+
+## Privacy
+
+Privacy is a big concern, especially in this day and age. This app was intentionally designed to require as little information as possible. Currently the only things that are stored are emails and optionally a contact method that is only displayed when a request is approved.
+There are NO addresses, names, or other identifying information stored. If you have any concerns please reach out to me and I will be happy to address them.
 
 ## Architecture
 
