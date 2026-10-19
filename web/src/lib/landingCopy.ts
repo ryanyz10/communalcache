@@ -1,9 +1,13 @@
+export const SOURCE_CODE_URL = 'https://github.com/ryanyz10/communalcache'
+
 export const landingCopy = {
   brand: 'Communal Cache',
   title: 'Communal Cache — Borrow from people you know',
   hero: 'Borrow from the people you already know.',
   description: 'List what you’re happy to lend or give away. Your neighbors ask. You hand it over in person.',
   signIn: 'Sign in',
+  sourceCode: 'Source code on GitHub',
+  opensNewTab: '(opens in a new tab)',
   getStarted: 'Get started, it’s free',
   invite: 'I have an invite link',
   inviteNote: 'Open the invite link someone sent you, or sign in and choose Join with an invite on Home to paste it.',

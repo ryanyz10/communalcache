@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { Cat } from '../components/Cat'
-import { landingCopy } from './landingCopy'
+import { landingCopy, SOURCE_CODE_URL } from './landingCopy'
 import { siteTitle } from './siteName'
 
 type Element = ReactElement<Record<string, unknown>>
@@ -25,7 +25,7 @@ function fixture() {
     'react-router': Router,
     '../components/Box': { BoxMark: Null }, '../components/Cat': { Cat },
     '../components/Support': { SupportLink: Null }, '../components/LegalLinks': { LegalLinks: Null },
-    '../lib/landingCopy': { landingCopy }, '../lib/siteName': { siteTitle },
+    '../lib/landingCopy': { landingCopy, SOURCE_CODE_URL }, '../lib/siteName': { siteTitle },
   }
   const source = readFileSync(new URL('../pages/LandingPage.tsx', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
