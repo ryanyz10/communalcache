@@ -187,9 +187,8 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
               {cache.id === cacheId && <span className="sr-only">, shared here in the same create operation</span>}
             </label>
           })}
+          {cachesQuery.isSuccess && !cachesQuery.data.length && <p className="cc-list-empty">No caches yet. Your item stays private in your library.</p>}
         </div>
-        {cachesQuery.isSuccess && !cachesQuery.data.length && <p className="cc-form-hint">No caches yet. Your item stays private in your library.</p>}
-        <p>One item, one stock count, wherever it's shown.</p>
       </fieldset>}
       <details className="cc-item-description-editor" open={!!item?.description}>
         <summary>{description ? 'Edit note' : 'Add a note (optional)'}</summary>

@@ -46,7 +46,8 @@ it('keeps private owner editing, manual availability, sharing and distinct destr
 })
 it('keeps the new form empty, photo optional, type native, caches selectable and optional description reachable',()=>{
   const html=render(createElement(ItemEditorPage),'/items/new','/items/new')
-  for(const text of ['New item','>Save</button>','for="new-item-photo"','accept="image/*"','Lend it','Give it away','for="item-title"','Put it in','type="checkbox"','One item, one stock count','Description (optional)'])expect(html).toContain(text)
+  for(const text of ['New item','>Save</button>','for="new-item-photo"','accept="image/*"','Lend it','Give it away','for="item-title"','Put it in','type="checkbox"','Description (optional)'])expect(html).toContain(text)
+  expect(html).not.toContain('One item, one stock count')
   expect(html).not.toContain('value="Mason jars"')
   expect(html).not.toContain('private@example.com')
 })

@@ -344,6 +344,7 @@ export function CacheSettingsPage() {
             Members
           </h2>
           <ul className="cc-list lg:border-0">
+            {!cache.members.length && <li className="cc-list-empty">No members yet.</li>}
             {cache.members.map(member => <li key={member.user_id} className="cc-row">
               <Avatar
                 userId={member.user_id}
