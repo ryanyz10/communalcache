@@ -95,8 +95,8 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
     <header className="cc-signin-copy">
       <h1>{heading}</h1>
       {!sentMode && <>
-        <p className="cc-signin-desktop-subtitle">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : "We'll email you a link. No password."}</p>
-        <p className="cc-signin-mobile-subtitle">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : "Borrow and lend with your neighbors. We'll email you a link. No password."}</p>
+        <p className="cc-signin-desktop-subtitle">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : "We'll email you a sign-in link."}</p>
+        <p className="cc-signin-mobile-subtitle">{inviteToken ? 'Someone shared a Communal Cache with you. Sign in to join.' : "Borrow and lend with your neighbors. We'll email you a sign-in link."}</p>
       </>}
       {sentMode === 'link' && <>
         <p>Open the email and tap <b>Continue</b> on the page it opens. The link works for 5 minutes.</p>

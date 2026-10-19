@@ -34,7 +34,7 @@ function render(path = '/', user: Me|null = null, state: 'ready'|'pending'|'erro
 
 it('shows the exact mock landing copy and sign-in targets for a signed-out root without private data or a sign-in form', ()=>{
   const fetch=vi.spyOn(globalThis,'fetch'), markup=render()
-  for(const copy of [landingCopy.brand,landingCopy.hero,landingCopy.description,landingCopy.howHeading,landingCopy.communityHeading,landingCopy.footer,...landingCopy.promises,...landingCopy.steps.flatMap(step=>[step.title,step.body])]) expect(markup).toContain(copy)
+  for(const copy of [landingCopy.brand,landingCopy.hero,landingCopy.description,landingCopy.howHeading,landingCopy.communityHeading,...landingCopy.promises,...landingCopy.steps.flatMap(step=>[step.title,step.body])]) expect(markup).toContain(copy)
   expect(markup.match(/Get started, it’s free/g)).toHaveLength(2)
   expect(markup.match(/href="\/login"/g)).toHaveLength(3)
   expect(markup).toContain('href="/login?invite=1"')
@@ -52,6 +52,15 @@ it('shows the exact mock landing copy and sign-in targets for a signed-out root 
   expect(markup).not.toContain('<form')
   expect(markup).not.toContain('Account menu')
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('never mentions passwords in landing or sign-in markup', () => {
+  for (const path of ['/', '/login', '/login?invite=1', `/join/${invite}`]) {
+    expect(render(path)).not.toMatch(/no password/i)
+  }
+  const login = render('/login')
+  expect(login).toContain('We&#x27;ll email you a sign-in link.')
+  expect(login).toContain('Borrow and lend with your neighbors. We&#x27;ll email you a sign-in link.')
 })
 
 it('links the header GitHub mark to source with an accessible new-tab notice and 44px target', () => {

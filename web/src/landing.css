@@ -758,21 +758,12 @@
 }
 
 .cc-landing-bottom-box > div {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   flex: 1;
   min-width: 260px;
 }
 
 .cc-landing-bottom h2 {
   font-size: clamp(30px,4vw,46px);
-}
-
-.cc-landing-bottom p {
-  margin: 0;
-  font: 600 16px var(--font-body);
-  color: #402310;
 }
 
 .cc-landing-bottom .cc-landing-primary {
