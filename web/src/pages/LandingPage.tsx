@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { BoxMark } from '../components/Box'
 import { Cat } from '../components/Cat'
@@ -8,6 +8,7 @@ import { LegalLinks } from '../components/LegalLinks'
 import { siteTitle } from '../lib/siteName'
 
 export function LandingPage() {
+  const [openFaq, setOpenFaq] = useState<number | null>(0)
   useEffect(() => {
     const previousTitle = document.title
     document.title = siteTitle(copy.title)
@@ -81,6 +82,31 @@ export function LandingPage() {
               </span>
               {promise}
             </li>)}</ul>
+          </div>
+        </section>
+        <section className="cc-landing-faq" aria-labelledby="landing-faq-heading">
+          <div className="cc-landing-faq-intro">
+            <h2 id="landing-faq-heading">{copy.faq.heading}</h2><p>{copy.faq.intro}</p>
+          </div>
+          <div className="cc-landing-faq-list">
+            {copy.faq.items.map((item, index) => {
+              const expanded = openFaq === index
+              const questionId = `landing-faq-question-${index}`
+              const answerId = `landing-faq-answer-${index}`
+              return <div key={item.question} className="cc-landing-faq-box" style={{ zIndex: copy.faq.items.length - index }}>
+                {index === 0 && <span className="cc-landing-faq-cat" aria-hidden="true"><Cat userId="faq-pip" pose="loaf" /></span>}
+                <h3><button
+                  type="button" id={questionId} aria-expanded={expanded} aria-controls={answerId}
+                  onClick={() => setOpenFaq(current => current === index ? null : index)}
+                >
+                  <span>{item.question}</span>
+                  <span className="cc-landing-faq-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round"><path d="M5 12h14M12 5v14" /></svg></span>
+                </button></h3>
+                <div id={answerId} className="cc-landing-faq-answer" role="region" aria-labelledby={questionId} aria-hidden={!expanded} inert={!expanded}>
+                  <div><p>{item.answer}</p></div>
+                </div>
+              </div>
+            })}
           </div>
         </section>
         <section className="cc-landing-bottom" aria-labelledby="landing-bottom-heading">
