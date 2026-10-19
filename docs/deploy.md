@@ -143,8 +143,8 @@ clipboard/write and native sharing are intentionally retained. Header/unit/runti
 checks do not certify native browser permission behavior.
 
 **Browser acceptance is pending.** The security-header PR's isolated local Wrangler
-HTTP smoke passed, but browser routing reached Pax rather than that local app and
-host-browser routing lacked approval. No Turnstile widget rendering, live provider
+HTTP smoke passed, but browser routing reached a different local tool rather than
+that local app, and host-browser routing lacked approval. No Turnstile widget rendering, live provider
 flow or enforced full-resource CSP compatibility is claimed. Keep the resource
 policy report-only until the following owner check is recorded:
 
