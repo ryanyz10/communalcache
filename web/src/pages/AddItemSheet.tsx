@@ -87,8 +87,8 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
         <p role="alert" className="text-red-700">{errorMessage(libraryQuery.error)}</p>
         <button type="button" className="underline" onClick={() => void libraryQuery.refetch()}>Try your items again</button>
       </div>}
-      {libraryQuery.isSuccess && !libraryItems.length && <p className="mt-4">No items yet. Choose New item to start your library.</p>}
       <ul className="cc-add-selection">
+        {libraryQuery.isSuccess && !libraryItems.length && <li className="cc-list-empty">No items yet. Choose New item to start your library.</li>}
         {libraryItems.map(item => {
           const isAlreadyShared = attachedItemIds.includes(item.id) || item.caches.some(cache => cache.id === cacheId)
           let hint = 'Already here'

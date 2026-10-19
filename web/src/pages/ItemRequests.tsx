@@ -67,8 +67,8 @@ export function ItemRequests({ item, compact = false, askOpen = false, onAskClos
             <Stamp>Pending</Stamp>
           </li>
         })}
+        {!requestsQuery.data.length && <li className="cc-list-empty">No visible requests for this item yet.</li>}
       </ul>
-      {!requestsQuery.data.length && <p className="cc-form-hint">No visible requests for this item yet.</p>}
     </>}
     {showAskSheet && me?.id !== item.owner_id && <AskSheet
       item={item}

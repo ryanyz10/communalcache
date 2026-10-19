@@ -50,11 +50,11 @@ export function ShownIn({ item }: { item: Item }) {
       }}>Try sharing again</button>
     </div>}
     {!readError && libraryItem.data && cachesQuery.data && <>
-      {!cachesQuery.data.length && <p className="mt-3 text-slate-600">
-        You aren't in any caches yet. Your item stays private in your library.{' '}
-        <Link to="/" className="underline">Go to Home</Link> to create a cache or join with an invite.
-      </p>}
-      <ul className="mt-3 divide-y divide-slate-100">
+      <ul className="cc-packing-slip mt-3 divide-y divide-slate-100">
+        {!cachesQuery.data.length && <li className="cc-list-empty">
+          You aren't in any caches yet. Your item stays private in your library.{' '}
+          <Link to="/" className="underline">Go to Home</Link> to create a cache or join with an invite.
+        </li>}
         {cachesQuery.data.map(cache => {
           const isShared = libraryItem.data.caches.some(row => row.id === cache.id)
           return <li key={cache.id}>

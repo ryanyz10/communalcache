@@ -89,11 +89,13 @@ export function AdminPage() {
       <p>Switches take effect on the server without a redeploy. Google still requires configured credentials.</p>
       {flags.isPending && <p role="status">Loading switches…</p>}
       {flags.isError && <p role="alert">Could not load switches. Use Refresh to retry.</p>}
-      {flags.data?.flags.map(flag => <FlagControl key={flag.key} flag={flag} onSaved={async () => {
-        await client.invalidateQueries({ queryKey: [...prefix, 'flags'] }, { throwOnError: true })
-        await client.invalidateQueries({ queryKey: ['config'] })
-      }} />)}
-      {flags.data && !flags.data.flags.length && <p>No switches configured.</p>}
+      {flags.data && <ul className="cc-list">
+        {flags.data.flags.map(flag => <li key={flag.key} className="cc-row"><FlagControl flag={flag} onSaved={async () => {
+          await client.invalidateQueries({ queryKey: [...prefix, 'flags'] }, { throwOnError: true })
+          await client.invalidateQueries({ queryKey: ['config'] })
+        }} /></li>)}
+        {!flags.data.flags.length && <li className="cc-list-empty">No switches configured.</li>}
+      </ul>}
     </section>
     <section aria-labelledby="admin-caches-heading">
       <h2 id="admin-caches-heading">Caches</h2>
@@ -106,9 +108,10 @@ export function AdminPage() {
             <td>{row.name}<code>{row.id}</code></td><td>{row.owner_name ?? 'Name not set'}<code>{row.owner_id ?? 'No owner'}</code></td>
             <td>{usage(row.member_count, row.member_limit)}</td><td>{row.item_count}</td>
             <td><PlanControl key={`${row.id}:${row.plan}`} kind="caches" id={row.id} plan={row.plan} plans={totals.plans} onSaved={refresh} /></td>
-          </tr>)}</tbody>
+          </tr>)}
+            {!caches.data.rows.length && <tr><td className="cc-list-empty" colSpan={5}>No caches.</td></tr>}
+          </tbody>
         </table></div>
-        {!caches.data.rows.length && <p>No caches.</p>}
         <Pager label="caches" after={cacheAfter} next={caches.data.next_cursor} pending={caches.isFetching} change={setCacheAfter} />
       </>}
     </section>
@@ -124,9 +127,10 @@ export function AdminPage() {
             <td>{usage(row.owned_items, row.owned_item_limit)}</td><td>{usage(row.pending_outgoing, row.pending_limit)}</td><td>{usage(row.memberships, row.membership_limit)}</td>
             <td>{usage(row.new_caches_24h, row.new_cache_limit)}</td><td>{usage(row.profile_photos, row.profile_photo_limit)}</td>
             <td><PlanControl key={`${row.id}:${row.plan}`} kind="users" id={row.id} plan={row.plan} plans={totals.plans} onSaved={refresh} /></td>
-          </tr>)}</tbody>
+          </tr>)}
+            {!users.data.rows.length && <tr><td className="cc-list-empty" colSpan={8}>No users.</td></tr>}
+          </tbody>
         </table></div>
-        {!users.data.rows.length && <p>No users.</p>}
         <Pager label="users" after={userAfter} next={users.data.next_cursor} pending={users.isFetching} change={setUserAfter} />
       </>}
     </section>
@@ -138,9 +142,10 @@ export function AdminPage() {
       {outbox.data && <>
         <div className="cc-admin-table-scroll" role="region" aria-label="Failed outbox table" tabIndex={0}><table>
           <thead><tr><th scope="col">ID</th><th scope="col">Kind</th><th scope="col">Created</th><th scope="col">Failed</th><th scope="col">Attempts</th><th scope="col">Error class</th></tr></thead>
-          <tbody>{outbox.data.rows.map(row => <tr key={row.id}><td><code>{row.id}</code></td><td>{row.kind}</td><td>{timestamp(row.created_at)}</td><td>{timestamp(row.failed_at)}</td><td>{row.attempts}</td><td>{row.error_class ?? 'Not recorded'}</td></tr>)}</tbody>
+          <tbody>{outbox.data.rows.map(row => <tr key={row.id}><td><code>{row.id}</code></td><td>{row.kind}</td><td>{timestamp(row.created_at)}</td><td>{timestamp(row.failed_at)}</td><td>{row.attempts}</td><td>{row.error_class ?? 'Not recorded'}</td></tr>)}
+            {!outbox.data.rows.length && <tr><td className="cc-list-empty" colSpan={6}>No failed deliveries.</td></tr>}
+          </tbody>
         </table></div>
-        {!outbox.data.rows.length && <p>No failed deliveries.</p>}
         <Pager label="outbox" after={outboxAfter} next={outbox.data.next_cursor} pending={outbox.isFetching} change={setOutboxAfter} />
       </>}
     </section>
