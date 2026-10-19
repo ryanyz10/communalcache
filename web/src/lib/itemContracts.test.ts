@@ -43,7 +43,7 @@ function text(node: Element): string {
 }
 function click(node: Element) { (node.props.onClick as () => void)() }
 
-function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = {}) {
+function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; embedded?: boolean } = {}) {
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
   const mutations: { options: MutationOptions; pending: boolean; error: unknown; success: boolean; api: object }[] = []
@@ -154,7 +154,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
   }, module, module.exports)
   const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'PhotoUpload']
   const props = kind === 'form' ? {
-    cacheId: context.cacheId ?? null, item: context.editing ? item : undefined,
+    cacheId: context.cacheId ?? null, item: context.editing ? item : undefined, embedded: context.embedded,
     onSaved: (saved: items.Item) => trace.push(['saved', saved.id]), onCancel: () => trace.push(['cancel']),
     onBusy: (busy: boolean) => trace.push(['busy', busy]),
   } : kind === 'delete' ? {} : { item: currentItem }
@@ -202,6 +202,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
     settled: () => lastMutation, focus: () => focus, libraryItem: () => libraryItem,
     async prepared() { for (let index = 0; index < 5; index++) await Promise.resolve(); return render() },
     preview: () => elements.find(node => String(node.props.alt).startsWith('Selected'))!,
+    saveActions: () => elements.find(node => node.props.className === 'cc-item-save-actions'),
     cancel: () => click(buttons()[0]), confirm: () => click(buttons()[1]),
     button: (label: string) => elements.find(node => node.type === 'button' && text(node) === label)!,
   }
@@ -243,6 +244,42 @@ for (const kind of ['delete', 'sharing'] as const) {
   })
 }
 
+it.each([false, true])('marks only failed-save recovery while retaining embedded controls (embedded=%s)', async embedded => {
+  let created!: (response: Response) => void, attached!: (response: Response) => void
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(path => new Promise(resolve => {
+    if (path === '/api/me/items') created = resolve
+    else attached = resolve
+  }))
+  const page = fixture('form', { embedded })
+  page.change('item-title', 'Tent'); page.selectCache(cacheA.id, true)
+  expect(page.saveActions()?.props['data-recovery']).toBe(embedded ? false : undefined)
+  expect(page.render().match(/class="cc-item-editor-nav"/g) ?? []).toHaveLength(embedded ? 0 : 1)
+
+  page.submit(); page.render()
+  expect(page.saveActions()?.props['data-recovery']).toBe(embedded ? false : undefined)
+  created(Response.json(item))
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+  page.render()
+  expect(page.saveActions()!.props['data-recovery']).toBe(false)
+  expect(descendants(page.saveActions()!.props.children as ReactNode).filter(node => node.type === 'button').map(node => [text(node), node.props.disabled])).toEqual([
+    ['Saving…', true], ['Keep item without remaining shares', true],
+  ])
+
+  attached(Response.json({ error: 'internal_error' }, { status: 503 }))
+  await page.settled(); page.render()
+  expect(page.saveActions()!.props['data-recovery']).toBe(true)
+  expect(descendants(page.saveActions()!.props.children as ReactNode).filter(node => node.type === 'button').map(node => [text(node), node.props.disabled])).toEqual([
+    ['Retry sharing', false], ['Keep item without remaining shares', false],
+  ])
+  page.submit(); page.render()
+  expect(page.saveActions()!.props['data-recovery']).toBe(false)
+  attached(new Response(null, { status: 204 }))
+  await page.settled(); page.render()
+  expect(page.saveActions()!.props['data-recovery']).toBe(false)
+  expect(fetch.mock.calls.filter(call => call[0] === '/api/me/items')).toHaveLength(1)
+  expect(page.trace.filter(row => row[0] === 'saved')).toEqual([['saved', item.id]])
+})
+
 it('preserves save→failed photo→photo retry→partial sharing→sharing retry without duplicate create/upload', async () => {
   let photoAttempts = 0, shareAttempts = 0
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (path, init) => {
@@ -259,6 +296,7 @@ it('preserves save→failed photo→photo retry→partial sharing→sharing retr
   expect(page.render()).not.toContain('photo.png')
   page.submit(); await page.settled()
   expect(page.render()).toContain('Retry photo')
+  expect(page.saveActions()!.props['data-recovery']).toBe(true)
   expect(page.render()).toContain('<fieldset disabled="" class="cc-item-fields"')
   page.submit(); await page.settled(); expect(page.render()).toContain('Retry sharing')
   expect(page.render()).toContain('Garden. Already shared caches are kept.')

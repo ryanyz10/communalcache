@@ -211,7 +211,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
       </p>}
     </div>}
     {saveItem.isError && <p role="alert" className="cc-form-error">{saveError}</p>}
-    {(embedded || saveSnapshot?.item) && <div className="cc-item-save-actions">
+    {(embedded || saveSnapshot?.item) && <div className="cc-item-save-actions" data-recovery={saveItem.isError && !!recoveryAction}>
       <button type="submit" disabled={submitDisabled} className="cc-profile-primary">{saveItem.isPending ? 'Saving…' : submitLabel}</button>
       {recoveryAction}
     </div>}
