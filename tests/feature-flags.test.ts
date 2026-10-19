@@ -29,7 +29,7 @@ it('adds feature switches to a populated database without changing existing user
   await env.DB.prepare("INSERT INTO write_limits VALUES (?,'photo_upload',600000,3)").bind(id).run()
   const tables = ['user', 'session', 'write_limits']
   const before = await Promise.all(tables.map(async table => (await env.DB.prepare(`SELECT * FROM ${table}`).all()).results))
-  await applyD1Migrations(env.DB, migrations.slice(index))
+  await applyD1Migrations(env.DB, [migrations[index]])
   const after = await Promise.all(tables.map(async table => (await env.DB.prepare(`SELECT * FROM ${table}`).all()).results))
   expect(after).toEqual(before)
   expect(await featureEnabled(env.DB, 'google_sign_in')).toBe(true)

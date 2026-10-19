@@ -14,6 +14,7 @@ import { SupportCard } from '../components/Support'
 import { PeekControls } from './PeekControls'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
+import { ReplayTourButton } from '../components/ProductTour'
 
 export function AccountPage() {
   const { me, signOut } = useAuth()
@@ -89,6 +90,11 @@ export function AccountPage() {
         <div className="cc-account-options">
           <PushControls userId={me.id} />
           <PeekControls />
+          <section className="cc-account-tour" aria-labelledby="tour-setting-heading">
+            <h2 id="tour-setting-heading">A quick look around</h2>
+            <p>Find your caches, items, requests and account settings.</p>
+            <ReplayTourButton />
+          </section>
           <section className="cc-account-session" aria-label="Session">
             <p>Signed in on this browser</p>
             <button type="button" disabled={signingOut} className="cc-profile-secondary" onClick={() => void logout()}>{signingOut ? 'Signing out…' : 'Sign out'}</button>

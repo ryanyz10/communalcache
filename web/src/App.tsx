@@ -21,6 +21,7 @@ import { RouteSkeleton } from './components/skeletons/RouteSkeleton'
 import { LoadingStatus } from './components/Skeleton'
 import { hasSessionHint } from './lib/sessionHint'
 import { ToastProvider } from './components/Toast'
+import { ProductTourProvider } from './components/ProductTour'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
 
@@ -65,7 +66,7 @@ export default function App() {
   return <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <BrowserRouter>
-        <ToastProvider><Ready><div className="cc-app-shell"><AppHeader /><AppRoutes /></div></Ready></ToastProvider>
+        <ProductTourProvider><ToastProvider><Ready><div className="cc-app-shell"><AppHeader /><AppRoutes /></div></Ready></ToastProvider></ProductTourProvider>
       </BrowserRouter>
     </AuthProvider>
   </QueryClientProvider>

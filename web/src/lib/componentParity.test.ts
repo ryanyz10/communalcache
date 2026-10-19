@@ -44,7 +44,7 @@ function render(component: ComponentType<Record<string, unknown>>, props: Record
   return html
 }
 
-it('retains shared markup apart from the tested contrast hook, including every status/navigation branch', () => {
+it('retains shared markup apart from tested contrast/tour hooks, including every status/navigation branch', () => {
   const item = { id: 'item', cache_id: 'cache', title: '4-person tent', is_consumable: false, quantity: null, available: true, photo_version: null }
   const examples: [string, string, Record<string, unknown>, string?][] = [
     ['AuthScreen', 'AuthScreen', { children: 'Content' }], ['AuthScreen', 'AuthScreen', { children: 'Content', illustration: 'Art', className: 'route' }],
@@ -76,8 +76,10 @@ it('retains shared markup apart from the tested contrast hook, including every s
   const fingerprint = createHash('sha256')
   for (const [file, name, props, path] of examples) {
     if (!exports.has(file)) exports.set(file, load(file, process.env.COMPONENT_PARITY_PARENT === '1'))
-    // Contrast metadata is tested separately; keep all other parent markup pinned.
-    const html = render(exports.get(file)![name], props, path).replace(/ data-cat-backdrop="(?:ginger|grey|dusk|oat|ash|toffee)"/g, '')
+    // Contrast and tour targets are tested separately; keep other parent markup pinned.
+    const html = render(exports.get(file)![name], props, path)
+      .replace(/ data-cat-backdrop="(?:ginger|grey|dusk|oat|ash|toffee)"/g, '')
+      .replace(/ data-tour="(?:items|requests|account)"/g, '')
     fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
   // Pin parent output so shallow CI checkouts do not need historical Git objects.

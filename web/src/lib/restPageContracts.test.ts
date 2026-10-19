@@ -124,6 +124,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     '../components/Box': { Box: Container }, '../components/Cat': { Cat: Null }, '../components/MemberCats': { MemberCats: Null },
     '../components/Avatar': { Avatar: Null }, '../components/Stamp': { Stamp: Container },
     '../components/ThingTile': { ThingTile: Null, ThingStatus: Null }, '../components/Support': { SupportCard: Null },
+    '../components/ProductTour': { ReplayTourButton: Null },
     '../components/Skeleton': { SkeletonRows: Null, LoadingStatus: Null, Shimmer: Null },
     '../components/skeletons/HomeSkeleton': { HomeBoxesSkeleton: Null },
     '../components/Turnstile': { Turnstile: Null }, '../components/CodeInput': { CodeInput: Null },

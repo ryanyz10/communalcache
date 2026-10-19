@@ -14,7 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-export type Me = { id: string; email: string; display_name: string | null; cat_coat?: CatCoat | null; profile_photo_version?: string | null }
+export type Me = { id: string; email: string; display_name: string | null; cat_coat?: CatCoat | null; tour_completed_at?: number | null; profile_photo_version?: string | null }
 
 type ApiOptions = { method?: string; body?: unknown; turnstileToken?: string; headers?: Record<string,string>; signal?: AbortSignal }
 
