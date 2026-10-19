@@ -21,6 +21,7 @@ import { HomeBoxesSkeleton } from '../components/skeletons/HomeSkeleton'
 import { SkeletonRows } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
+import { InstallHint } from '../components/InstallHint'
 
 export function HomePage() {
   const { me } = useAuth()
@@ -89,6 +90,7 @@ export function HomePage() {
           <button type="button" className="cc-profile-primary" aria-haspopup="dialog" onClick={openCreate}>+ New cache</button>
         </div>
       </div>
+      <InstallHint />
       {summaryQuery.isError && <div className="cc-read-error">
         <p role="alert">{errorMessage(summaryQuery.error)} Ask summaries could not be loaded.</p>
         <button type="button" onClick={() => void summaryQuery.refetch()}>Try summaries again</button>

@@ -130,6 +130,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     '../components/GoogleSignInButton': { GoogleSignInButton: Null },
     '../components/LegalLinks': { LegalLinks: Null }, '../components/InviteBox': { InviteBox: Null },
     '../components/NamePreview': { NamePreview: Null }, '../components/CoatPicker': { CoatPicker: Null },
+    '../components/InstallHint': { InstallHint: Null },
     '../lib/landingCopy': { landingCopy: { inviteNote: 'Saved invite hint' } },
     './OnboardingPage': { OnboardingPage: Null }, './LandingPage': { LandingPage: Null },
     './JoinInviteSheet': { JoinInviteSheet: Null }, './LoginPage': { LoginForm: Null },

@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { iosDevice, standaloneMode } from './install'
 
 export const PUSH_OWNER_KEY = 'communalcache-push-owner'
 const accountCache = 'communalcache-push-account'
@@ -32,8 +33,8 @@ export async function reconcilePushAccount(userId: string | null, signal?: Abort
 
 export function pushSupport() {
   const supported = typeof window !== 'undefined' && typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
-  const ios = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
-  const standalone = typeof window !== 'undefined' && typeof navigator !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true)
+  const ios = iosDevice()
+  const standalone = standaloneMode()
   return { supported, ios, standalone: !!standalone }
 }
 

@@ -11,6 +11,7 @@ import * as contacts from './contacts'
 import * as cats from './cats'
 import * as push from './push'
 import * as peek from './peek'
+import * as install from './install'
 import { PHOTO_READ_ERROR, uploadProfilePhoto } from './photos'
 import { refreshProfileViews } from './profile'
 import { toastFixture } from '../test/toastFixture'
@@ -123,6 +124,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
     '../lib/profile': { refreshProfileViews }, '../lib/cats': cats, '../lib/push': push, '../lib/peek': peek,
     '../lib/config': { loadConfig: vi.fn() }, '../lib/contacts': { ...contacts, useOwnContact: () => ownContact },
     '../components/Avatar': { Avatar: Null }, '../components/CoatPicker': { CoatPicker: Null },
+    '../components/InstallHint': { IOSInstallInstructions: Null }, '../lib/install': install,
     '../components/PhotoPreview': { PhotoPreview: Null },
     '../components/ContactLink': { ContactLink: ({ contact }: { contact: contacts.Contact }) => createElement('a', { href: contact.link }, contact.value), PlatformIcon: Null },
     '../components/Skeleton': { Shimmer: Null, LoadingStatus: Null, LoadingLines: Null }, './CoatControls': { CoatControls: Null },

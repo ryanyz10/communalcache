@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '../auth/AuthProvider'
 import { PushControls } from '../pages/PushControls'
 import { disablePush, enablePush, PUSH_OWNER_KEY, pushSupport, subscriptionForAccount } from './push'
+import { installCopy } from './install'
 
 const publicKey = 'BA'.repeat(43) + 'A'
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
@@ -103,12 +104,24 @@ it('cleans up push before auth logout and does not log out if server cleanup fai
   client.clear()
 })
 
+it('hides installation guidance when the iOS app is already standalone', () => {
+  browser(true, true)
+  const client = new QueryClient()
+  client.setQueryData(['config'], { vapid_public_key: publicKey })
+  const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(PushControls, { userId: 'caller' })))
+  expect(markup).not.toContain(installCopy.add)
+  expect(markup).not.toContain(installCopy.notifications)
+  client.clear()
+})
+
 it('renders unsupported/configuration and iOS installation guidance without asking permission', () => {
   const { permission } = browser(true, false)
   const client = new QueryClient()
   client.setQueryData(['config'], { app_base_url: 'https://communalcache.com', better_auth_url: 'https://communalcache.com', vapid_public_key: '' })
   const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(PushControls, { userId: 'caller' })))
   expect(markup).toContain('Add to Home Screen')
+  expect(markup).toContain(installCopy.notifications)
+  expect(markup).toContain('class="cc-install-share"')
   expect(markup).not.toContain('Push is not configured yet')
   expect(markup).toMatch(/<input[^>]*role="switch"[^>]*disabled=""/)
   expect(markup).toContain('aria-label="Push notifications"')
