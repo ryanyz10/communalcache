@@ -47,6 +47,8 @@
   --cc-bg: #f5ead8;
   --cc-card: #f9f4ed;
   --cc-chip: #ebddc5;
+  --cc-avatar-light: var(--cc-chip);
+  --cc-avatar-dark: #474238;
   --cc-field: #f9f4ed;
   --cc-fg: #201e1d;
   --cc-sub: #645c50;
@@ -98,6 +100,8 @@
     --cc-bg: #201e1d;
     --cc-card: #2e2b25;
     --cc-chip: #474238;
+    --cc-avatar-light: #ebddc5;
+    --cc-avatar-dark: var(--cc-chip);
     --cc-field: #201e1d;
     --cc-fg: #f5ead8;
     --cc-sub: #c0b6a5;
@@ -876,6 +880,14 @@ dialog::backdrop {
   overflow: hidden;
   border-radius: 50%;
   background: var(--cc-chip);
+}
+
+[data-cat-backdrop] {
+  background: var(--cc-avatar-light);
+}
+
+[data-cat-backdrop="ginger"], [data-cat-backdrop="oat"], [data-cat-backdrop="ash"] {
+  background: var(--cc-avatar-dark);
 }
 
 .cc-avatar > img {

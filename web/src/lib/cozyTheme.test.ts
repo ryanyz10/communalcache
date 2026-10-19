@@ -4,11 +4,14 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { expect, it } from 'vitest'
 import { BoxMark } from '../components/Box'
+import { Avatar } from '../components/Avatar'
+import { CoatPicker } from '../components/CoatPicker'
+import { COATS, catTraits } from './cats'
 import { createHash } from 'node:crypto'
 
 const web = new URL('../../',import.meta.url)
 const css = readFileSync(new URL('src/index.css',web),'utf8')
-const palettes = [...css.matchAll(/:root\s*\{([^}]+)\}/g)].map(match=>Object.fromEntries([...match[1].matchAll(/(--cc-[\w-]+):\s*(#[0-9a-f]{6})/g)].map(token=>[token[1],token[2]]))).filter(palette=>palette['--cc-bg'])
+const palettes = [...css.matchAll(/:root\s*\{([^}]+)\}/g)].map(match=>Object.fromEntries([...match[1].matchAll(/(--cc-[\w-]+):\s*([^;\n]+)/g)].map(token=>[token[1],token[2]]))).filter(palette=>palette['--cc-bg'])
 function luminance(hex: string) {
   const channels=[1,3,5].map(index=>parseInt(hex.slice(index,index+2),16)/255).map(value=>value<=0.04045?value/12.92:((value+0.055)/1.055)**2.4)
   return channels[0]*0.2126+channels[1]*0.7152+channels[2]*0.0722
@@ -35,6 +38,38 @@ it('uses exact Organic day/night roles and readable compatibility text on unfini
   const mark=renderToStaticMarkup(createElement(BoxMark))
   expect(mark).toContain('viewBox="0 0 32 32"')
   expect(mark).not.toContain('crispEdges')
+})
+
+it.each(COATS)('keeps $name avatar and picker backgrounds at least 3:1 against the body in both themes', coat => {
+  const rules = [...css.matchAll(/([^{}]+)\{\s*background: var\((--cc-avatar-(?:light|dark))\);\s*\}/g)]
+  let token = ''
+  for (const rule of rules) {
+    const selectors = rule[1].trim().split(',').map(selector => selector.trim())
+    if (selectors.includes('[data-cat-backdrop]') || selectors.includes(`[data-cat-backdrop="${coat.key}"]`)) token = rule[2]
+  }
+  expect(token).not.toBe('')
+  for (const [index, palette] of palettes.entries()) {
+    let background = palette[token]
+    const alias = background.match(/^var\((--cc-[\w-]+)\)$/)
+    if (alias) background = palette[alias[1]]
+    expect(background).toMatch(/^#[0-9a-f]{6}$/)
+    expect(contrast(coat.fill, background), `${coat.name} in ${index === 0 ? 'sunny' : 'evening'}`).toBeGreaterThanOrEqual(3)
+  }
+  const avatar = renderToStaticMarkup(createElement(Avatar, { userId: 'Mia', name: 'Neighbor', coat: coat.key }))
+  expect(avatar).toContain(`data-cat-backdrop="${coat.key}"`)
+  expect(avatar).toContain(`data-coat="${coat.key}"`)
+  expect(avatar).toContain(`fill="${coat.fill}"`)
+  const picker = renderToStaticMarkup(createElement(CoatPicker, { userId: 'Mia', value: coat.key, onChange: () => {} }))
+  expect(picker).toContain(`class="cc-coat-swatch" data-cat-backdrop="${coat.key}"`)
+})
+
+it('uses the derived coat for legacy avatars while leaving profile-photo backgrounds unchanged', () => {
+  const derived = renderToStaticMarkup(createElement(Avatar, { userId: 'Mia', name: 'Neighbor' }))
+  expect(derived).toContain(`data-cat-backdrop="${catTraits('Mia').coat}"`)
+  const photo = renderToStaticMarkup(createElement(Avatar, { userId: 'Mia', name: 'Neighbor', coat: 'dusk', photoVersion: 'photo' }))
+  expect(photo).toContain('/api/users/Mia/photo?v=photo')
+  expect(photo).not.toContain('data-cat-backdrop')
+  expect(photo).not.toContain('cc-avatar-cat')
 })
 
 it('self-hosts the exact OFL font assets without remote font CSS or runtime asset origins', () => {
