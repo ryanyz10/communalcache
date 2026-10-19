@@ -120,7 +120,7 @@ export function LandingPage() {
             <span><Cat userId="footer-zara" pose="loaf" /></span><span><Cat userId="footer-arlo" /></span><span><Cat userId="footer-june" /></span>
           </div>
           <div className="cc-landing-bottom-box">
-            <div><h2 id="landing-bottom-heading">{copy.bottomHeading}</h2><p>{copy.footer}</p></div>
+            <div><h2 id="landing-bottom-heading">{copy.bottomHeading}</h2></div>
             <Link to="/login" className="cc-landing-primary">{copy.getStarted}</Link>
           </div>
         </section>

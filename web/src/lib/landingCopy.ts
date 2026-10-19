@@ -69,7 +69,6 @@ export const landingCopy = {
     'Your contact shows only after you approve an ask',
     'Free for small groups',
   ],
-  footer: 'Sign in with your email. No password.',
   support: {
     heading: 'Support Communal Cache',
     description: 'Communal Cache is free. If it helps your neighborhood, you can chip in for hosting.',
