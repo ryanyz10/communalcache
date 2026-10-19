@@ -3,41 +3,53 @@ import { Link } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch } from '../lib/api'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 import { adminListPath, setAdminFlag, setAdminPlan, type AdminCache, type AdminFlag, type AdminOutbox, type AdminOverview, type AdminPageRows, type AdminPlan, type AdminUser } from '../lib/admin'
 
 function PlanControl({ kind, id, plan, plans, onSaved }: { kind: 'caches' | 'users'; id: string; plan: string; plans: AdminPlan[]; onSaved: () => Promise<void> }) {
   const [selected, setSelected] = useState(plan)
   const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const { showToast } = useToast()
   async function save(event: FormEvent) {
     event.preventDefault()
-    setPending(true); setMessage('')
+    setPending(true)
+    setError('')
     try {
       await setAdminPlan(kind, id, selected)
       await onSaved()
-      setMessage('Saved')
-    } catch { setMessage('Could not save. Refresh and try again.') }
+      showToast('Saved')
+    } catch (failure) {
+      if (transientActionFailure(failure)) showToast('Could not save. Refresh and try again.', 'error')
+      else setError('Could not save. Refresh and try again.')
+    }
     finally { setPending(false) }
   }
   return <form className="cc-admin-plan" onSubmit={save}>
-    <select aria-label={`Plan for ${id}`} value={selected} disabled={pending} onChange={event => { setSelected(event.target.value); setMessage('') }}>
+    <select aria-label={`Plan for ${id}`} value={selected} disabled={pending} onChange={event => { setSelected(event.target.value); setError('') }}>
       {plans.map(option => <option key={option.plan} value={option.plan}>{option.plan}</option>)}
     </select>
     <button type="submit" className="cc-outline" disabled={pending || selected === plan || !plans.some(option => option.plan === selected)}>{pending ? 'Saving…' : 'Save'}</button>
-    {message && <span role="status">{message}</span>}
+    {error && <span role="alert">{error}</span>}
   </form>
 }
 
 export function FlagControl({ flag, onSaved }: { flag: AdminFlag; onSaved: () => Promise<void> }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const { showToast } = useToast()
   async function change() {
     setPending(true)
     setError('')
     try {
       await setAdminFlag(flag.key, !flag.enabled)
       await onSaved()
-    } catch { setError('Could not change switch. Refresh and try again.') }
+      showToast('Switch updated.')
+    } catch (failure) {
+      if (transientActionFailure(failure)) showToast('Could not change switch. Refresh and try again.', 'error')
+      else setError('Could not change switch. Refresh and try again.')
+    }
     finally { setPending(false) }
   }
   return <div className="cc-admin-plan">

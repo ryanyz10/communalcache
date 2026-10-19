@@ -3,20 +3,30 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
-import { Toast, type useToast } from '../components/Toast'
+import { Toast, type ToastProvider, type useToast } from '../components/Toast'
+import { ApiError } from './api'
+import { transientActionFailure } from './feedback'
 
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-function toastHook() {
-  let value: unknown = null
-  let effect: (() => void) | undefined, cleanup: (() => void) | undefined, dependency: unknown
+function toastHost() {
+  let value: unknown = null, dependency: unknown = Symbol('unset')
+  let effect: (() => void) | undefined, cleanup: (() => void) | undefined
+  const sequence = { current: 0 }
   const source = readFileSync(new URL('../components/Toast.tsx', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
-  const module = { exports: {} as { useToast: typeof useToast } }
+  const context = { Provider: Symbol('provider'), current: {} as ReturnType<typeof useToast> }
+  const jsx = (type: unknown, props: Record<string, unknown>) => { if (type === context.Provider) context.current = props.value as ReturnType<typeof useToast>; return { type, props } }
+  const module = { exports: {} as { useToast: typeof useToast; ToastProvider: typeof ToastProvider } }
   new Function('require', 'module', 'exports', compiled)((name: string) => {
-    if (name === 'react/jsx-runtime') return {}
+    if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
+    if (name === 'react-dom') return { createPortal: (node: unknown) => node }
     if (name !== 'react') throw new Error(`Unexpected dependency ${name}`)
     return {
+      createContext: (initial: ReturnType<typeof useToast>) => { context.current = initial; return context },
+      useContext: () => context.current,
+      useCallback: (callback: unknown) => callback,
+      useRef: () => sequence,
       useState: () => [value, (next: unknown) => { value = typeof next === 'function' ? next(value) : next }],
       useEffect: (next: () => (() => void) | undefined, deps: unknown[]) => {
         if (dependency !== deps[0]) { dependency = deps[0]; effect = () => { cleanup?.(); cleanup = next() } }
@@ -24,73 +34,83 @@ function toastHook() {
     }
   }, module, module.exports)
   function render() {
-    const state = module.exports.useToast()
+    module.exports.ToastProvider({ children: null })
     effect?.(); effect = undefined
-    return state
+    return module.exports.useToast()
   }
   render()
   return {
     current: render,
-    show(message: string) { render().showToast(message); return render() },
+    show(message: string, tone: 'success' | 'error' = 'success') { render().showToast(message, tone); return render() },
     dismiss() { render().dismissToast(); render() },
     unmount() { cleanup?.() },
   }
 }
 
-it('auto-dismisses the message at 2500ms, with no timer while idle', () => {
+it('dismisses success at 2500ms and error at 5000ms, with no idle timer', () => {
   vi.useFakeTimers()
-  const hook = toastHook()
-  expect(hook.current().toast).toBeNull()
-  expect(vi.getTimerCount()).toBe(0)
-  hook.show('Invite copied.')
-  vi.advanceTimersByTime(2499)
-  expect(hook.current().toast?.message).toBe('Invite copied.')
-  vi.advanceTimersByTime(1)
-  expect(hook.current().toast).toBeNull()
-  expect(vi.getTimerCount()).toBe(0)
+  const host = toastHost()
+  expect(host.current().toast).toBeNull(); expect(vi.getTimerCount()).toBe(0)
+  host.show('Saved.')
+  vi.advanceTimersByTime(2499); expect(host.current().toast?.message).toBe('Saved.')
+  vi.advanceTimersByTime(1); expect(host.current().toast).toBeNull()
+  host.show('Could not save.', 'error')
+  vi.advanceTimersByTime(4999); expect(host.current().toast?.tone).toBe('error')
+  vi.advanceTimersByTime(1); expect(host.current().toast).toBeNull()
 })
 
-it('re-copying the same message restarts the timer and refreshes its announcement key', () => {
+it('shares one replaceable notice across consumers and refreshes repeated announcements', () => {
   vi.useFakeTimers()
-  const hook = toastHook(), first = hook.show('Invite copied.').toast
+  const host = toastHost(), first = host.current(), second = host.current()
+  first.showToast('Copied.'); const initial = host.current().toast
   vi.advanceTimersByTime(2000)
-  const repeated = hook.show('Invite copied.').toast
-  expect(repeated?.sequence).toBe(first!.sequence + 1)
+  second.showToast('Could not save.', 'error'); host.current()
+  expect(host.current().toast).toMatchObject({ message: 'Could not save.', tone: 'error', sequence: initial!.sequence + 1 })
+  vi.advanceTimersByTime(1000); expect(host.current().toast?.tone).toBe('error')
+  const repeated = host.show('Could not save.', 'error').toast
+  expect(repeated!.sequence).toBe(initial!.sequence + 2)
   expect(vi.getTimerCount()).toBe(1)
-  vi.advanceTimersByTime(2499)
-  expect(hook.current().toast?.message).toBe('Invite copied.')
-  vi.advanceTimersByTime(1)
-  expect(hook.current().toast).toBeNull()
+  vi.advanceTimersByTime(4999); expect(host.current().toast).not.toBeNull()
+  vi.advanceTimersByTime(1); expect(host.current().toast).toBeNull()
 })
 
-it('cleans timers on explicit dismissal and unmount, including error feedback', () => {
+it('cleans timers on dismissal/unmount and never reuses an announcement sequence', () => {
   vi.useFakeTimers()
-  const hook = toastHook()
-  hook.show('Could not copy. Select the invite link.')
-  hook.dismiss()
-  expect(hook.current().toast).toBeNull()
-  expect(vi.getTimerCount()).toBe(0)
-  hook.show('Invite copied.')
-  hook.unmount()
-  expect(vi.getTimerCount()).toBe(0)
+  const host = toastHost(), first = host.show('Saved.').toast
+  host.dismiss(); expect(host.current().toast).toBeNull(); expect(vi.getTimerCount()).toBe(0)
+  expect(host.show('Saved.').toast!.sequence).toBeGreaterThan(first!.sequence)
+  host.unmount(); expect(vi.getTimerCount()).toBe(0)
 })
 
-it('keeps a persistent polite status region and escapes success/error text without taking focus', () => {
+it('uses polite status for success, assertive alert for errors and escapes text without taking focus', () => {
   expect(renderToStaticMarkup(createElement(Toast, { toast: null }))).toBe('<div class="cc-toast-region" role="status" aria-live="polite" aria-atomic="true"></div>')
-  const html = renderToStaticMarkup(createElement(Toast, { toast: { message: '<b>Could not copy</b>', sequence: 1 } }))
-  expect(html).toContain('&lt;b&gt;Could not copy&lt;/b&gt;')
-  expect(html).not.toMatch(/tabindex|autofocus|<button/)
+  for (const tone of ['success', 'error'] as const) {
+    const html = renderToStaticMarkup(createElement(Toast, { toast: { message: '<b>Notice</b>', sequence: 1, tone } }))
+    expect(html).toContain(tone === 'error' ? 'role="alert" aria-live="assertive"' : 'role="status" aria-live="polite"')
+    expect(html).toContain('&lt;b&gt;Notice&lt;/b&gt;')
+    expect(html).not.toMatch(/tabindex|autofocus|<button/)
+  }
+  vi.stubGlobal('HTMLElement', { prototype: { showPopover() {} } })
+  expect(renderToStaticMarkup(createElement(Toast, { toast: null }))).toContain('popover="manual"')
 })
 
-it('uses fixed safe-area-aware top positioning, cozy theme tokens and a static reduced-motion variant', () => {
+it('keeps the shared host outside route/session children with safe-area and reduced-motion styling', () => {
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')
+  expect(app).toContain('<ToastProvider><Ready>')
+  const source = readFileSync(new URL('../components/Toast.tsx', import.meta.url), 'utf8')
+  expect(source).toContain("document.querySelector<HTMLElement>('dialog[open]') ?? document.body")
+  expect(source).toContain('new MutationObserver(move)')
+  expect(source).toContain('createPortal(notice, target)')
   const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8')
   const region = css.match(/\.cc-toast-region\s*\{([^}]+)\}/)![1]
-  expect(region).toContain('position: fixed')
-  expect(region).toContain('left: 50%')
-  expect(region).toContain('env(safe-area-inset-top,0px)')
-  expect(region).toContain('env(safe-area-inset-left,0px)')
-  expect(region).toContain('pointer-events: none')
+  for (const fragment of ['position: fixed', 'left: 50%', 'env(safe-area-inset-top,0px)', 'env(safe-area-inset-left,0px)', 'pointer-events: none']) expect(region).toContain(fragment)
   const message = css.match(/\.cc-toast-message\s*\{([^}]+)\}/)![1]
   for (const token of ['--cc-fg', '--cc-bg', '--cc-shadow', '--radius-pill']) expect(message).toContain(`var(${token})`)
+  expect(css).toContain('.cc-toast-error')
   expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.cc-toast-message\s*\{\s*animation: none;/)
+})
+
+it('moves known operational failures while retaining validation, limits, state and uncertain errors', () => {
+  for (const error of [new TypeError('Network'), new SyntaxError('Reply'), new ApiError(503, 'internal_error'), new ApiError(502, 'email_unavailable')]) expect(transientActionFailure(error)).toBe(true)
+  for (const error of [new Error('Unknown'), new ApiError(400, 'invalid_name'), new ApiError(409, 'limit_reached'), new ApiError(503, 'limits_unavailable'), new ApiError(429, 'rate_limited'), new ApiError(404, 'not_found'), new ApiError(409, 'request_not_pending')]) expect(transientActionFailure(error)).toBe(false)
 })

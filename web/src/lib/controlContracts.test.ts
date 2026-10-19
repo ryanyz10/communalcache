@@ -13,13 +13,15 @@ import * as push from './push'
 import * as peek from './peek'
 import { PHOTO_READ_ERROR, uploadProfilePhoto } from './photos'
 import { refreshProfileViews } from './profile'
+import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
 type Page = 'ProfilePhotoControls' | 'ContactControls' | 'PushControls' | 'CoatControls' | 'PeekControls'
 type MutationOptions = {
   mutationFn: (variables?: unknown) => Promise<unknown>
   onMutate?: (variables?: unknown) => unknown
-  onSuccess?: (data: unknown) => unknown
+  onSuccess?: (data: unknown, variables?: unknown) => unknown
+  onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
 const parent = '2dfffd47f1bd59d39eb3fd52d8ad859898194cba'
@@ -32,6 +34,7 @@ function content(node: Element): string {
   return React.Children.toArray(node.props.children as ReactNode).map(child => React.isValidElement(child) ? content(child as Element) : String(child)).join('')
 }
 function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean } = {}) {
+  const toasts = toastFixture()
   const trace: unknown[][] = [], states: unknown[] = [], refs: { current: unknown }[] = []
   const effects: { dependencies: unknown[]; cleanup?: () => void }[] = []
   const storage = new Map<string, string>(options.subscribed ? [[push.PUSH_OWNER_KEY, me.id]] : [])
@@ -78,6 +81,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
   const record = (factory: typeof jsx) => (...args: Parameters<typeof jsx>) => { const node = factory(...args); elements.push(node as Element); return node }
   const Null = () => null
   const modules: Record<string, unknown> = {
+    ...toasts.modules,
     react: {
       ...React,
       useState(initial: unknown) { const index = stateIndex++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], (value: unknown) => { states[index] = typeof value === 'function' ? value(states[index]) : value }] },
@@ -106,8 +110,8 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
           mutate(variables?: unknown) {
             mutation.pending = true; mutation.error = null; mutation.success = false
             lastMutation = (async () => {
-              try { await mutationOptions.onMutate?.(variables); const data = await mutationOptions.mutationFn(variables); await mutationOptions.onSuccess?.(data); mutation.success = true }
-              catch (error) { mutation.error = error }
+              try { await mutationOptions.onMutate?.(variables); const data = await mutationOptions.mutationFn(variables); await mutationOptions.onSuccess?.(data, variables); mutation.success = true }
+              catch (error) { mutation.error = error; await mutationOptions.onError?.(error, variables) }
               finally { await mutationOptions.onSettled?.(); mutation.pending = false }
             })()
           },
@@ -137,7 +141,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
   const props = page === 'PushControls' ? { userId: me.id } : page === 'CoatControls' ? { resettable: true, onBusy: (busy: boolean) => trace.push(['busy', busy]) } : {}
   function render() {
     elements = []; stateIndex = 0; refIndex = 0; effectIndex = 0
-    const html = renderToStaticMarkup(createElement(module.exports[page], props))
+    const html = renderToStaticMarkup(createElement(React.Fragment, null, createElement(module.exports[page], props), toasts.element()))
     for (const node of elements) {
       if (node.type === 'dialog') (node.props.ref as { current: unknown }).current = dialogModel
       if (node.type === 'input' && node.props.type === 'file') (node.props.ref as { current: unknown }).current = fileInput
@@ -162,7 +166,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
   }
   render()
   return {
-    trace, render, button, click, change, submit, escape, client, preview, ownContact, config, resizePhoto, fileInput, dialogModel, storage, permission, subscription, registration, notification,
+    toasts, trace, render, button, click, change, submit, escape, client, preview, ownContact, config, resizePhoto, fileInput, dialogModel, storage, permission, subscription, registration, notification,
     field: (id: string) => elements.find(node => node.props.id === id)!, settled: () => lastMutation,
     picker: () => elements.find(node => node.props.names === true)!,
     photoPreview: () => elements.find(node => node.props.alt === 'Selected profile photo preview')!,
@@ -204,6 +208,7 @@ it('photo decode/upload errors retain the selection, retry replaces via the exac
   page.render(); expect(page.photoPreview().props.src).toBeNull()
   expect(page.resizePhoto).toHaveBeenCalledTimes(2)
   expect(fetch.mock.calls[0][1]?.body).toBe(fetch.mock.calls[1][1]?.body)
+  expect(page.toasts.notice).toMatchObject({ message: 'Photo saved.', tone: 'success' })
 })
 
 it('photo admission errors keep the sheet and selection with clear retry-later copy', async () => {
@@ -263,6 +268,7 @@ it('push asks permission only on explicit enable, uses browser subscription and 
   await page.flush(); expect(page.permission).not.toHaveBeenCalled(); expect(page.registration.pushManager.subscribe).not.toHaveBeenCalled()
   page.toggle(); expect(page.permission).toHaveBeenCalledOnce(); await page.flush()
   expect(page.render()).toContain('Notifications enabled for this account on this browser.')
+  expect(page.toasts.notice).toMatchObject({ message: 'Notifications enabled for this account on this browser.', tone: 'success' })
   expect(page.storage.get(push.PUSH_OWNER_KEY)).toBe(me.id)
   page.toggle(); await page.flush(); expect(page.render()).toContain('Notifications disabled on this browser.')
   expect(fetch.mock.calls.map(call => [call[1]?.method, call[0]])).toEqual([['POST', '/api/push/subscribe'], ['DELETE', '/api/push/subscribe']])

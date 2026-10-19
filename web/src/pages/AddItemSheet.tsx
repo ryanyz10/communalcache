@@ -7,6 +7,8 @@ import { attachSelected, sharingHint, useLibrary } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { ItemForm } from './ItemForm'
 import { SkeletonRows, LoadingStatus, Shimmer } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 type AddItemSheetProps = {
   cacheId: string
@@ -23,7 +25,7 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
   const [attachedItemIds, setAttachedItemIds] = useState<string[]>([])
   const [isCreating, setIsCreating] = useState(false)
   const [formVersion, setFormVersion] = useState(0)
-  const [statusMessage, setStatusMessage] = useState('')
+  const { showToast } = useToast()
   const libraryItems = libraryQuery.data?.pages.flatMap(page => page.items) ?? []
   const addItems = useMutation({
     mutationFn: () => attachSelected(selectedItemIds, cacheId, itemId => {
@@ -31,9 +33,10 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
       setSelectedItemIds(current => current.filter(value => value !== itemId))
     }),
     onSuccess: () => {
-      setStatusMessage('Items added.')
+      showToast('Items added.')
       dialog.current?.close()
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: () => invalidateRequestViews(queryClient),
   })
   const isBusy = addItems.isPending || isCreating
@@ -46,7 +49,6 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
     onClose={() => {
       setSelectedItemIds([])
       setAttachedItemIds([])
-      setStatusMessage('')
       setSourceTab('existing')
       setFormVersion(version => version + 1)
       addItems.reset()
@@ -122,10 +124,9 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
         {libraryQuery.isFetchingNextPage ? <><LoadingStatus label="Loading more items…" /><Shimmer width={110} height={18} /></> : 'Load more items'}
       </button>}
       {addItems.isError && <p role="alert" className="mt-3 text-red-700">
-        {errorMessage(addItems.error)} Items already added are kept. Retry the remaining selection or find them in{' '}
+        {!transientActionFailure(addItems.error) && errorMessage(addItems.error)} Items already added are kept. Retry the remaining selection or find them in{' '}
         <Link to="/items" className="underline">Your items</Link>.
       </p>}
-      {statusMessage && <p role="status" className="mt-3">{statusMessage}</p>}
       <button
         type="button"
         disabled={isBusy || !selectedItemIds.length || libraryQuery.isError}

@@ -12,10 +12,13 @@ import { CoatControls } from './CoatControls'
 import { ContactControls } from './ContactControls'
 import { SupportCard } from '../components/Support'
 import { PeekControls } from './PeekControls'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function AccountPage() {
   const { me, signOut } = useAuth()
   const client = useQueryClient()
+  const { showToast } = useToast()
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(me?.display_name ?? '')
   const [signingOut, setSigningOut] = useState(false)
@@ -27,7 +30,9 @@ export function AccountPage() {
       await refreshProfileViews(client)
       setEditingName(false)
       editNameButton.current?.focus()
+      showToast('Profile saved.')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
   if (!me) return <Navigate to="/login" replace />
   if (!me.display_name) return <OnboardingPage />
@@ -39,8 +44,11 @@ export function AccountPage() {
   async function logout() {
     setSigningOut(true)
     setSignOutError('')
-    try { await signOut() }
-    catch (error) { setSignOutError(errorMessage(error)) }
+    try { await signOut(); showToast('Signed out.') }
+    catch (error) {
+      if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+      else setSignOutError(errorMessage(error))
+    }
     finally { setSigningOut(false) }
   }
 
@@ -66,7 +74,7 @@ export function AccountPage() {
             {editingName && <form onSubmit={submitName} className="cc-account-name-editor">
               <label htmlFor="account-name">Display name</label>
               <input autoFocus id="account-name" className="cc-profile-input" required maxLength={60} value={name} onChange={event => setName(event.target.value)} />
-              {saveName.isError && <p role="alert" className="cc-form-error">{errorMessage(saveName.error)}</p>}
+              {saveName.isError && !transientActionFailure(saveName.error) && <p role="alert" className="cc-form-error">{errorMessage(saveName.error)}</p>}
               <div className="cc-inline-actions">
                 <button className="cc-profile-primary" disabled={saveName.isPending || !name.trim()}>{saveName.isPending ? 'Saving…' : 'Save name'}</button>
                 <button type="button" className="cc-profile-secondary" disabled={saveName.isPending} onClick={() => { setEditingName(false); editNameButton.current?.focus() }}>Cancel</button>
@@ -75,7 +83,6 @@ export function AccountPage() {
             <div className="cc-profile-field cc-account-email"><div><strong>Email</strong><p>{me.email}</p></div><Stamp tone="warn">PRIVATE</Stamp></div>
           </div>
         </div>
-        {saveName.isSuccess && <p role="status" className="cc-form-hint">Profile saved.</p>}
       </section>
       <div className="cc-account-settings">
         <ContactControls key={me.id} />

@@ -5,11 +5,14 @@ import { ContactLink, PlatformIcon } from '../components/ContactLink'
 import { apiFetch, errorMessage } from '../lib/api'
 import { platforms, useOwnContact, type Contact, type ContactKind } from '../lib/contacts'
 import { Shimmer, LoadingStatus, LoadingLines } from '../components/Skeleton'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function ContactControls() {
   const { me } = useAuth()
   const ownContactQuery = useOwnContact(me?.id ?? '')
   const client = useQueryClient()
+  const { showToast } = useToast()
   const contactDialog = useRef<HTMLDialogElement>(null)
   const [editing, setEditing] = useState(false)
   const [kind, setKind] = useState<ContactKind>('sms')
@@ -26,13 +29,15 @@ export function ContactControls() {
   })
   const changeContact = useMutation({
     mutationFn: (remove: boolean) => apiFetch('/api/me/contact', remove ? { method: 'DELETE' } : { method: 'PUT', body: { kind, value } }),
-    onSuccess: async () => {
+    onSuccess: async (_data, remove) => {
       await Promise.all([
         client.invalidateQueries({ queryKey: ['own-contact'] }),
         client.invalidateQueries({ queryKey: ['request-contact'] }),
       ])
       contactDialog.current?.close()
+      showToast(remove ? 'Contact removed.' : 'Contact saved.')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
   if (!me) return null
 
@@ -118,7 +123,7 @@ export function ContactControls() {
         <button type="submit" className="cc-pill min-h-11" disabled={changeContact.isPending || !currentPreview}>{changeContact.isPending ? 'Saving…' : 'Save contact'}</button>
       </form>
       <button type="button" className="cc-outline mt-3 min-h-11 text-red-800" disabled={changeContact.isPending || !ownContactQuery.data?.contact} onClick={() => changeContact.mutate(true)}>Remove contact</button>
-      {changeContact.isError && <p role="alert" className="mt-3 text-red-700">{errorMessage(changeContact.error)}</p>}
+      {changeContact.isError && !transientActionFailure(changeContact.error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(changeContact.error)}</p>}
     </dialog>
   </section>
 }

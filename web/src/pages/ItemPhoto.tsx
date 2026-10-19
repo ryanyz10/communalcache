@@ -7,6 +7,8 @@ import { usePhotoSelection } from '../lib/usePhotoSelection'
 import { PhotoPreview } from '../components/PhotoPreview'
 import { invalidateRequestViews } from '../lib/requests'
 import { thingTone } from '../components/ThingTile'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function ItemPhoto({ item }: { item: Item }) {
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -30,6 +32,7 @@ export function ItemPhoto({ item }: { item: Item }) {
 }
 
 export function PhotoUpload({ item }: { item: Item }) {
+  const { showToast } = useToast()
   const queryClient = useQueryClient()
   const photoInput = useRef<HTMLInputElement>(null)
   const photo = usePhotoSelection()
@@ -40,7 +43,9 @@ export function PhotoUpload({ item }: { item: Item }) {
       await invalidateRequestViews(queryClient)
       photo.clear()
       if (photoInput.current) photoInput.current.value = ''
+      showToast('Photo saved.')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
   const photoError = errorMessage(savePhoto.error)
 
@@ -76,8 +81,7 @@ export function PhotoUpload({ item }: { item: Item }) {
       {photo.processing && <p role="status">Preparing photo…</p>}
       {photo.error && <p role="alert" className="cc-form-error">{photo.error}</p>}
       <p className="cc-form-hint">Resized to at most 1600 pixels and saved as JPEG. Private to you and members of caches where you share it.</p>
-      {savePhoto.isError && <p role="alert" className="cc-form-error">{photoError}</p>}
-      {savePhoto.isSuccess && <p role="status">Photo saved.</p>}
+      {savePhoto.isError && !transientActionFailure(savePhoto.error) && <p role="alert" className="cc-form-error">{photoError}</p>}
       <button type="submit" disabled={!photo.photo || photo.processing || savePhoto.isPending} className="cc-profile-secondary">
         {savePhoto.isPending ? 'Saving photo…' : 'Upload photo'}
       </button>

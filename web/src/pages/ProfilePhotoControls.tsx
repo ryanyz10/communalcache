@@ -9,10 +9,13 @@ import { PhotoPreview } from '../components/PhotoPreview'
 import { refreshProfileViews } from '../lib/profile'
 import { catTraits, COATS } from '../lib/cats'
 import { CoatControls } from './CoatControls'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function ProfilePhotoControls() {
   const { me } = useAuth()
   const client = useQueryClient()
+  const { showToast } = useToast()
   const photoDialog = useRef<HTMLDialogElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const photo = usePhotoSelection()
@@ -22,13 +25,15 @@ export function ProfilePhotoControls() {
       if (action === 'remove') return apiFetch<void>('/api/me/photo', { method: 'DELETE' })
       return uploadProfilePhoto(photo.photo!)
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, action) => {
       // Refetch identity instead of restoring an upload response after an account change.
       await refreshProfileViews(client)
       photo.clear()
       if (fileInput.current) fileInput.current.value = ''
       photoDialog.current?.close()
+      showToast(action === 'remove' ? 'Photo removed.' : 'Photo saved.')
     },
+    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
   if (!me) return null
 
@@ -90,7 +95,7 @@ export function ProfilePhotoControls() {
         <button type="submit" disabled={!photo.photo || photo.processing || changePhoto.isPending} className="cc-pill min-h-11">{changePhoto.isPending ? 'Saving…' : 'Save photo'}</button>
       </form>
       <button type="button" disabled={!me.profile_photo_version || changePhoto.isPending} onClick={() => changePhoto.mutate('remove')} className="cc-outline mt-3 min-h-11 text-red-800">Remove photo</button>
-      {changePhoto.isError && <p role="alert" className="mt-3 text-red-700">
+      {changePhoto.isError && !transientActionFailure(changePhoto.error) && <p role="alert" className="mt-3 text-red-700">
         {errorMessage(changePhoto.error)}
       </p>}
     </dialog>

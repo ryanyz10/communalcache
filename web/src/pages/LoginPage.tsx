@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
@@ -11,9 +11,12 @@ import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 import { LegalLinks } from '../components/LegalLinks'
 import { GoogleSignInButton } from '../components/GoogleSignInButton'
 import { googleSignInError, googleSignInUrl } from '../lib/googleSignIn'
+import { useToast } from '../components/Toast'
+import { transientActionFailure } from '../lib/feedback'
 
 export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: string; inviteHint?: boolean }) {
   const { refresh } = useAuth()
+  const { showToast } = useToast()
   const [search] = useSearchParams()
   const emailInput = useRef<HTMLInputElement>(null)
   const botCheck = useRef<TurnstileHandle>(null)
@@ -22,7 +25,8 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
   const [code, setCode] = useState('')
   const [pending, setPending] = useState(false)
   const [sentMode, setSentMode] = useState<'link' | 'code' | null>(null)
-  const [error, setError] = useState<string | null>(search.has('error') ? googleSignInError : null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { if (search.has('error')) showToast(googleSignInError, 'error') }, [search, showToast])
 
   async function continueWithGoogle() {
     setPending(true)
@@ -30,7 +34,7 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
     try {
       window.location.assign(await googleSignInUrl(inviteToken))
     } catch {
-      setError(googleSignInError)
+      showToast(googleSignInError, 'error')
       setPending(false)
     }
   }
@@ -44,7 +48,8 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
       setSentMode(mode)
       setCode('')
     } catch (error) {
-      setError(errorMessage(error))
+      if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+      else setError(errorMessage(error))
     } finally {
       setPending(false)
       botCheck.current?.reset()
@@ -62,7 +67,8 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
       await apiFetch('/api/auth/sign-in/email-otp', { body: { email: email.trim(), otp: code } })
       await refresh()
     } catch (error) {
-      setError(errorMessage(error))
+      if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+      else setError(errorMessage(error))
     } finally {
       setPending(false)
     }

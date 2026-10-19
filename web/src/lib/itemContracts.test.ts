@@ -12,12 +12,14 @@ import * as items from './items'
 import { cacheDetailQuery } from './caches'
 import { PHOTO_READ_ERROR, uploadPhoto } from './photos'
 import { invalidateRequestViews } from './requests'
+import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
 type Kind = 'delete' | 'sharing' | 'form' | 'photo'
 type MutationOptions = {
   mutationFn: (variables?: unknown) => Promise<unknown>
   onSuccess?: (data: unknown, variables?: unknown) => unknown
+  onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
 const parent = '82692d32909d4d63b4f3256c3e667c03e258707e'
@@ -44,6 +46,7 @@ function text(node: Element): string {
 function click(node: Element) { (node.props.onClick as () => void)() }
 
 function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; embedded?: boolean } = {}) {
+  const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
   const mutations: { options: MutationOptions; pending: boolean; error: unknown; success: boolean; api: object }[] = []
@@ -83,7 +86,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
               const data = await entry.options.mutationFn(variables)
               await entry.options.onSuccess?.(data, variables)
               entry.success = true
-            } catch (error) { entry.error = error }
+            } catch (error) { entry.error = error; await entry.options.onError?.(error, variables) }
             finally { await entry.options.onSettled?.(); entry.pending = false }
           })()
         },
@@ -101,6 +104,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
   const Null = () => null
   const currentItem = { ...item, cache_id: context.cacheId ?? null }
   const modules: Record<string, unknown> = {
+    ...toasts.modules,
     react: {
       ...React, useEffect: () => {},
       useState(initial: unknown) {
@@ -160,7 +164,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
   } : kind === 'delete' ? {} : { item: currentItem }
   function render() {
     elements = []; stateIndex = 0; refIndex = 0; mutationIndex = 0
-    const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(component as React.ComponentType<Record<string, unknown>>, props)))
+    const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(React.Fragment, null, createElement(component as React.ComponentType<Record<string, unknown>>, props), toasts.element())))
     for (const node of elements.filter(node => node.type === 'dialog')) (node.props.ref as { current: unknown }).current = dialogModel
     for (const node of elements.filter(node => node.type === 'input' && node.props.ref)) (node.props.ref as { current: unknown }).current = inputModel
     return html
@@ -198,7 +202,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
   }
   render()
   return {
-    trace, render, open, submit, escape, change, selectCache, resizePhoto, inputModel, dialogModel, buttons,
+    toasts, trace, render, open, submit, escape, change, selectCache, resizePhoto, inputModel, dialogModel, buttons,
     settled: () => lastMutation, focus: () => focus, libraryItem: () => libraryItem,
     async prepared() { for (let index = 0; index < 5; index++) await Promise.resolve(); return render() },
     preview: () => elements.find(node => String(node.props.alt).startsWith('Selected'))!,
@@ -330,6 +334,35 @@ it('keeps decode failure before create, explicit Continue without photo and Keep
   expect(fetch.mock.calls.filter(call => call[0] === '/api/me/items')).toHaveLength(1)
   expect(fetch.mock.calls.filter(call => String(call[0]).endsWith('/photo'))).toHaveLength(1)
   expect(page.trace.filter(row => row[0] === 'saved')).toEqual([['saved', item.id]])
+})
+
+it('keeps sharing recovery guidance inline after an operational error toast is dismissed', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'internal_error' }, { status: 503 }))
+  const page = fixture('sharing', { cacheId: cacheA.id })
+  page.open(); page.confirm(); await page.settled()
+  expect(page.toasts.notice).toMatchObject({ message: 'Could not complete that request. Please try again.', tone: 'error' })
+  page.toasts.modules['../components/Toast'].useToast().dismissToast()
+  const html = page.render()
+  expect(page.toasts.notice).toBeNull()
+  expect(html).not.toContain('cc-toast-message')
+  expect(html).toContain('Could not confirm sharing. Refresh or try the checkbox again.')
+  expect(html).toContain('You can retry here.')
+  expect(html).not.toContain('Could not complete that request.')
+  expect(page.dialogModel.open).toBe(true)
+})
+
+it('toasts an operational partial-save failure while keeping recovery state inline', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async path => path === '/api/me/items' ? Response.json(item) : Response.json({ error: 'internal_error' }, { status: 503 }))
+  const page = fixture('form')
+  page.change('item-title', 'Tent'); page.selectCache(cacheA.id, true)
+  page.submit(); await page.settled()
+  const html = page.render()
+  expect(page.toasts.notice).toMatchObject({ message: 'Could not complete that request. Please try again.', tone: 'error' })
+  expect(html).toContain('cc-toast-error')
+  expect(html).toContain('Your item is saved')
+  expect(html).toContain('Sharing needs retrying.')
+  expect(html).toContain('Keep item without remaining shares')
+  expect(html).not.toContain('<p role="alert" class="cc-form-error">Could not complete')
 })
 
 it('retains atomic cache creation/first attachment, and editing PATCH omits immutable type', async () => {

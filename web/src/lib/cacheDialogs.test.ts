@@ -10,12 +10,14 @@ import ts from 'typescript'
 import { apiFetch, errorMessage } from './api'
 import { cacheDetailQuery, type CacheDetail } from './caches'
 import { invalidateRequestViews } from './requests'
+import { toastFixture } from '../test/toastFixture'
 
 type Flow = 'rotate' | 'remove' | 'leave'
 type Element = ReactElement<Record<string, unknown>>
 type MutationOptions = {
   mutationFn: (variables?: unknown) => Promise<unknown>
   onSuccess?: (data: unknown, variables?: unknown) => unknown
+  onError?: (error: unknown, variables?: unknown) => unknown
 }
 const cacheId = '11111111-1111-4111-8111-111111111111'
 const ownerId = '22222222-2222-4222-8222-222222222222'
@@ -52,6 +54,7 @@ function text(node: Element): string {
 }
 
 function fixture(flow: Flow) {
+  const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = []
   const refs: { current: unknown }[] = []
@@ -96,7 +99,7 @@ function fixture(flow: Flow) {
               const data = await entry.options.mutationFn(variables)
               await entry.options.onSuccess?.(data, variables)
               entry.success = true
-            } catch (error) { entry.error = error }
+            } catch (error) { entry.error = error; await entry.options.onError?.(error, variables) }
             finally { entry.pending = false }
           })()
         },
@@ -112,6 +115,7 @@ function fixture(flow: Flow) {
     return element
   }
   const modules: Record<string, unknown> = {
+    ...toasts.modules,
     react: {
       ...React,
       useState(initial: unknown) {
@@ -135,7 +139,6 @@ function fixture(flow: Flow) {
     './JoinRequests': { JoinRequests: () => null },
     '../components/WideBreadcrumbs': { WideBreadcrumbs: ({ children }: { children: ReactNode }) => createElement('nav', null, children) },
     '../components/Avatar': { Avatar: () => null },
-    '../components/Toast': { Toast: () => null, useToast: () => ({ toast: null, showToast: vi.fn(), dismissToast: () => trace.push(['dismiss-toast']) }) },
     '../components/skeletons/CacheSkeleton': { CacheSettingsSkeleton: () => null },
   }
   const module = { exports: {} as { CacheSettingsPage: () => ReactElement } }
@@ -149,7 +152,7 @@ function fixture(flow: Flow) {
   function buttons() { return descendants(dialog().props.children as ReactNode).filter(element => element.type === 'button') }
   function render() {
     elements = []; stateIndex = 0; refIndex = 0; mutationIndex = 0
-    const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(module.exports.CacheSettingsPage)))
+    const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(React.Fragment, null, createElement(module.exports.CacheSettingsPage), toasts.element())))
     ;(dialog().props.ref as { current: unknown }).current = dialogModel
     return html
   }
@@ -168,7 +171,7 @@ function fixture(flow: Flow) {
   }
   render()
   return {
-    trace, queryClient, dialogModel, render, open, escape, releaseInvalidations,
+    toasts, trace, queryClient, dialogModel, render, open, escape, releaseInvalidations,
     buttons, active: () => active, settled: () => lastMutation,
     cancel: () => (buttons()[0].props.onClick as () => void)(),
     confirm: () => (buttons()[1].props.onClick as () => void)(),
@@ -229,7 +232,7 @@ for (const flow of ['rotate', 'remove', 'leave'] as const) {
     const label = flow === 'rotate' ? 'rotate-heading' : flow === 'remove' ? `remove-${memberId}` : 'leave-cache-heading'
     const expected: unknown[][] = [['close', label]]
     if (flow === 'rotate') {
-      expected.push(['dismiss-toast'], ['state', 'Invite rotated. The old link no longer works.'], ['invalidate', ['cache', cacheId]])
+      expected.push(['invalidate', ['cache', cacheId]])
       expect(page.render()).toContain('Invite rotated. The old link no longer works.')
     } else {
       if (flow === 'leave') expected.push(['remove', ['cache', cacheId]], ['remove', ['join-requests', cacheId]])

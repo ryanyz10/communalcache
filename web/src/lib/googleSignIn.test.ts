@@ -43,13 +43,13 @@ it('shows a locally drawn four-color Google G, explicit label and a non-submit b
   expect(render(true, createElement(GoogleSignInButton, { disabled: true, onClick() {} }))).toContain('disabled=""')
 })
 
-it('renders Google on normal and invite sign-in without disabling email fallback, and shows friendly callback errors without reflecting provider text', () => {
+it('renders Google and email fallback without inline transient callback errors or provider text', () => {
   for (const inviteToken of [undefined, invite]) {
     const markup = render(true, createElement(LoginForm, { inviteToken }), '/login?error=access_denied&error_description=private-provider-detail')
     expect(markup).toContain('Continue with Google')
     expect(markup).toContain('Email me a sign-in link')
     expect(markup).toContain('Use a 6-digit code instead')
-    expect(markup).toContain(googleSignInError)
+    expect(markup).not.toContain(googleSignInError)
     expect(markup).not.toContain('private-provider-detail')
     if (inviteToken) expect(markup).toContain('Invite saved on this browser')
   }
