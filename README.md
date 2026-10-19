@@ -2,7 +2,7 @@
 
 # Communal Cache
 
-Share things among your community.
+Share things among your community 🧑‍🤝‍🧑
 
 Communal Cache is a small app for a close community to share household items.
 Join a cache and you'll be able to loan and borrow items with your friends, neighbors or whatever other group you are sharing items amongst.
@@ -15,6 +15,10 @@ All communication happens outside of the app and handoff happens in person.
 I was making some wintermelon tea at a friend's place and asked to use their brown sugar. Their bag hadn't been touched in ages. 
 I realized I also had a mostly-full bag sitting in my cupboard at home. Ideally we would've been able to coordinate what we had ahead of time 
 and avoided each having a bag of brown sugar that is mostly relegated to clump together over months and years.
+
+### Why cats
+
+I love cats :3
 
 ## Privacy
 
