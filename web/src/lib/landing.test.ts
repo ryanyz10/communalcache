@@ -58,9 +58,19 @@ it('never mentions passwords in landing or sign-in markup', () => {
   for (const path of ['/', '/login', '/login?invite=1', `/join/${invite}`]) {
     expect(render(path)).not.toMatch(/no password/i)
   }
-  const login = render('/login')
-  expect(login).toContain('We&#x27;ll email you a sign-in link.')
-  expect(login).toContain('Borrow and lend with your neighbors. We&#x27;ll email you a sign-in link.')
+})
+
+it('shows subtitle paragraphs only for an actual invite', () => {
+  for (const path of ['/login', '/login?invite=1']) {
+    const markup = render(path)
+    expect(markup).toContain('<header class="cc-signin-copy"><h1>Sign in</h1></header>')
+    expect(markup).not.toContain('cc-signin-desktop-subtitle')
+    expect(markup).not.toContain('cc-signin-mobile-subtitle')
+  }
+  const joining = render(`/join/${invite}`)
+  for (const variant of ['desktop', 'mobile']) {
+    expect(joining).toContain(`<p class="cc-signin-${variant}-subtitle">Someone shared a Communal Cache with you. Sign in to join.</p>`)
+  }
 })
 
 it('links the header GitHub mark to source with an accessible new-tab notice and 44px target', () => {
