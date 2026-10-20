@@ -527,17 +527,6 @@
   flex: 1;
 }
 
-.cc-approval-lent > input {
-  width: 100%;
-  height: 44px;
-  padding: 0 16px;
-  border: 1.5px solid transparent;
-  border-radius: 999px;
-  background: var(--cc-field);
-  color: var(--cc-fg);
-  font: 400 14px var(--font-body);
-}
-
 .organic-request-detail {
   display: flex;
   flex-direction: column;

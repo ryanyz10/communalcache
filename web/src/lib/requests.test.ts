@@ -12,7 +12,7 @@ import { ApiError, apiFetch, errorMessage } from './api'
 import { invalidateRequestViews, ordinal, requesterQueueLabel, type ItemRequest, type RequestsPageData } from './requests'
 import type { Item } from './items'
 
-const item: Item = { id: 'item', cache_id: 'cache', title: 'Sugar', description: null, owner_id: 'owner', owner_name: 'Owner', is_consumable: true, quantity: 5, available_quantity: 3, available: true, unavailable_note: null, photo_version: null, created_at: 1 }
+const item: Item = { id: 'item', cache_id: 'cache', title: 'Sugar', description: null, owner_id: 'owner', owner_name: 'Owner', is_consumable: true, quantity: 5, available_quantity: 3, available: true, photo_version: null, created_at: 1 }
 const request: ItemRequest = { id: 'request', cache_id: 'cache', cache_name: 'Pantry', item_id: 'item', item_title: 'Sugar', owner_id: 'owner', owner_name: 'Owner', requester_id: 'member', requester_name: 'Neighbor', quantity: 2, status: 'pending', decision_reason: null, decided_at: null, created_at: 1 }
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
@@ -125,8 +125,10 @@ it('does not infer other-cache availability from the visible queue and blocks ne
   expect(shared).not.toContain('Available now: 5')
   const missing = render('ask', { item: { ...item, available_quantity: undefined } })
   expect(missing).toContain('Refresh the item to see current availability')
-  const lent = render('item', { item: { ...item, available: false, unavailable_note: 'With a neighbor' } })
-  expect(lent).toContain('Lent out · With a neighbor')
+  const legacyItem = { ...item, available: false, unavailable_note: 'With a neighbor' }
+  const lent = render('item', { item: legacyItem })
+  expect(lent).toContain('Lent out.')
+  expect(lent).not.toContain('With a neighbor')
   expect(lent).toMatch(/<button[^>]*disabled=""[^>]*>Ask for some/)
 })
 
@@ -141,7 +143,7 @@ it('offers the reusable approval checkbox without blocking decisions on existing
 it('uses nested cookie-auth mutations without forged party IDs and invalidates every affected view', async () => {
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(request))
   await apiFetch('/api/caches/cache/items/item/requests', { body: { quantity: 2 } })
-  await apiFetch('/api/me/requests/request/approve', { body: { mark_lent_out: true, unavailable_note: 'Back tomorrow' } })
+  await apiFetch('/api/me/requests/request/approve', { body: { mark_lent_out: true } })
   await apiFetch('/api/me/requests/request/reject', { body: { reason: 'Not today' } })
   expect(fetchMock.mock.calls.every(call => call[1]?.credentials === 'same-origin' && call[1]?.method === 'POST')).toBe(true)
   expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('requester_id')
@@ -178,5 +180,4 @@ it('explains request quantity, stock races, already-decided conflicts and requir
   expect(errorMessage(new ApiError(409, 'request_not_pending'))).toContain('already been decided')
   expect(errorMessage(new ApiError(400, 'invalid_reason'))).toContain('1 and 500')
   expect(errorMessage(new ApiError(409, 'item_unavailable'))).toContain('lent out')
-  expect(errorMessage(new ApiError(400, 'invalid_unavailable_note'))).toContain('200')
 })

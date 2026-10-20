@@ -96,7 +96,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | D1 1 | Single-D1 specification | This docs-only PR; no implementation/migration/resource changes |
 | D1 2 | Caches / membership / joining | Implemented; merged: canonical D1 config/membership/join outbox, additive 0007 migration, no DO bridge. Legacy item/photo/request/removal APIs gated temporarily; PRs 2–4 intended to merge together (staging test data only). |
 | D1 3 | Shared items / attachments / photos | Implemented; merged: 0008 canonical items/attachments/cleanup, own-library APIs, retained atomic cache create+attach and scoped PATCH/photo routes, restored item UI. Requests/destruction remain gated; library/add-sheet/checkbox screens stay PR 6. |
-| D1 4 | Requests / shared stock / Lent out / notifications | Implemented; merged: 0009 requests, all-cache reservation guards, atomic token-gated decisions/outbox, direct party pagination, Lent out toggle/approval checkbox. Request APIs/screens reopen after race proofs; every destructive route stays gated for PR 5. |
+| D1 4 | Requests / shared stock / Lent out / notifications | Implemented; merged: 0009 requests, all-cache reservation guards, atomic token-gated decisions/outbox, direct party pagination, Lent out button/approval checkbox. Request APIs/screens reopen after race proofs; every destructive route stays gated for PR 5. |
 | D1 5 | Removal / leave / detach / deletion / races | Implemented; in review: guarded atomic cascades/outbox/cleanup, 0010 left-membership rebuild and rejoin semantics, removal/leave/detach/global-delete confirmations; no DO/config retirement. |
 | D1 6 | Library / add sheet / checkboxes / items board | Implemented; in review: owner-scoped paginated library/Home preview, Existing/New cache add sheet, atomic create+attach, Shown in confirmations, shared availability and private photos; items board 1a–1d, supersedes #28. |
 | D1 7 | Retire Durable Objects / staging reset | Implemented for draft review only: Cache code/bindings/RPC/sweeps and historical tests removed; inherited v2-retire-cache deleted_classes and D1 0011 projection-table drop prepared. Explicit owner approval required before merge/deploy. Staging test-data reset is NOT included and remains separately approval-gated. |
@@ -148,6 +148,7 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | UI polish | Staging installed-app name | Implemented; in review from current master: staging's separate web build alone sets VITE_SITE_NAME. HTML/browser and manifest full name become Communal Cache Staging; manifest short_name and Apple home-screen title use CC Staging so the staging marker fits on iPhone. Runtime landing/legal title overrides preserve the build name; default/production/local and in-app wordmarks remain unchanged. Manifest identity/scope/icons and security headers are unchanged. Existing iOS installations need remove + re-add after approved staging deployment; no deployment or provider/resource change here. |
 | UI polish | Account-remembered product tour | Implemented; in review from master: additive 0018 nullable own-profile tour completion, exact-Origin boolean set/reset and one guarded profile UPDATE. Named unseen accounts start on Home without interrupting saved invites/deep links; four native-modal spotlight steps visit caches/items/requests/Account and highlight real responsive targets, with centered fallback, keyboard/focus return, safe areas and reduced motion. Finish/Skip save optimistically with one silent retry; Account Replay resets and restarts. Real-D1 and UI/browser checks accompany the PR; no dependency, remote migration, deployment or release approval. |
 | Requests | Advisory per-item queue | Implemented; in review: separate paginated owner-pending read groups by longest-waiting item, then oldest request/ID; SQL ordinals label Next up/2nd/3rd without restricting approval order. Only a requester's own pending reusable request receives a count-only all-cache position; no other-cache names/IDs/details. Cache-context rows stay cache-scoped. Forward-only 0019 extends the pending item index; stock/decision guards and party-history cursor are unchanged. |
+| UI polish | Lent out button / note retirement | Implemented; in review: one immediate availability button, flag-only reusable approval, no active availability-note validation/SQL/API/UI. Legacy nullable column/values remain unused; no migration. Real-D1 guards/rollback and response parity retain their existing boundaries. |
 | Gate 11 | Independent security review | Review recorded at admin revision 0718eda; follow-ups address CC-SEC-01/02/04, bound per-user churn in CC-SEC-03 and add the CC-SEC-05 baseline. Full-CSP/browser acceptance, documented capacity/orphan residual acceptance and final intended-revision review remain release gates, not a CI-only signoff. |
 | Gate 12 | Explicit release approval | not started — owner-approved revision/environment/features after parity and security; external setup, destructive retirement/reset and legacy cutover approvals remain separate |
 
@@ -221,8 +222,8 @@ sheet/cache checkboxes. Requests, member removal, item deletion and detach stay
 gated. All cache item/photo reads require active caller AND owner membership;
 losing a cache never deletes the canonical item/photo or blocks own-library access.
 
-Manual available/unavailable_note fields are stored and validated now (200 Unicode
-code points); UI controls/approval behavior follow later PRs. With request routes
+Manual availability uses `available`; the old `unavailable_note` column is now
+retired/unused and retained only for applied-schema compatibility. No column drop. With request routes
 gated, new D1 items have no reservations yet; PR 4 must add the all-cache pending
 floor to guarded stock edits before requests open. Cleanup originally used two
 cursor-paged intents; the photo-admission follow-up raises this to ten per Cron
@@ -244,13 +245,12 @@ SELECT/await/write, no admission flags or SQL changes(). Direct indexed/cursor
 incoming/outgoing query replaces cache/owner fan-out and request_index.
 
 Approve/reject primary pending-only guarded UPDATE writes fresh decision_token;
-dependent stock deduction, optional reusable Lent out flag/note and outbox require
+dependent stock deduction, optional reusable Lent out flag and outbox require
 that exact token in the same batch. A losing primary causes no effects. Ensure
 stock CHECK failure aborts, not a silent deduction no-op. Owner stock edit includes
 all-cache reservation floor. Preserve cache-only pending queue/party-only history.
 
-Manual Lent out/note max 200 Unicode code points blocks new requests, **not existing
-pending rows**. Checked reusable approval sets it atomically; unchecked does not
+Manual Lent out blocks new requests, **not existing pending rows**. Checked reusable approval sets it atomically; unchecked does not
 clear it. No holder/return/cancellation model. Keep existing outbox guarded claim,
 failed_at eligibility, 90s lease, 10s provider/30s row deadlines, Queue retries and
 bounded Cron rescue. Producers now insert outbox with state, never DO intents.
@@ -258,8 +258,7 @@ Queue send is post-commit; enqueue failure is recoverable from committed outbox.
 
 **Proof:** concurrent creates through two caches never overbook; concurrent double
 approve deducts once; approve/reject/edit/create races; zero primary → no dependent
-effects; injected failure rolls back stock/decision/flag/outbox. Note Unicode
-bounds, unavailable create 409, pending still decidable, checkbox atomicity;
+effects; injected failure rolls back stock/decision/flag/outbox. Unavailable create 409, pending still decidable, checkbox atomicity;
 cache queue vs party-history privacy and no emails. Competing outbox claims,
 crashed sixth claim recovery, stale terminal writes, post-commit enqueue crash,
 Cron fair pagination and Queue duplicates. Open request routes after these proofs;
@@ -288,10 +287,9 @@ item/photo or decision access. Cache queues expose only that cache's pending
 requesters, plus party-owned decided rows. Item available_quantity is calculated
 from ALL-cache pending reservations without returning other caches' identities.
 
-Minimal owner Lent out/note controls and the reusable approval checkbox ship now.
-A checked approval sets the flag and optional note in the decision batch; omitted
-note preserves it, explicit null/blank clears it. Unchecked approval preserves the
-existing flag/note. Unicode validation remains 200 code points. Requests use the
+The owner uses one immediate Mark as lent out / Mark as available button; reusable
+approval keeps its checkbox. A checked approval sets the flag in the decision batch;
+unchecked approval preserves the existing flag. Availability notes are retired. Requests use the
 server's shared available_quantity, not a sum of the visible cache queue; edits,
 decisions and availability changes invalidate item/request views across caches.
 No holder/return lifecycle or cancellation status is added.

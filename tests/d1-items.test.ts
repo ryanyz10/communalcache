@@ -51,7 +51,8 @@ it('creates one canonical item, shares it to two caches, and edits once without 
 it('keeps unshared library items private and permits canonical editing without any cache membership', async () => {
   const owner = await user(), other = await user()
   const item = await createItem(env.DB, owner, itemChanges({ title: 'Mixer', is_consumable: false }, true))
-  expect(item).toMatchObject({ owner_id: owner, quantity: null, cache_id: null, available: true, unavailable_note: null })
+  expect(item).toMatchObject({ owner_id: owner, quantity: null, cache_id: null, available: true })
+  expect(item).not.toHaveProperty('unavailable_note')
   expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM item_caches').first('n')).toBe(0)
   await expect(itemDetail(env.DB, item.id, other)).rejects.toMatchObject({ status: 404 })
   expect((await updateItem(env.DB, item.id, owner, itemChanges({ title: 'Stand mixer' }, false))).title).toBe('Stand mixer')
@@ -121,16 +122,41 @@ it('enforces real SQLite item quantity/boolean/FK constraints and keeps type imm
   expect((await updateItem(env.DB, f.item.id, f.owner, itemChanges({ quantity: 0 }, false))).quantity).toBe(0)
 })
 
-it('stores manual availability/note globally with 200-code-point validation and no loan state', async () => {
+it('stores manual availability globally without accepting or returning the retired note', async () => {
   const f = await fixture()
   await attachItem(env.DB, f.item.id, f.second.id, f.owner)
-  await updateItem(env.DB, f.item.id, f.owner, itemChanges({ available: false, unavailable_note: '😀'.repeat(200) }, false))
-  for (const cache of [f.first,f.second]) expect(await itemDetail(env.DB, f.item.id, f.admin, cache.id)).toMatchObject({ available: false, unavailable_note: '😀'.repeat(200) })
-  expect(() => itemChanges({ unavailable_note: '😀'.repeat(201) }, false)).toThrow('invalid_unavailable_note')
-  expect(() => itemChanges({ available: 0 }, false)).toThrow('invalid_available')
-  await updateItem(env.DB, f.item.id, f.owner, itemChanges({ available: true, unavailable_note: null }, false))
-  expect(await itemDetail(env.DB, f.item.id, f.owner)).toMatchObject({ available: true, unavailable_note: null })
-  for (const caller of [f.admin,f.member]) await expect(updateItem(env.DB, f.item.id, caller, itemChanges({ available: false }, false),f.first.id)).rejects.toMatchObject({ status: 404 })
+  await env.DB.prepare('UPDATE items SET unavailable_note=? WHERE id=?').bind('Legacy note retained in storage',f.item.id).run()
+  const changes = itemChanges({available:false,unavailable_note:{retired:'ignored'}},false)
+  expect(changes).toEqual({available:false})
+  await updateItem(env.DB,f.item.id,f.owner,changes)
+  for (const cache of [f.first,f.second]) {
+    const item = await itemDetail(env.DB,f.item.id,f.admin,cache.id)
+    expect(item.available).toBe(false)
+    expect(item).not.toHaveProperty('unavailable_note')
+    expect((await cacheItems(env.DB,cache.id,f.admin))[0]).not.toHaveProperty('unavailable_note')
+  }
+  expect((await libraryItems(env.DB,f.owner))[0]).not.toHaveProperty('unavailable_note')
+  expect(() => itemChanges({unavailable_note:'ignored'},false)).toThrow('invalid_json')
+  expect(() => itemChanges({available:0},false)).toThrow('invalid_available')
+  await updateItem(env.DB,f.item.id,f.owner,itemChanges({available:true},false))
+  expect((await itemDetail(env.DB,f.item.id,f.owner)).available).toBe(true)
+  expect(await env.DB.prepare('SELECT unavailable_note FROM items WHERE id=?').bind(f.item.id).first('unavailable_note')).toBe('Legacy note retained in storage')
+  for (const caller of [f.admin,f.member]) await expect(updateItem(env.DB,f.item.id,caller,itemChanges({available:false},false),f.first.id)).rejects.toMatchObject({status:404})
+})
+
+it('ignores retired fields alongside recognized PATCH fields and rejects an unknown-only PATCH', async () => {
+  const owner = await login('retired-note@example.test')
+  await worker.fetch(appRequest('/api/me',{method:'PATCH',cookie:owner.cookie,body:{display_name:'Owner'}}),env)
+  const item = await createItem(env.DB,owner.id,itemChanges({title:'Mixer',is_consumable:false},true))
+  const path = `/api/me/items/${item.id}`
+  const changed = await worker.fetch(appRequest(path,{method:'PATCH',cookie:owner.cookie,body:{available:false,unavailable_note:{ignored:true}}}),env)
+  expect(changed.status).toBe(200)
+  const payload = await changed.json()
+  expect(payload).toMatchObject({available:false})
+  expect(payload).not.toHaveProperty('unavailable_note')
+  const unknownOnly = await worker.fetch(appRequest(path,{method:'PATCH',cookie:owner.cookie,body:{unavailable_note:'ignored'}}),env)
+  expect(unknownOnly.status).toBe(400)
+  expect(await unknownOnly.json()).toEqual({error:'invalid_json'})
 })
 
 it('validates bounded text/quantity, trims nullable text and never interpolates SQL or accepts forged owners', async () => {
@@ -155,7 +181,7 @@ it('reopens current cache item screens and private library/attach APIs with cook
     const response = await worker.fetch(appRequest(path,{cookie:owner.cookie}),poisoned)
     expect(response.status).toBe(200)
     const payload = JSON.stringify(await response.json())
-    for (const privateField of ['photo_path','operation_token','example.test']) expect(payload).not.toContain(privateField)
+    for (const privateField of ['photo_path','operation_token','unavailable_note','example.test']) expect(payload).not.toContain(privateField)
   }
   const other = await createCache(env.DB,stranger,'Pantry',false)
   await joinCache(env.DB,other.id,owner.id,other.invite_token.split('.')[1])

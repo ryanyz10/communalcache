@@ -14,7 +14,7 @@ import { uploadPhoto } from './photos'
 import { invalidateRequestViews } from './requests'
 
 const cacheId = '11111111-1111-4111-8111-111111111111'
-const item: LibraryItem = {id:'22222222-2222-4222-8222-222222222222',cache_id:null,owner_id:'owner',owner_name:'Ryan',title:'Sugar',description:'Bring a jar',is_consumable:true,quantity:8,available_quantity:5,available:false,unavailable_note:'Back Sunday',created_at:1,photo_version:'version',caches:[{id:cacheId,name:'Maple Street'},{id:'garden',name:'Garden Club'}],pending_count:2}
+const item: LibraryItem = {id:'22222222-2222-4222-8222-222222222222',cache_id:null,owner_id:'owner',owner_name:'Ryan',title:'Sugar',description:'Bring a jar',is_consumable:true,quantity:8,available_quantity:5,available:false,created_at:1,photo_version:'version',caches:[{id:cacheId,name:'Maple Street'},{id:'garden',name:'Garden Club'}],pending_count:2}
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 function render(element: ReactElement, options: { route?: string; path?: string; caller?: string; state?: 'empty' | 'loading' | 'error'; more?: boolean } = {}) {
   const caller = options.caller ?? 'owner'
@@ -113,13 +113,13 @@ it('keeps partial attachment successes and retries only failures, using idempote
 
 it('renders saved cache links on the overview and leaves attachment editing to the item editor', () => {
   const markup = render(createElement(ItemPage),{route:'/items/:itemId',path:`/items/${item.id}`})
-  for (const text of ['Shown in','Maple Street','Garden Club','Save availability','Back Sunday','Delete item','your library and every cache']) expect(markup).toContain(text)
+  for (const text of ['Shown in','Maple Street','Garden Club','Mark as available','Delete item','your library and every cache']) expect(markup).toContain(text)
   const sharing = markup.match(/<ul class="cc-cache-list">([\s\S]*?)<\/ul>/)![1]
   expect(sharing).toContain(`href="/caches/${cacheId}"`)
   expect(sharing).toContain('href="/caches/garden"')
   expect(sharing).not.toMatch(/<button|<input|<svg|aria-pressed|Tool Shed/)
   expect(markup).not.toContain('Confirm stop sharing')
-  expect(markup).toContain('role="switch"')
+  expect(markup).not.toContain('role="switch"')
   expect(markup).toContain(`/items/${item.id}/edit`)
   expect(markup).toContain('View asks in Requests')
   expect(markup).not.toContain('Ask to borrow')

@@ -85,6 +85,14 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
       expect(html).toBe('<section class="mt-3" aria-label="Bot protection"><div></div></section>')
       html = html.replace('</section>', '<div><p role="alert" class="text-sm text-red-700">Bot protection is unavailable. Please retry.</p><button type="button" class="mt-2 text-sm underline">Retry bot check</button></div></section>')
     }
+    if (file === 'ThingTile' && name === 'ThingStatus' && process.env.COMPONENT_PARITY_PARENT !== '1') {
+      expect(html).not.toContain('cc-status-note')
+      expect(html).not.toContain('With a neighbor')
+      if (!(props.pending as number) && (props.item as {available:boolean}).available === false) {
+        // Retire only the old availability-note span; pin every other byte.
+        html = html.replace(/<\/span>$/, '<span class="cc-status-note"> · With a neighbor</span></span>')
+      }
+    }
     fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
   // Pin parent output so shallow CI checkouts do not need historical Git objects.

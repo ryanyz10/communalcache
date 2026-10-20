@@ -15,7 +15,7 @@ import { invalidateRequestViews } from './requests'
 import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
-type Kind = 'delete' | 'sharing' | 'form' | 'photo' | 'add'
+type Kind = 'delete' | 'sharing' | 'form' | 'photo' | 'add' | 'availability'
 type MutationOptions = {
   mutationFn: (variables?: unknown) => Promise<unknown>
   onSuccess?: (data: unknown, variables?: unknown) => unknown
@@ -46,7 +46,7 @@ function text(node: Element): string {
 }
 function click(node: Element) { (node.props.onClick as () => void)() }
 
-function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean } = {}) {
+function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean; available?: boolean } = {}) {
   const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
@@ -107,7 +107,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     return element
   }
   const Null = () => null
-  const currentItem = { ...item, cache_id: context.cacheId ?? null }
+  const currentItem = { ...item, cache_id: context.cacheId ?? null, available: context.available ?? true }
   const modules: Record<string, unknown> = {
     ...toasts.modules,
     react: {
@@ -153,8 +153,8 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
   modules['../lib/usePhotoSelection'] = hook.exports
-  const oldFile = kind === 'delete' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'ItemPhoto'
-  const newFile = kind === 'delete' ? 'ItemPage' : oldFile
+  const oldFile = kind === 'delete' || kind === 'availability' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'ItemPhoto'
+  const newFile = kind === 'delete' || kind === 'availability' ? 'ItemPage' : oldFile
   const source = process.env.ITEM_CONTRACT_PARENT === '1'
     ? execFileSync('git', ['show', `${parent}:web/src/pages/${oldFile}.tsx`], { encoding: 'utf8' })
     : readFileSync(new URL(`../pages/${newFile}.tsx`, import.meta.url), 'utf8')
@@ -166,7 +166,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     if (!(name in modules)) throw new Error(`Unexpected item dependency: ${name}`)
     return modules[name]
   }, module, module.exports)
-  const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'PhotoUpload']
+  const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'availability' ? 'ItemAvailability' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'PhotoUpload']
   const props = kind === 'form' ? {
     cacheId: context.cacheId ?? null, item: context.editing ? item : undefined,
     onStateChange: (state: typeof editorState) => { editorState = state },
@@ -221,6 +221,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     recoveryActions: () => elements.find(node => node.props.className === 'cc-item-recovery-actions'),
     editorState: () => editorState,
     sharedInCurrentCache: () => sharedResult,
+    setAvailability(available: boolean) { currentItem.available = available; render() },
     cancel: () => click(buttons()[0]), confirm: () => click(buttons()[1]),
     row: (title: string) => elements.find(node => node.type === 'button' && node.props.className === 'cc-select-row' && text(node).startsWith(title))!,
     button: (label: string) => elements.find(node => node.type === 'button' && text(node) === label)!,
@@ -260,6 +261,36 @@ for (const kind of ['delete'] as const) {
     expect(page.dialogModel.open).toBe(false)
   })
 }
+
+it('availability is one immediate button with exact boolean PATCH, pending disabling and both success labels', async () => {
+  let respond!: (response:Response) => void
+  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(() => new Promise(resolve => {respond=resolve}))
+  const page = fixture('availability')
+  expect(page.render()).toContain('role="status">Available')
+  expect(page.render().match(/<button/g)).toHaveLength(1)
+  expect(page.render()).not.toMatch(/<input|<form|Save availability|unavailable-note/)
+  click(page.button('Mark as lent out'));page.render()
+  expect(page.button('Saving…').props.disabled).toBe(true)
+  expect(fetch).toHaveBeenLastCalledWith(`/api/me/items/${item.id}`,expect.objectContaining({method:'PATCH',body:'{"available":false}'}))
+  respond(Response.json({...item,available:false}));await page.settled();page.setAvailability(false)
+  expect(page.toasts.notice).toMatchObject({message:'Marked as lent out',tone:'success'})
+  expect(page.render()).toContain('role="status">Lent out')
+  click(page.button('Mark as available'));page.render()
+  expect(fetch).toHaveBeenLastCalledWith(`/api/me/items/${item.id}`,expect.objectContaining({method:'PATCH',body:'{"available":true}'}))
+  respond(Response.json({...item,available:true}));await page.settled();page.setAvailability(true)
+  expect(page.toasts.notice).toMatchObject({message:'Marked as available',tone:'success'})
+  expect(page.button('Mark as lent out').props.disabled).toBe(false)
+})
+
+it('availability failure toasts without flipping the saved state and permits a manual retry', async () => {
+  const fetch = vi.spyOn(globalThis,'fetch').mockResolvedValueOnce(Response.json({error:'internal_error'},{status:503})).mockResolvedValueOnce(Response.json({...item,available:false}))
+  const page = fixture('availability')
+  click(page.button('Mark as lent out'));await page.settled();page.render()
+  expect(page.toasts.notice).toMatchObject({tone:'error'})
+  expect(page.button('Mark as lent out').props.disabled).toBe(false)
+  click(page.button('Mark as lent out'));await page.settled()
+  expect(fetch).toHaveBeenCalledTimes(2)
+})
 
 it('item overview lists only saved cache links and the edit hint, with no sharing controls', () => {
   const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('sharing')

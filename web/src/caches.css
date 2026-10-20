@@ -306,10 +306,6 @@
   background: currentColor;
 }
 
-.cc-thing-status > .cc-status-note {
-  display: none;
-}
-
 @media (max-width: 1023px) {
   .cc-contents-slip .cc-thing-tile {
     background: var(--cc-tile-deep);
@@ -1509,10 +1505,6 @@
   .cc-content-main .cc-thing-status > span:first-child {
     width: 8px;
     height: 8px;
-  }
-
-  .cc-thing-status > .cc-status-note {
-    display: contents;
   }
 
   .cc-content-ask, .cc-content-review {

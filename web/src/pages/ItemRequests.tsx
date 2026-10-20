@@ -41,7 +41,7 @@ export function ItemRequests({ item, compact = false, askOpen = false, onAskClos
       {!compact && item.is_consumable && item.available_quantity !== undefined && <p>Available now: {item.available_quantity}</p>}
       {!compact && item.is_consumable && (item.available_quantity === undefined || item.available_quantity === null) && <p className="cc-form-hint">Refresh the item to see current availability.</p>}
       {!compact && item.is_consumable && typeof item.available_quantity === 'number' && item.available_quantity <= 0 && <p className="cc-form-hint">No stock available now.</p>}
-      {item.available === false && <p className="cc-form-hint">Lent out{item.unavailable_note ? ` · ${item.unavailable_note}` : ''}. Existing requests can still be decided.</p>}
+      {item.available === false && <p className="cc-form-hint">Lent out. Existing requests can still be decided.</p>}
       {!compact && me?.id !== item.owner_id && <button
         type="button"
         className="cc-profile-primary"

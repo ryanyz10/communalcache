@@ -6,7 +6,6 @@ export type ItemChanges = {
   is_consumable?: boolean
   quantity?: number | null
   available?: boolean
-  unavailable_note?: string | null
 }
 
 export function itemChanges(body: Record<string, unknown>, creating: boolean): ItemChanges {
@@ -17,7 +16,7 @@ export function itemChanges(body: Record<string, unknown>, creating: boolean): I
     if (typeof body.is_consumable !== 'boolean') throw new HttpError(400, 'invalid_is_consumable')
     changes.is_consumable = body.is_consumable
   }
-  for (const [field, limit] of [['title', 120], ['description', 2000], ['unavailable_note', 200]] as const) {
+  for (const [field, limit] of [['title', 120], ['description', 2000]] as const) {
     if (!Object.hasOwn(body, field) && !(creating && field === 'title')) continue
     const value = body[field]
     if (field !== 'title' && value === null) {

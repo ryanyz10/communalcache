@@ -24,7 +24,7 @@ const parent = 'c9c06db17817e6d49e5d5cfbbdd7f021ffcb3656'
 const item: Item = {
   id: 'item', cache_id: 'cache', owner_id: 'owner', owner_name: 'Owner', title: 'Starter',
   description: null, is_consumable: true, quantity: 8, available_quantity: 3,
-  available: true, unavailable_note: null, photo_version: null, created_at: 1,
+  available: true, photo_version: null, created_at: 1,
 }
 const request: requests.ItemRequest = {
   id: 'request', cache_id: 'cache', cache_name: 'Tools', item_id: item.id, item_title: item.title,
@@ -281,32 +281,26 @@ it('approval opens with empty message, default reusable Lent out on, and resets 
   expect(page.trace.filter(row => row[0] === 'invalidate')).toEqual(invalidations.map(key => ['invalidate', [key]]))
   page.click('Approve request from Neighbor')
   expect(page.field('approval-message-request').props.value).toBe('')
-  expect(page.field('approval-note-request').props.value).toBe('')
+  expect(page.field('approval-note-request')).toBeUndefined()
   expect(fetch).not.toHaveBeenCalled()
 })
 
-it('counts approval message/note Unicode code points and preserves note edited vs untouched payloads', async () => {
+it('counts approval message Unicode code points and sends only message and Lent out flag', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ ...request, status: 'approved' }))
   const page = fixture('decision', { request: { ...request, quantity: null } })
   page.click('Approve request from Neighbor')
+  expect(page.render()).not.toMatch(/approval-note-|Lent out note|200 characters/)
   page.change('approval-message-request', '😀'.repeat(500))
-  page.change('approval-note-request', '😀'.repeat(200))
   expect(page.button('Approve').props.disabled).toBe(false)
-  page.change('approval-note-request', '😀'.repeat(201))
-  expect(page.button('Approve').props.disabled).toBe(true)
-  expect(page.render()).toContain('Keep the note within 200 characters.')
-  page.change('approval-note-request', '  With a neighbor  ')
   page.change('approval-message-request', '😀'.repeat(501))
   expect(page.button('Approve').props.disabled).toBe(true)
   page.change('approval-message-request', '  See you soon  ')
   page.trace.length = 0; page.submit(); await page.settled()
-  expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).toEqual({ approval_message: 'See you soon', mark_lent_out: true, unavailable_note: 'With a neighbor' })
+  expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).toEqual({ approval_message: 'See you soon', mark_lent_out: true })
   expect(page.trace).toEqual([['close'], ...invalidations.map(key => ['invalidate', [key]])])
   expect(page.toasts.notice).toMatchObject({ message: 'Request approved.', tone: 'success' })
-  page.click('Approve request from Neighbor'); page.submit(); await page.settled()
-  expect(JSON.parse(fetch.mock.calls[1][1]?.body as string)).toEqual({ approval_message: '', mark_lent_out: true })
-  page.click('Approve request from Neighbor'); page.change('approval-note-request', '  '); page.submit(); await page.settled()
-  expect(JSON.parse(fetch.mock.calls[2][1]?.body as string)).toEqual({ approval_message: '', mark_lent_out: true, unavailable_note: null })
+  page.click('Approve request from Neighbor'); page.change('switch',false); page.submit(); await page.settled()
+  expect(JSON.parse(fetch.mock.calls[1][1]?.body as string)).toEqual({ approval_message: '', mark_lent_out: false })
 })
 
 it('keeps consumable approval free of Lent out controls and blocks pending sheet close/Escape', async () => {
