@@ -104,7 +104,7 @@ it('keeps join requests, the add-item selector and sharing empties inside their 
   const adding = render(createElement(AddItemSheet, { cacheId, cacheName: 'Tools', dialog: { current: null } }))
   emptyList(adding, 'No items yet. Choose New item to start your library.', 'cc-add-selection')
   const sharing = render(createElement(ShownIn, { item }))
-  emptyList(sharing, 'Your item stays private in your library.', 'cc-packing-slip')
+  emptyList(sharing, 'Your item stays private in your library.', 'cc-select-options')
   expect(sharing).toContain('Go to Home')
 })
 
@@ -119,6 +119,6 @@ it('keeps admin empty states in the switch list and full-width table cells', () 
 it('removes the stock helper while keeping cache-picker empty guidance inside its choices', () => {
   const html = render(createElement(ItemForm, { cacheId: null, onSaved: () => {}, onCancel: () => {} }))
   const choices = html.match(/<fieldset class="cc-put-it-in">([\s\S]*?)<\/fieldset>/)![1]
-  expect(choices).toMatch(/<div><p class="cc-list-empty">No caches yet\. Your item stays private in your library\.<\/p><\/div>/)
+  expect(choices).toMatch(/<div class="cc-select-options"><p class="cc-list-empty">No caches yet\. Your item stays private in your library\.<\/p><\/div>/)
   expect(html).not.toContain("One item, one stock count, wherever it&#x27;s shown.")
 })

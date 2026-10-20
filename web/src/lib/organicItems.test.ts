@@ -48,22 +48,28 @@ it('keeps private owner editing, manual availability, sharing and distinct destr
 })
 it('keeps the new form empty, photo optional, type native, caches selectable and optional description reachable',()=>{
   const html=render(createElement(ItemEditorPage),'/items/new','/items/new')
-  for(const text of ['New item','>Save</button>','for="new-item-photo"','accept="image/*"','Lend it','Give it away','for="item-title"','Put it in','type="checkbox"','Description (optional)'])expect(html).toContain(text)
+  for(const text of ['New item','>Save</button>','for="new-item-photo"','accept="image/*"','Lend it','Give it away','for="item-title"','Put it in','aria-pressed="false"','Description (optional)'])expect(html).toContain(text)
   expect(html).not.toContain('One item, one stock count')
   expect(html).not.toContain('value="Mason jars"')
   expect(html).not.toContain('private@example.com')
 })
-it('keeps Put it in native checkboxes with square indicators, centered SVG ticks and disabled/focus states', () => {
+it('uses accessible cache pills with segment colors and no checkbox indicators', () => {
   const unchecked = render(createElement(ItemEditorPage), '/items/new', '/items/new')
   const selected = render(createElement(ItemForm, { cacheId, onSaved: vi.fn(), onCancel: vi.fn() }), '/', '/')
-  expect(unchecked).toMatch(/<input type="checkbox"\/>/)
-  expect(selected).toMatch(/<input type="checkbox" disabled="" checked=""\/>/)
+  expect(unchecked).toContain('<button type="button" class="cc-select-pill" aria-pressed="false">Climbing crew</button>')
+  expect(selected).toContain('<button type="button" class="cc-select-pill" aria-pressed="true" disabled="">Climbing crew')
   expect(selected).toContain('shared here in the same create operation')
-  expect(selected).toMatch(/<span aria-hidden="true"[^>]*><svg viewBox="0 0 24 24"/)
-  expect(selected).toContain('<path d="m5 13 4 4L19 7">')
+  for (const markup of [unchecked, selected]) {
+    const choices = markup.match(/<fieldset class="cc-put-it-in">([\s\S]*?)<\/fieldset>/)![1]
+    expect(choices).not.toMatch(/<input|<svg|aria-hidden="true"/)
+  }
   const css = readFileSync(new URL('../items.css', import.meta.url), 'utf8')
-  const indicator = css.match(/\.cc-put-it-in label > span:not\(\.sr-only\) \{([^}]+)\}/)![1]
-  for (const rule of ['width: 26px', 'height: 26px', 'aspect-ratio: 1', 'flex: none', 'display: grid', 'place-items: center']) expect(indicator).toContain(rule)
-  expect(css).toContain('.cc-put-it-in label:has(input:focus-visible)')
-  expect(css).toContain('.cc-put-it-in label:has(input:disabled)')
+  const chip = css.match(/\.cc-select-pill, \.cc-select-row \{([^}]+)\}/)![1]
+  expect(chip).toContain('min-height: 40px')
+  expect(chip).toContain('background: var(--cc-chip)')
+  const selectedChip = css.match(/\.cc-select-pill\[aria-pressed="true"\], \.cc-select-row\[aria-pressed="true"\] \{([^}]+)\}/)![1]
+  for (const rule of ['background: var(--cc-fg)', 'color: var(--cc-bg)']) expect(selectedChip).toContain(rule)
+  expect(css).toContain('.cc-select-pill:focus-visible')
+  expect(css).toContain('.cc-select-pill:disabled')
+  expect(css).not.toContain('.cc-put-it-in label > span')
 })

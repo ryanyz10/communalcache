@@ -420,63 +420,40 @@
   min-width: 0;
 }
 
-.cc-put-it-in > div {
+.cc-select-options {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.cc-put-it-in > div > label {
-  position: relative;
+.cc-select-pill, .cc-select-row {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  min-height: 38px;
+  min-height: 40px;
   max-width: 100%;
   padding: 9px 14px;
   border-radius: 999px;
-  background: var(--cc-card);
+  background: var(--cc-chip);
+  color: var(--cc-fg);
   font: 600 13px/normal var(--font-body);
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
-.cc-put-it-in input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.cc-put-it-in label:has(input:checked) {
-  box-shadow: 0 0 0 2px var(--cc-fg);
+.cc-select-pill[aria-pressed="true"], .cc-select-row[aria-pressed="true"] {
+  background: var(--cc-fg);
+  color: var(--cc-bg);
   font-weight: 700;
 }
 
-.cc-put-it-in label:has(input:focus-visible) {
+.cc-select-pill:focus-visible, .cc-select-row:focus-visible {
   outline: 2px solid var(--cc-accent);
   outline-offset: 3px;
 }
 
-.cc-put-it-in label > span:not(.sr-only) {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  aspect-ratio: 1;
-  flex: none;
-  border: 1.5px solid currentColor;
-  border-radius: 6px;
-}
-
-.cc-put-it-in label > span > svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-}
-
-.cc-put-it-in label:has(input:disabled) {
+.cc-select-pill:disabled, .cc-select-row:disabled {
   cursor: not-allowed;
   opacity: .65;
 }
@@ -620,66 +597,32 @@
 }
 
 .cc-add-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 10px;
   overflow-y: auto;
   min-height: 0;
 }
 
-.cc-add-selection li {
-  border-bottom: 1px solid var(--cc-line);
-}
-
-.cc-add-selection li:last-child {
-  border: 0;
-}
-
-.cc-add-selection label {
+.cc-select-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
   min-height: 58px;
-  padding: 12px 0;
+  padding: 12px 16px;
+  border-radius: 20px;
+  text-align: left;
 }
 
-.cc-add-selection input, .cc-owner-sharing input[type="checkbox"] {
-  appearance: none;
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border: 2px solid var(--cc-edge);
-  border-radius: 9px;
-  background: transparent;
+.cc-select-row > span:first-child {
+  font-size: 15px;
 }
 
-.cc-add-selection input:checked, .cc-owner-sharing input:checked {
-  background: var(--cc-accent);
-  border-color: var(--cc-accent);
-}
-
-.cc-add-selection input:checked::after, .cc-owner-sharing input:checked::after {
-  content: '✓';
-  color: #201e1d;
-  font: 800 18px/1 var(--font-body);
-}
-
-.cc-add-selection li[data-already="true"] {
-  color: var(--cc-sub);
-}
-
-.cc-add-selection input:disabled {
-  background: var(--cc-chip);
-  border-color: var(--cc-chip);
-}
-
-.cc-add-selection input:disabled::after {
-  content: none;
-}
-
-.cc-add-selection label > span > span:first-child {
-  font: 600 15px var(--font-body);
-}
-
-.cc-add-selection label > span > span:last-child {
+.cc-select-row > span:last-child {
   font: 400 13px var(--font-body);
+  opacity: .8;
 }
 
 .cc-add-submit {

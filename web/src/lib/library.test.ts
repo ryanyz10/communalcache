@@ -82,11 +82,14 @@ it('does not reuse another account or cache-context detail through denial, refet
   observer.destroy(); client.clear()
 })
 
-it('offers existing/new sources in one labeled native sheet, with attached items checked and disabled and other sharing hints', () => {
+it('offers existing/new sources in one labeled native sheet, with attached item rows pressed and disabled and other sharing hints', () => {
   const markup = render(createElement(AddItemSheet,{cacheId,cacheName:'Maple Street',dialog:createRef<HTMLDialogElement>()}))
   expect(markup.match(/<dialog\b/g)).toHaveLength(1)
   for (const copy of ['Add to Maple Street','Your items','New item','Already here','Not shared yet','Add 0 to Maple Street','Creates it in your library','Create and add here']) expect(markup).toContain(copy)
-  expect(markup).toMatch(/<input(?=[^>]*type="checkbox")(?=[^>]*disabled="")(?=[^>]*checked="")[^>]*>/)
+  expect(markup).toMatch(/<button(?=[^>]*class="cc-select-row")(?=[^>]*aria-pressed="true")(?=[^>]*disabled="")[^>]*>/)
+  const choices = markup.match(/<ul class="cc-add-selection">([\s\S]*?)<\/ul>/)![1]
+  expect(choices).toContain('aria-pressed="false"')
+  expect(choices).not.toMatch(/<input|<svg/)
   expect(markup).toContain('aria-label="Choose item source"')
   expect(markup).toContain('aria-pressed="true"')
   expect(markup).toContain('for="new-item-photo"')
@@ -108,10 +111,14 @@ it('keeps partial attachment successes and retries only failures, using idempote
   expect(fetchMock.mock.calls.every(call=>call[1]?.method==='PUT' && call[1]?.credentials==='same-origin')).toBe(true)
 })
 
-it('renders private owner item controls and active-cache checkboxes with explicit detach consequences', () => {
+it('renders private owner item controls and active-cache pills with explicit detach consequences', () => {
   const markup = render(createElement(ItemPage),{route:'/items/:itemId',path:`/items/${item.id}`})
-  for (const text of ['Shown in','Maple Street','Garden Club','Tool Shed','Save availability','Back Sunday','Pending asks in this cache get declined','Your library item, photos, stock and other caches are kept','Confirm stop sharing','Delete item','your library and every cache']) expect(markup).toContain(text)
-  expect(markup.match(/type="checkbox"[^>]*checked=""/g)).toHaveLength(3)
+  for (const text of ['Shown in','Maple Street','Garden Club','Tool Shed','Save availability','Back Sunday','Pending asks in these caches get declined','Your library item, photos, stock and other caches are kept','Confirm stop sharing','Delete item','your library and every cache']) expect(markup).toContain(text)
+  const sharing = markup.match(/<ul class="cc-select-options mt-3">([\s\S]*?)<\/ul>/)![1]
+  expect(sharing.match(/aria-pressed="true"/g)).toHaveLength(2)
+  expect(sharing).toContain('aria-pressed="false"')
+  expect(sharing).not.toMatch(/<input|<svg/)
+  expect(markup).toContain('role="switch"')
   expect(markup).toContain(`/items/${item.id}/edit`)
   expect(markup).toContain('View asks in Requests')
   expect(markup).not.toContain('Ask to borrow')

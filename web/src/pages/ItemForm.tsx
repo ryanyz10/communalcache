@@ -4,7 +4,6 @@ import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { persistItem, type Item, type ItemSaveProgress } from '../lib/items'
 import type { CacheSummary } from '../lib/caches'
-import { boxColor } from '../components/Box'
 import { usePhotoSelection } from '../lib/usePhotoSelection'
 import { PhotoPreview } from '../components/PhotoPreview'
 import { invalidateRequestViews } from '../lib/requests'
@@ -175,23 +174,21 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
           <p role="alert">{errorMessage(cachesQuery.error)}</p>
           <button type="button" onClick={() => void cachesQuery.refetch()}>Try caches again</button>
         </div>}
-        <div>
+        <div className="cc-select-options">
           {orderedCaches && orderedCaches.map(cache => {
             const isSelected = selectedCacheIds.includes(cache.id)
-            return <label key={cache.id} style={isSelected ? { background: boxColor(cache.id), color: '#201e1d' } : undefined}>
-              <input
-                type="checkbox"
-                checked={isSelected}
-                disabled={cache.id === cacheId || fieldsLocked}
-                onChange={event => setSelectedCacheIds(current => event.target.checked
-                  ? [...current, cache.id] : current.filter(id => id !== cache.id))}
-              />
-              <span aria-hidden="true" style={{ background: boxColor(cache.id) }}>
-                {isSelected && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 13 4 4L19 7" /></svg>}
-              </span>
+            return <button
+              key={cache.id}
+              type="button"
+              className="cc-select-pill"
+              aria-pressed={isSelected}
+              disabled={cache.id === cacheId || fieldsLocked}
+              onClick={() => setSelectedCacheIds(current => current.includes(cache.id)
+                ? current.filter(id => id !== cache.id) : [...current, cache.id])}
+            >
               {cache.name}
               {cache.id === cacheId && <span className="sr-only">, shared here in the same create operation</span>}
-            </label>
+            </button>
           })}
           {cachesQuery.isSuccess && !cachesQuery.data.length && <p className="cc-list-empty">No caches yet. Your item stays private in your library.</p>}
         </div>

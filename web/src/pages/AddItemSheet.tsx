@@ -99,19 +99,17 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
             if (item.is_consumable) hint += ` · ${item.available_quantity ?? item.quantity} to give`
           }
           return <li key={item.id} data-already={isAlreadyShared}>
-            <label className="flex min-h-14 items-center gap-3 py-3">
-              <input
-                type="checkbox"
-                checked={isAlreadyShared || selectedItemIds.includes(item.id)}
-                disabled={isAlreadyShared || isBusy}
-                onChange={event => setSelectedItemIds(current => event.target.checked
-                  ? [...current, item.id] : current.filter(id => id !== item.id))}
-              />
-              <span className="min-w-0">
-                <span className="block break-words font-medium">{item.title}</span>
-                <span className="block break-words text-sm text-slate-600">{hint}</span>
-              </span>
-            </label>
+            <button
+              type="button"
+              className="cc-select-row"
+              aria-pressed={isAlreadyShared || selectedItemIds.includes(item.id)}
+              disabled={isAlreadyShared || isBusy}
+              onClick={() => setSelectedItemIds(current => current.includes(item.id)
+                ? current.filter(id => id !== item.id) : [...current, item.id])}
+            >
+              <span>{item.title}</span>
+              <span>{hint}</span>
+            </button>
           </li>
         })}
       </ul>
