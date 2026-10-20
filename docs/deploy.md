@@ -764,6 +764,10 @@ finite hidden retry cutoff. Production export/restore needs approval.
 
 ## Legacy cutover (separate approval)
 
+Legacy Go service, Fly deployment and Supabase integration files were removed
+from this repo and remain in git history. Removing those files does not shut down
+the external Fly app or Supabase project or authorize their decommissioning.
+
 Inventory verified Supabase emails; match/insert Better Auth users and preserve
 display names. Import caches, memberships, canonical items, item_caches and
 requests **straight into D1**, rewriting owner/requester/user IDs and outbox/photo
