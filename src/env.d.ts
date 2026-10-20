@@ -1,4 +1,5 @@
 interface Env {
+  LOCAL_DEV_AUTH?: string
   CF_ACCESS_TEAM_DOMAIN?: string
   CF_ACCESS_AUD?: string
   ADMIN_USER_IDS?: string
@@ -11,6 +12,7 @@ interface Env {
 
 declare namespace Cloudflare {
   interface Env {
+    LOCAL_DEV_AUTH?: string
     CF_ACCESS_TEAM_DOMAIN?: string
     CF_ACCESS_AUD?: string
     ADMIN_USER_IDS?: string

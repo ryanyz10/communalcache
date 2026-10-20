@@ -26,9 +26,9 @@ it('pins explicit named-environment logs with invocation logs/traces off', () =>
   expect(config.observability).toBeUndefined()
 })
 
-it('audits production console events and pins the one guarded localhost mail exception', () => {
+it('audits production console events and pins the guarded localhost mail exceptions', () => {
   const events = new Set<string>()
-  let count = 0, localMailCount = 0
+  let count = 0, localMailCount = 0, localNotificationCount = 0
   function scan(directory: string) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name)
@@ -50,6 +50,20 @@ it('audits production console events and pins the one guarded localhost mail exc
             expect(ts.isTemplateExpression(call.arguments[0])).toBe(true)
             expect(call.getText(source)).toContain('LOCAL DEV SIGN-IN MAIL')
             localMailCount++
+            return
+          }
+          if (path === fileURLToPath(new URL('src/notifications.ts',root)) && method === 'log') {
+            const guard=call.parent.parent.parent
+            expect(ts.isIfStatement(guard)).toBe(true)
+            if (!ts.isIfStatement(guard)) return
+            expect(guard.expression.getText(source)).toBe('localDevAuth(env,env.APP_BASE_URL) && !env.RESEND_API_KEY')
+            expect(call.arguments).toHaveLength(1)
+            const message=call.arguments[0]
+            expect(ts.isTemplateExpression(message)).toBe(true)
+            if (!ts.isTemplateExpression(message)) return
+            expect(message.templateSpans.map(span=>span.expression.getText(source))).toEqual(['email','content.subject','content.text'])
+            expect(call.getText(source)).toContain('LOCAL DEV NOTIFICATION MAIL')
+            localNotificationCount++
             return
           }
           expect(['info', 'warn', 'error']).toContain(method)
@@ -78,6 +92,7 @@ it('audits production console events and pins the one guarded localhost mail exc
   scan(fileURLToPath(new URL('src', root)))
   expect(count).toBe(9)
   expect(localMailCount).toBe(1)
+  expect(localNotificationCount).toBe(1)
   expect([...events].sort()).toEqual(Object.keys(fields).sort())
 })
 
