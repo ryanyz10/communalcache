@@ -31,13 +31,14 @@ function render(element: ReactElement, options: { route?: string; path?: string;
   return markup
 }
 
-it('renders caller library cards, names, shared stock, pending asks, private photo routes and wide grid without a cache dependency', () => {
+it('renders owner photo tiles with canonical stock and private detail links, without cache metadata or row actions', () => {
   const markup = render(createElement(LibraryPage),{more:true})
-  for (const copy of ['Your items','+ New item','Sugar','Maple Street · Garden Club','Give · 8','2 asks','Not in a cache yet','Load more items']) expect(markup).toContain(copy)
+  for (const copy of ['Your items','+ New item','Sugar','Give · 8','Lent out','Load more items']) expect(markup).toContain(copy)
   expect(markup).toContain(`/items/${item.id}`)
   expect(markup).toContain(`/api/me/items/${item.id}/photo?v=version`)
-  expect(markup).toContain('cc-library-slip')
-  expect(markup).toContain('href="/items/unshared/edit"')
+  expect(markup).toContain('cc-library-grid')
+  expect(markup).toContain('href="/items/unshared"')
+  expect(markup).not.toMatch(/Maple Street|Garden Club|cc-library-hero|cc-library-row|cc-library-status|2 asks/)
   expect(markup).not.toContain('#sharing')
   expect(markup).not.toContain('/api/caches/null')
   expect(markup).not.toContain('private@example.test')
@@ -45,10 +46,9 @@ it('renders caller library cards, names, shared stock, pending asks, private pho
 
 it('keeps inactive items greyed and tagged in the owner library while the private item controls stay usable', () => {
   const markup=render(createElement(LibraryPage),{inactive:true})
-  expect(markup).toContain('cc-library-row cc-item-inactive')
+  expect(markup).toContain('cc-library-tile cc-item-inactive')
   expect(markup).not.toContain('cc-inactive-tag')
-  expect(markup).toContain('cc-thing-status-muted')
-  expect(markup).toContain('Inactive</span>')
+  expect(markup).toContain(' · Inactive</span>')
   const unshared=render(createElement(LibraryPage),{inactive:true,unshared:true})
   expect(unshared).toContain('Inactive</span>')
   expect(unshared).not.toContain('cc-inactive-tag')
