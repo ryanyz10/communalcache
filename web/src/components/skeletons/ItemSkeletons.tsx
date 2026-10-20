@@ -27,14 +27,8 @@ export function ItemSkeleton({ cacheId }: { cacheId?: string }) {
           </div>
           <section className="cc-owner-availability">
             <h2>Availability</h2>
-            <div className="cc-owner-availability-toggle">
-              <span>Lent out</span>
-              <Shimmer width={48} height={28} />
-            </div>
-            <span>Lent out note (optional)</span>
-            <Shimmer height={50} />
-            <p className="cc-form-hint">Up to 200 characters. This blocks new requests, not existing pending requests.</p>
-            <button disabled className="cc-profile-secondary">Save availability</button>
+            <Shimmer width={96} height={18} />
+            <button disabled className="cc-profile-secondary">Mark as lent out</button>
           </section>
           <section className="cc-owner-sharing">
             <h2>Shown in</h2>

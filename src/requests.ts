@@ -13,7 +13,6 @@ export type DecisionInput = {
   reason: string | null
   mark_lent_out: boolean
   approval_message?: string | null
-  unavailable_note?: string | null
 }
 
 export function decisionInput(body: Record<string, unknown>, action: 'approve' | 'reject'): DecisionInput {
@@ -33,12 +32,6 @@ export function decisionInput(body: Record<string, unknown>, action: 'approve' |
       throw new HttpError(400, 'invalid_approval_message')
     }
     input.approval_message = body.approval_message.trim() || null
-  }
-  if (Object.hasOwn(body, 'unavailable_note')) {
-    if (body.unavailable_note !== null && (typeof body.unavailable_note !== 'string' || [...body.unavailable_note.trim()].length > 200)) {
-      throw new HttpError(400, 'invalid_unavailable_note')
-    }
-    input.unavailable_note = typeof body.unavailable_note === 'string' ? body.unavailable_note.trim() || null : null
   }
   return input
 }

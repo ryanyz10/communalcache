@@ -102,18 +102,18 @@ it('guards stock edits against pending across every cache and serializes stock-e
   expect((await updateItem(env.DB,f.item.id,f.owner,itemChanges({quantity:floor},false))).quantity).toBe(floor)
 })
 
-it('Lent out blocks new requests, preserves pending rows and unchecked approvals never clear the flag or note', async () => {
+it('Lent out blocks new requests, preserves pending rows and unchecked approvals never clear the flag', async () => {
   const f = await fixture(0,true), first = await createRequest(env.DB,f.item.id,f.a.id,f.first,null), second = await createRequest(env.DB,f.item.id,f.b.id,f.second,null)
-  await updateItem(env.DB,f.item.id,f.owner,itemChanges({available:false,unavailable_note:'Back next week'},false))
+  await updateItem(env.DB,f.item.id,f.owner,itemChanges({available:false},false))
   await expect(createRequest(env.DB,f.item.id,f.a.id,f.neighbor,null)).rejects.toMatchObject({status:409,code:'item_unavailable'})
   expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM requests WHERE status='pending'").first('n')).toBe(2)
   await decideRequest(env.DB,first.request.id,f.owner,'approve',approve())
-  expect(await itemDetail(env.DB,f.item.id,f.owner)).toMatchObject({available:false,unavailable_note:'Back next week',quantity:null})
-  await decideRequest(env.DB,second.request.id,f.owner,'approve',decisionInput({mark_lent_out:true,unavailable_note:'😀'.repeat(200)},'approve'))
-  for(const cache of [f.a,f.b])expect(await itemDetail(env.DB,f.item.id,f.owner,cache.id)).toMatchObject({available:false,unavailable_note:'😀'.repeat(200)})
-  await updateItem(env.DB,f.item.id,f.owner,itemChanges({available:true,unavailable_note:null},false))
+  expect(await itemDetail(env.DB,f.item.id,f.owner)).toMatchObject({available:false,quantity:null})
+  await decideRequest(env.DB,second.request.id,f.owner,'approve',decisionInput({mark_lent_out:true},'approve'))
+  for(const cache of [f.a,f.b])expect(await itemDetail(env.DB,f.item.id,f.owner,cache.id)).toMatchObject({available:false})
+  await updateItem(env.DB,f.item.id,f.owner,itemChanges({available:true},false))
   expect((await createRequest(env.DB,f.item.id,f.a.id,f.neighbor,null)).request.status).toBe('pending')
-  expect(()=>decisionInput({mark_lent_out:true,unavailable_note:'😀'.repeat(201)},'approve')).toThrow('invalid_unavailable_note')
+  expect(decisionInput({mark_lent_out:true,unavailable_note:{retired:'ignored'}},'approve')).toEqual({reason:null,mark_lent_out:true})
 })
 
 it('serializes a Lent out approval against new asks while preserving any request that committed first', async () => {
@@ -130,10 +130,14 @@ it('serializes a Lent out approval against new asks while preserving any request
   }
 })
 
-it('the reusable approval checkbox sets flag/note atomically and cannot be applied to consumables', async () => {
+it('the reusable approval checkbox sets the flag atomically without changing retired notes and cannot be applied to consumables', async () => {
   const tool = await fixture(0,true), request = await createRequest(env.DB,tool.item.id,tool.a.id,tool.first,null)
-  await decideRequest(env.DB,request.request.id,tool.owner,'approve',decisionInput({mark_lent_out:true,unavailable_note:'With a neighbor'},'approve'))
-  expect(await itemDetail(env.DB,tool.item.id,tool.owner)).toMatchObject({available:false,unavailable_note:'With a neighbor'})
+  await env.DB.prepare('UPDATE items SET unavailable_note=? WHERE id=?').bind('Legacy note',tool.item.id).run()
+  await decideRequest(env.DB,request.request.id,tool.owner,'approve',decisionInput({mark_lent_out:true,unavailable_note:'ignored'},'approve'))
+  const changed = await itemDetail(env.DB,tool.item.id,tool.owner)
+  expect(changed.available).toBe(false)
+  expect(changed).not.toHaveProperty('unavailable_note')
+  expect(await env.DB.prepare('SELECT unavailable_note FROM items WHERE id=?').bind(tool.item.id).first('unavailable_note')).toBe('Legacy note')
   const stock = await fixture(), consumable = await createRequest(env.DB,stock.item.id,stock.a.id,stock.first,1), before = (await outbox()).results.length
   await expect(decideRequest(env.DB,consumable.request.id,stock.owner,'approve',decisionInput({mark_lent_out:true},'approve'))).rejects.toMatchObject({status:400,code:'invalid_lent_out'})
   expect((await outbox()).results).toHaveLength(before)
@@ -202,13 +206,13 @@ it('party history is not decision authority after owner membership or attachment
   expect((await itemDetail(env.DB,f.item.id,f.owner)).quantity).toBe(10)
 })
 
-it('validates rejection/checkbox/note inputs with Unicode bounds and no forged decision party', () => {
+it('validates rejection/checkbox inputs with Unicode bounds and no forged decision party', () => {
   for(const reason of [null,'','  ',123,'😀'.repeat(501)])expect(()=>decisionInput({reason},'reject')).toThrow('invalid_reason')
   expect(decisionInput({reason:'😀'.repeat(500)},'reject').reason).toHaveLength(1000)
   expect(()=>decisionInput({mark_lent_out:'yes'},'approve')).toThrow('invalid_lent_out')
   expect(()=>decisionInput({mark_lent_out:true,reason:'Not today'},'reject')).toThrow('invalid_lent_out')
   expect(()=>decisionInput({owner_id:'forged'},'approve')).toThrow('not_found')
-  expect(decisionInput({mark_lent_out:true,unavailable_note:'  '},'approve').unavailable_note).toBeNull()
+  expect(decisionInput({mark_lent_out:true,unavailable_note:'  '},'approve')).not.toHaveProperty('unavailable_note')
 })
 
 it('rolls request state, stock, optional availability and outbox back on injected SQL failures', async () => {
@@ -221,9 +225,9 @@ it('rolls request state, stock, optional availability and outbox back on injecte
   const before = (await outbox()).results
   await env.DB.exec("CREATE TRIGGER fail_outbox BEFORE INSERT ON outbox BEGIN SELECT RAISE(ABORT,'injected outbox failure'); END")
   await expect(decideRequest(env.DB,request.request.id,f.owner,'approve',approve())).rejects.toThrow('injected outbox failure')
-  await expect(decideRequest(env.DB,reusable.request.id,tool.owner,'approve',decisionInput({mark_lent_out:true,unavailable_note:'Lost note'},'approve'))).rejects.toThrow('injected outbox failure')
+  await expect(decideRequest(env.DB,reusable.request.id,tool.owner,'approve',decisionInput({mark_lent_out:true},'approve'))).rejects.toThrow('injected outbox failure')
   expect(await itemDetail(env.DB,f.item.id,f.owner)).toMatchObject({quantity:10,available_quantity:7})
-  expect(await itemDetail(env.DB,tool.item.id,tool.owner)).toMatchObject({available:true,unavailable_note:null})
+  expect(await itemDetail(env.DB,tool.item.id,tool.owner)).toMatchObject({available:true})
   expect((await outbox()).results).toEqual(before)
   await env.DB.exec('DROP TRIGGER fail_outbox')
   await env.DB.exec("CREATE TRIGGER corrupt_stock AFTER UPDATE ON requests WHEN NEW.status='approved' AND NEW.quantity IS NOT NULL BEGIN UPDATE items SET quantity=0 WHERE id=NEW.item_id; END")

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
@@ -67,50 +67,24 @@ function DeleteItem({ item }: { item: Item }) {
   </>
 }
 
-function ItemAvailability({ item }: { item: Item }) {
+export function ItemAvailability({ item }: { item: Item }) {
   const { showToast } = useToast()
   const queryClient = useQueryClient()
-  const [isLentOut, setIsLentOut] = useState(item.available === false)
-  const [note, setNote] = useState(item.unavailable_note ?? '')
-  const trimmedNote = note.trim()
-  const noteTooLong = [...trimmedNote].length > 200
+  const isLentOut = item.available === false
   const saveAvailability = useMutation({
-    mutationFn: () => apiFetch(`/api/me/items/${item.id}`, {
-      method: 'PATCH', body: { available: !isLentOut, unavailable_note: trimmedNote || null },
-    }),
-    onSuccess: () => showToast('Availability saved.'),
-    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
+    mutationFn: (available: boolean) => apiFetch(`/api/me/items/${item.id}`, { method: 'PATCH', body: { available } }),
+    onSuccess: (_saved, available) => showToast(available ? 'Marked as available' : 'Marked as lent out'),
+    onError: error => showToast(errorMessage(error), 'error'),
     onSettled: () => invalidateRequestViews(queryClient),
   })
 
-  function submitAvailability(event: FormEvent) {
-    event.preventDefault()
-    if (!noteTooLong) saveAvailability.mutate()
-  }
-
-  return <form className="cc-owner-availability" onSubmit={submitAvailability} aria-label="Item availability">
+  return <section className="cc-owner-availability" aria-label="Item availability">
     <h2>Availability</h2>
-    <label className="cc-owner-availability-toggle">
-      <span>Lent out</span>
-      <input
-        type="checkbox"
-        role="switch"
-        aria-checked={isLentOut}
-        checked={isLentOut}
-        disabled={saveAvailability.isPending}
-        onChange={event => setIsLentOut(event.target.checked)}
-        className="cc-switch"
-      />
-    </label>
-    <label htmlFor="unavailable-note">Lent out note (optional)</label>
-    <input id="unavailable-note" value={note} disabled={saveAvailability.isPending} onChange={event => setNote(event.target.value)} className="cc-profile-input" />
-    <p className="cc-form-hint">Up to 200 characters. This blocks new requests, not existing pending requests.</p>
-    {noteTooLong && <p role="alert" className="cc-form-error">Keep the note within 200 characters.</p>}
-    {saveAvailability.isError && !transientActionFailure(saveAvailability.error) && <p role="alert" className="cc-form-error">{errorMessage(saveAvailability.error)}</p>}
-    <button type="submit" disabled={saveAvailability.isPending || noteTooLong} className="cc-profile-secondary">
-      {saveAvailability.isPending ? 'Saving…' : 'Save availability'}
+    <p role="status">{isLentOut ? 'Lent out' : 'Available'}</p>
+    <button type="button" disabled={saveAvailability.isPending} className="cc-profile-secondary" onClick={() => saveAvailability.mutate(isLentOut)}>
+      {saveAvailability.isPending ? 'Saving…' : isLentOut ? 'Mark as available' : 'Mark as lent out'}
     </button>
-  </form>
+  </section>
 }
 
 export function ItemPage() {
@@ -196,7 +170,7 @@ export function ItemPage() {
             <Link to={editPath} state={{ itemEditor: true }} data-item-editor-trigger={item.id} className="cc-profile-primary">Edit item</Link>
             <DeleteItem item={item} />
           </div>
-          <ItemAvailability key={`${item.id}:${item.available}:${item.unavailable_note ?? ''}`} item={item} />
+          <ItemAvailability item={item} />
           <div id="sharing"><ShownIn item={item} /></div>
           <PhotoUpload item={item} />
           {!cacheId && <Link to="/requests" className="cc-profile-secondary">View asks in Requests</Link>}

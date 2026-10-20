@@ -13,17 +13,14 @@ export function RequestDecision({ request }: { request: ItemRequest }) {
   const [mode, setMode] = useState<'approve' | 'decline'>('approve')
   const [message, setMessage] = useState('')
   const [reason, setReason] = useState('')
-  const [note, setNote] = useState('')
   const [markLentOut, setMarkLentOut] = useState(DEFAULT_MARK_LENT_OUT)
-  const [noteEdited, setNoteEdited] = useState(false)
   const messageTooLong = [...message.trim()].length > 500
-  const noteTooLong = [...note.trim()].length > 200
   const reasonTooLong = [...reason.trim()].length > 500
   const decisionMutation = useMutation({
     mutationFn: (action: 'approve' | 'reject') => {
       const body = action === 'reject'
         ? { reason: reason.trim() }
-        : approvalBody(request.quantity, message, markLentOut, note, noteEdited)
+        : approvalBody(request.quantity, message, markLentOut)
       return apiFetch<ItemRequest>(`/api/me/requests/${request.id}/${action}`, { body })
     },
     onSuccess: (_data, action) => { showToast(action === 'approve' ? 'Request approved.' : 'Request declined.'); dialogRef.current?.close() },
@@ -35,8 +32,6 @@ export function RequestDecision({ request }: { request: ItemRequest }) {
     setMode(nextMode)
     setMessage('')
     setReason('')
-    setNote('')
-    setNoteEdited(false)
     setMarkLentOut(DEFAULT_MARK_LENT_OUT)
     dialogRef.current?.showModal()
   }
@@ -105,24 +100,11 @@ export function RequestDecision({ request }: { request: ItemRequest }) {
                 className="cc-switch"
               />
             </label>
-            {markLentOut && <>
-              <label className="sr-only" htmlFor={`approval-note-${request.id}`}>Lent out note (optional)</label>
-              <input
-                id={`approval-note-${request.id}`}
-                value={note}
-                maxLength={400}
-                disabled={decisionMutation.isPending}
-                onChange={event => { setNote(event.target.value); setNoteEdited(true) }}
-                placeholder="Lent out note (optional)"
-              />
-              <span className="sr-only">Up to 200 characters. Leave untouched to keep an existing availability note.</span>
-            </>}
-            {markLentOut && noteTooLong && <p role="alert" className="cc-form-error">Keep the note within 200 characters.</p>}
           </div>}
           <button
             type="submit"
             className="cc-profile-primary"
-            disabled={decisionMutation.isPending || messageTooLong || (isReusable && markLentOut && noteTooLong)}
+            disabled={decisionMutation.isPending || messageTooLong}
           >{decisionMutation.isPending ? 'Saving decision…' : 'Approve'}</button>
           <button type="button" className="cc-sheet-text-button" disabled={decisionMutation.isPending} onClick={() => { decisionMutation.reset(); setMode('decline') }}>Decline with a reason</button>
         </> : <>

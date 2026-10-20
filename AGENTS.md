@@ -3,7 +3,7 @@
 Mobile-first household sharing for a close community. A directory and lightweight
 ask/approve handshake, not a logistics system. Handoffs happen in real life; no
 addresses, return/holder tracking or loan lifecycle. Lent out is only a manual
-owner availability flag/note, not a borrower or return record.
+owner availability flag, not a borrower or return record.
 
 Target: one TypeScript Cloudflare Worker serves `/api/*` and React static assets.
 ONE D1 database is the source of truth for auth, caches, memberships, canonical
@@ -66,7 +66,8 @@ Intended production URL is https://communalcache.com; provisioning needs approva
    Request plus outbox commit together. Pending-only token-guarded approval deducts
    once; stock edits cannot undercut pending reservations; lost races return 409.
    Lent out blocks new requests, not existing pending rows. Reusable approval's
-   checkbox sets that flag/optional note in the same batch; note max 200 code points.
+   checkbox sets that flag in the same batch. The item-page button immediately
+   saves Mark as lent out / Mark as available; no availability note.
 4. **Destruction is one guarded atomic batch.** Removal, detach and global item
    deletion snapshot affected recipients into outbox before deleting source rows,
    reject affected pending requests and commit all relational changes together.

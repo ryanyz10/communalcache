@@ -70,7 +70,8 @@ CREATE TABLE items (
   is_consumable INTEGER NOT NULL CHECK(is_consumable IN (0,1)),
   quantity INTEGER,
   available INTEGER NOT NULL DEFAULT 1 CHECK(available IN (0,1)),
-  unavailable_note TEXT, created_at INTEGER NOT NULL, operation_token TEXT,
+  unavailable_note TEXT, -- Retired/unused; retained for applied-schema compatibility.
+  created_at INTEGER NOT NULL, operation_token TEXT,
   CHECK(is_consumable = (quantity IS NOT NULL)),
   CHECK(quantity IS NULL OR (typeof(quantity) = 'integer' AND quantity BETWEEN 0 AND 9999))
 );
@@ -111,9 +112,12 @@ not FK to attachments: decided history may remain after detach/removal. Global
 item deletion snapshots recipients, then cascades request rows. Outbox must not
 FK to deleted source items/requests/memberships.
 
-Manual availability is `available` plus optional max **200 Unicode code points**
-`unavailable_note`, validated server-side (not UTF-16 string.length). New requests
-check flag; existing pending rows stay pending and may be decided while membership/
+Manual availability is only `available`, saved immediately by the owner's
+**Mark as lent out / Mark as available** button. `unavailable_note` is retired:
+its column and existing bytes remain, but the application no longer selects,
+writes or returns it. Like other unknown fields, it is ignored beside recognized
+PATCH/decision fields; an unknown-only item PATCH returns `invalid_json`.
+New requests check the flag; existing pending rows stay pending and may be decided while membership/
 attachment is valid. Reusable approval can atomically set Lent out; unchecked
 approval does not clear it. No current-holder/return table or new request status.
 

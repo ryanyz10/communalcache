@@ -38,9 +38,9 @@ handshake, not logistics. Handoffs happen in real life; no addresses stored.
 - One item is owned by one user and may be attached to many caches, or none.
   ONE canonical stock count and pending reservation sum serve every cache.
 - Non-consumables have NULL quantity; only consumables have stock.
-- **Lent out** is a manual owner availability flag plus optional note (max 200
-  Unicode code points), shared across caches. A reusable approval offers **Mark as
-  lent out**. It blocks new requests, not existing pending ones. No holder, return,
+- **Lent out** is a manual owner availability flag shared across caches. The item
+  page has one immediate **Mark as lent out / Mark as available** button. A reusable
+  approval offers **Mark as lent out**, without an availability note. It blocks new requests, not existing pending ones. No holder, return,
   due date, borrower assignment or loan lifecycle; requests end approved/rejected.
 - Join by unguessable invite link; optional per-cache owner approval. Removed
   members cannot rejoin with the still-valid secret. Non-owner members may leave
@@ -100,7 +100,7 @@ input. [database.md](database.md) gives illustrative DDL and batch protocols.
 | Better Auth user/session/account/verification/rateLimit | Unchanged auth schema, private email, D1 sessions/challenges/rate limits; nullable app user.display_name |
 | caches | UUID, name/config, 32-byte base64url join_secret, requires_approval, created_at; operation_token for guarded multi-statement mutations |
 | memberships | (cache_id,user_id), role owner/member, status active/pending/removed/left, created_at, operation_token; exactly one active cache owner, protected from removal |
-| items | UUID, owner_id, title, description, photo_path, immutable is_consumable, quantity, available, unavailable_note, created_at, operation_token |
+| items | UUID, owner_id, title, description, photo_path, immutable is_consumable, quantity, available, created_at, operation_token; unavailable_note is retired/unused, retained in applied schema only |
 | item_caches | Unique (item_id,cache_id), attached_at, operation_token; real FKs to items/caches, no duplicated stock/display fields |
 | requests | UUID, item_id, cache_id where asked, requester_id, quantity, status, decision_reason, decided_at, created_at, decision_token |
 | outbox | Existing stable id, kind/dedupe_key uniqueness, validated JSON payload, attempts, claim_token/claim_until, sent_at/failed_at, created_at |
@@ -112,8 +112,8 @@ Port existing checks: consumable quantity integer 0–9999 and non-consumable NU
 request quantity NULL or integer 1–9999 with type consistency enforced by guarded
 request SQL; status pending/approved/rejected, pending iff decided_at NULL, rejected
 requires reason; roles/statuses and booleans constrained. `available` is the manual
-flag, **not** calculated reservable stock. Notes have max 200 Unicode code points,
-including server validation; title 120, description 2000, display name 60, reason
+flag, **not** calculated reservable stock. Text limits are title 120, description
+2000, display name 60, reason
 500. Trim text and return field-specific 400s, not raw constraint failures.
 
 `requests` does not FK to `item_caches`: detach rejects pending rows but may retain
@@ -190,7 +190,7 @@ UPDATE requests SET status='approved', decided_at=now, decision_token=fresh
     AND consumable stock can cover R;
 UPDATE items SET quantity=quantity-R.quantity
   WHERE consumable AND EXISTS(request R with decision_token=fresh);
-UPDATE items SET available=0, unavailable_note=note
+UPDATE items SET available=0
   WHERE reusable AND checkbox_checked AND EXISTS(R with decision_token=fresh);
 INSERT outbox ... SELECT snapshot FROM R/item/cache WHERE R.decision_token=fresh;
 ```
@@ -205,8 +205,10 @@ snapshot. Already decided requests are not reversed by later removal.
 
 Manual Lent out blocks **new** requests only. Existing pending rows remain
 approvable/rejectable while their membership/attachment remains valid. Reusable
-approval's checkbox sets flag/note atomically; unchecked approval does not clear
-an existing flag. The owner marks available again manually. No listing intents.
+approval's checkbox sets the flag atomically; unchecked approval does not clear
+an existing flag. The owner button immediately PATCHes only `available`. No listing
+intents. The retired `unavailable_note` column is neither read nor written by the
+application; no column drop or legacy-value erasure is included.
 
 Owner-only stock UPDATE includes `new_quantity >= all_pending_sum(item)` and range
 checks in the guarded statement. Type is immutable. D1 serialization plus the
@@ -576,7 +578,7 @@ React/TypeScript/Vite, React Router, TanStack Query and Tailwind remain. Home Yo
 items reads own canonical library, including unshared items and attached caches.
 Cache Add item offers Existing/New; a new item is created once, then attached.
 Failure to attach leaves a visible/retryable library item, not a duplicate. Detail
-has owner cache checkboxes. Lent out flag/note/approval checkbox affect the same row
+has owner cache checkboxes. Lent out button/approval checkbox affect the same row
 visible in every attachment, without projections. Keep mobile layout, accessible
 sheets/focus, loading/error/empty states and bounded cursor pagination. Complete
 items board 1a–1d in PR 6, after backend protocols; do not invent additional product
@@ -872,7 +874,7 @@ only until ported. No production test bindings or live provider sends.
   batch failure. Primary zero rows produces zero dependent state/outbox/cleanup.
   Tokens cannot match prior operations; no SQL changes() dependence.
 - Lent out blocks new requests but keeps pending ones; checkbox is atomic and
-  unchecked approval preserves flag; max 200 Unicode-code-point note.
+  unchecked approval preserves the flag. No availability note is accepted or returned.
 - Removal vs request/attach/decision, detach vs request, delete vs create/upload:
   either request first is included or destructive batch first blocks it. No
   surviving affected pending rows after commit; no need to await sync convergence.

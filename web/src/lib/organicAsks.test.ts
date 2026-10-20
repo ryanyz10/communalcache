@@ -28,17 +28,16 @@ function render(element:ReactElement,options:{caller?:string;request?:ItemReques
   client.clear();return html
 }
 afterEach(()=>{vi.restoreAllMocks()})
-it('starts reusable approval ON, message/note empty, and sends only the intended atomic decision fields',()=>{
+it('starts reusable approval ON with an empty message and no availability-note field',()=>{
   expect(DEFAULT_MARK_LENT_OUT).toBe(true)
-  expect(approvalBody(null,'',DEFAULT_MARK_LENT_OUT,'',false)).toEqual({approval_message:'',mark_lent_out:true})
-  expect(approvalBody(2,' Private ',true,'Back Sunday',true)).toEqual({approval_message:'Private',mark_lent_out:false})
-  expect(approvalBody(null,'',false,'do not write',true)).toEqual({approval_message:'',mark_lent_out:false})
-  expect(approvalBody(null,'',true,'  ',true)).toEqual({approval_message:'',mark_lent_out:true,unavailable_note:null})
+  expect(approvalBody(null,'',DEFAULT_MARK_LENT_OUT)).toEqual({approval_message:'',mark_lent_out:true})
+  expect(approvalBody(2,' Private ',true)).toEqual({approval_message:'Private',mark_lent_out:false})
+  expect(approvalBody(null,'',false)).toEqual({approval_message:'',mark_lent_out:false})
   const html=render(createElement(RequestDecision,{request:{...row,status:'pending',approval_message:null}}),{caller:'owner'})
   expect(html).toMatch(/<input(?=[^>]*role="switch")(?=[^>]*checked="")[^>]*>/)
   expect(html).toMatch(/<textarea[^>]*><\/textarea>/)
   expect(html).toContain('Up to 500 characters')
-  expect(html).toContain('Up to 200 characters')
+  expect(html).not.toMatch(/approval-note-|Lent out note|200 characters/)
   expect(html).toContain('Decline with a reason')
   expect(html).not.toMatch(/Knock when|Back by Sunday|auth-private/)
 })

@@ -41,6 +41,5 @@ export function ThingStatus({ item, pending = 0, compact = false, quantityAsStat
   }
   return <span className={`cc-thing-status cc-thing-status-${tone}`}>
     <span aria-hidden="true" />{status}
-    {!pending && item.available === false && item.unavailable_note && <span className="cc-status-note"> · {item.unavailable_note}</span>}
   </span>
 }

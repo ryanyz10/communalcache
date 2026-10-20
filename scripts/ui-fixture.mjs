@@ -41,7 +41,7 @@ const server = createServer(async (request, response) => {
     users.set('priya@fixture.test',{id:member,email:'priya@fixture.test',display_name:'Priya'})
     users.set('sam@fixture.test',{id:sam,email:'sam@fixture.test',display_name:'Sam'})
     for (const [id,name,cacheOwner] of [[cacheId,'Maple St',owner],['55555555-5555-4555-8555-555555555555','Garden Club',member],['66666666-6666-4666-8666-666666666666','Book Swap',sam]]) caches.set(id,{id,name,members,owner_id:cacheOwner,requires_approval:false,invite_token:`${id}.${'A'.repeat(43)}`})
-    const item={id:itemId,cache_id:cacheId,cache_ids:[cacheId],owner_id:owner,owner_name:'Ryan',title:'Pressure washer',description:'Electric, 1800 psi. Comes with two nozzles. Happy to share!',is_consumable:false,quantity:null,available:true,unavailable_note:null,created_at:1,photo_version:null}
+    const item={id:itemId,cache_id:cacheId,cache_ids:[cacheId],owner_id:owner,owner_name:'Ryan',title:'Pressure washer',description:'Electric, 1800 psi. Comes with two nozzles. Happy to share!',is_consumable:false,quantity:null,available:true,created_at:1,photo_version:null}
     items.set(itemId,item)
     items.set('77777777-7777-4777-8777-777777777777',{...item,id:'77777777-7777-4777-8777-777777777777',title:'Sourdough starter',is_consumable:true,quantity:3})
     const row={id:'88888888-8888-4888-8888-888888888888',cache_id:cacheId,cache_name:'Maple St',item_id:itemId,item_title:'Pressure washer',owner_id:owner,owner_name:'Ryan',requester_id:member,requester_name:'Priya',quantity:null,status:'approved',decision_reason:null,approval_message:'It is by my side gate.',decided_at:2,created_at:1}
@@ -233,7 +233,7 @@ const server = createServer(async (request, response) => {
       Object.assign(row,{status:action==='approve'?'approved':'rejected',decided_at:Date.now(),decision_reason:action==='reject'?body.reason.trim():null,approval_message:action==='approve'?body.approval_message?.trim()||null:null})
       const item=items.get(row.item_id)
       if (action==='approve' && row.quantity!==null) item.quantity-=row.quantity
-      if (action==='approve' && body.mark_lent_out) {item.available=false;item.unavailable_note=body.unavailable_note??null}
+      if (action==='approve' && body.mark_lent_out) item.available=false
       json(row); return
     }
     const profileRead=path.match(/^\/api\/users\/([^/]+)\/photo$/)
@@ -292,7 +292,7 @@ const server = createServer(async (request, response) => {
       }
       if (!itemId && request.method==='POST') {
         if (!body.title?.trim()) { json({error:'invalid_title'},400); return }
-        const item={id:randomUUID(),cache_id:null,cache_ids:[],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,unavailable_note:null,created_at:Date.now(),photo_version:null}
+        const item={id:randomUUID(),cache_id:null,cache_ids:[],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,created_at:Date.now(),photo_version:null}
         items.set(item.id,item); json(libraryInfo(item),201); return
       }
       const item=items.get(itemId)
@@ -321,7 +321,7 @@ const server = createServer(async (request, response) => {
       if (request.method==='PATCH') {
         const reserved=[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)
         if (body.quantity!==undefined && body.quantity!==null && body.quantity<reserved) { json({error:'quantity_reserved'},409); return }
-        for (const field of ['title','description','quantity','available','unavailable_note']) if (body[field]!==undefined) item[field]=body[field]
+        for (const field of ['title','description','quantity','available']) if (body[field]!==undefined) item[field]=body[field]
       }
       json(libraryInfo(item)); return
     }
@@ -414,7 +414,7 @@ const server = createServer(async (request, response) => {
         if (!itemId && request.method === 'POST') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
-          const item={id:randomUUID(),cache_id:cacheId,cache_ids:[cacheId],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,unavailable_note:null,created_at:Date.now(),photo_version:null}
+          const item={id:randomUUID(),cache_id:cacheId,cache_ids:[cacheId],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,created_at:Date.now(),photo_version:null}
           items.set(item.id,item)
           json(item,201)
           return

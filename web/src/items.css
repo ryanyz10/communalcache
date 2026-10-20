@@ -950,20 +950,9 @@
   text-decoration: underline;
 }
 
-.cc-owner-availability-toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.cc-owner-availability > label:not(:first-child), .cc-owner-photo label {
+.cc-owner-photo label {
   display: block;
   font: 600 13px var(--font-body);
-}
-
-.cc-owner-availability .cc-profile-input {
-  margin-top: 6px;
 }
 
 .cc-owner-availability .cc-profile-secondary {

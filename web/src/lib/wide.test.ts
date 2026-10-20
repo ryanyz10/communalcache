@@ -98,7 +98,7 @@ it('retains cache breadcrumbs, members, owner controls and one copy of each item
   expect(markup.match(/>Starter<\/strong>/g)).toHaveLength(1)
   const detail = render(createElement(ItemPage), { route: '/caches/:cacheId/items/:itemId', path: `/caches/${id}/items/${itemId}` })
   expect(detail.match(/>Starter<\/h1>/g)).toHaveLength(1)
-  for (const text of ['Edit item', 'Upload photo', 'Save availability', 'for="unavailable-note"', 'not existing pending requests', 'Delete item', 'your library and every cache', 'Shown in', 'Approve request']) expect(detail).toContain(text)
+  for (const text of ['Edit item', 'Upload photo', 'Mark as lent out', 'Delete item', 'your library and every cache', 'Shown in', 'Approve request']) expect(detail).toContain(text)
   expect(detail).not.toContain('Requests are being moved')
   expect(markup).toContain('+ Add item')
 })

@@ -12,9 +12,8 @@ export type ItemRequest = {
 }
 export const DEFAULT_MARK_LENT_OUT = true
 
-export function approvalBody(quantity:number|null,message:string,markLentOut:boolean,note:string,noteEdited:boolean) {
-  const mark=quantity===null && markLentOut
-  return {approval_message:message.trim(),mark_lent_out:mark,...(mark && noteEdited?{unavailable_note:note.trim() || null}:{})}
+export function approvalBody(quantity:number|null,message:string,markLentOut:boolean) {
+  return {approval_message:message.trim(),mark_lent_out:quantity===null && markLentOut}
 }
 export function relativeWhen(time:number,now=Date.now()) {
   const minutes=Math.max(0,Math.floor((now-time)/60_000)),hours=Math.floor(minutes/60),days=Math.floor(hours/24)

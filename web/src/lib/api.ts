@@ -76,7 +76,6 @@ export function errorMessage(error: unknown) {
   if (error.code === 'quantity_reserved') return 'Stock cannot be lower than the quantity reserved by pending requests. Refresh the item and try again.'
   if (error.code === 'invalid_request_quantity') return 'Request a whole quantity from 1 to 9999 for consumables; reusable items have no quantity.'
   if (error.code === 'item_unavailable') return 'This item is marked as lent out. Existing requests are unchanged.'
-  if (error.code === 'invalid_unavailable_note') return 'Keep the Lent out note within 200 characters.'
   if (error.code === 'invalid_lent_out') return 'Mark as lent out is available only when approving a reusable item.'
   if (error.code === 'invalid_available') return 'Choose whether this item is available.'
   if (error.code === 'insufficient_stock') return 'There is not enough available stock. The item and requests have been refreshed.'

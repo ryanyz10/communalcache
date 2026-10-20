@@ -9,7 +9,7 @@ import { cacheRead, itemAccess, itemRead } from './shared'
 type ItemRow = {
   id: string; owner_id: string; owner_name: string | null; owner_cat_coat: CatCoat | null; title: string; description: string | null
   photo_path: string | null; is_consumable: number; quantity: number | null; available_quantity: number | null; available: number
-  unavailable_note: string | null; created_at: number
+  created_at: number
 }
 
 function itemInfo(row: ItemRow, cacheId: string | null) {
@@ -113,10 +113,10 @@ export async function createItem(db: D1Database, userId: string, changes: ItemCh
   const access = `(? IS NULL OR EXISTS(SELECT 1 FROM memberships m JOIN caches c ON c.id=m.cache_id
     AND c.join_secret IS NOT NULL WHERE m.cache_id=? AND m.user_id=u.id AND m.status='active'))`
   const [created,_attachment,quota] = await db.batch([
-    db.prepare(`INSERT INTO items(id,owner_id,title,description,is_consumable,quantity,available,unavailable_note,created_at,operation_token)
-      SELECT ?,?,?,?,?,?,?,?,?,? FROM user u JOIN plan_limits l ON l.plan=u.plan
+    db.prepare(`INSERT INTO items(id,owner_id,title,description,is_consumable,quantity,available,created_at,operation_token)
+      SELECT ?,?,?,?,?,?,?,?,? FROM user u JOIN plan_limits l ON l.plan=u.plan
       WHERE u.id=? AND ${ownedItemCount}<l.owned_items AND ${access}`)
-      .bind(id,userId,changes.title!,changes.description ?? null,changes.is_consumable ? 1 : 0,changes.quantity ?? null,changes.available === false ? 0 : 1,changes.unavailable_note ?? null,now,token,userId,cacheId,cacheId),
+      .bind(id,userId,changes.title!,changes.description ?? null,changes.is_consumable ? 1 : 0,changes.quantity ?? null,changes.available === false ? 0 : 1,now,token,userId,cacheId,cacheId),
     db.prepare(`INSERT INTO item_caches(item_id,cache_id,attached_at)
       SELECT id,?,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND ? IS NOT NULL`)
       .bind(cacheId,now,id,userId,token,cacheId),
@@ -136,12 +136,12 @@ export async function updateItem(db: D1Database, itemId: string, userId: string,
   const token = crypto.randomUUID()
   const result = await db.prepare(`UPDATE items AS i SET title=COALESCE(?,title),
     description=CASE WHEN ? THEN ? ELSE description END,quantity=CASE WHEN ? THEN ? ELSE quantity END,
-    available=COALESCE(?,available),unavailable_note=CASE WHEN ? THEN ? ELSE unavailable_note END,operation_token=?
+    available=COALESCE(?,available),operation_token=?
     WHERE i.id=? AND i.owner_id=? AND (${itemAccess}) AND (?=0 OR i.is_consumable=(? IS NOT NULL))
     AND (?=0 OR ? IS NULL OR ?>=(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending'))`)
     .bind(changes.title ?? null, changes.description !== undefined ? 1 : 0, changes.description ?? null,
       changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.available === undefined ? null : changes.available ? 1 : 0,
-      changes.unavailable_note !== undefined ? 1 : 0, changes.unavailable_note ?? null, token, itemId, userId,
+      token, itemId, userId,
       cacheId, userId, userId, cacheId, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null,
       changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.quantity ?? null).run()
   if (result.meta.changes === 0) {

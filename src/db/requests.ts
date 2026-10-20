@@ -96,9 +96,9 @@ export async function decideRequest(db: D1Database, requestId: string, userId: s
     db.prepare(`UPDATE items SET quantity=quantity-(SELECT quantity FROM requests WHERE id=? AND decision_token=?)
       WHERE id=(SELECT item_id FROM requests WHERE id=? AND decision_token=?) AND is_consumable=1 AND ?=1`)
       .bind(requestId,token,requestId,token,action === 'approve' ? 1 : 0),
-    db.prepare(`UPDATE items SET available=0,unavailable_note=CASE WHEN ? THEN ? ELSE unavailable_note END
+    db.prepare(`UPDATE items SET available=0
       WHERE id=(SELECT item_id FROM requests WHERE id=? AND decision_token=?) AND is_consumable=0 AND ?=1`)
-      .bind(input.unavailable_note !== undefined ? 1 : 0,input.unavailable_note ?? null,requestId,token,markLentOut ? 1 : 0),
+      .bind(requestId,token,markLentOut ? 1 : 0),
     db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
       SELECT ?,?,?,json_object('event',?,'cache_id',c.id,'cache_name',c.name,'item_id',i.id,'item_title',i.title,
         'request_id',r.id,'recipient_id',r.requester_id,'user_id',i.owner_id,'quantity',r.quantity,'reason',r.decision_reason),?

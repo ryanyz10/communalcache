@@ -223,6 +223,22 @@ it('matches the frozen parent response fixture across routes, methods and caller
           legacyBody = { ...body, requests: body.requests.map(legacyRequest) }
         }
       }
+      function restoreRetiredField(value: unknown): unknown {
+        if (Array.isArray(value)) return value.map(restoreRetiredField)
+        if (!value || typeof value !== 'object') return value
+        const row = value as Record<string,unknown>
+        if (Object.hasOwn(row,'items') && Array.isArray(row.items)) return {...row,items:row.items.map(restoreRetiredField)}
+        if (!Object.hasOwn(row,'available') || !Object.hasOwn(row,'is_consumable')) return value
+        expect(row,labels[index]).not.toHaveProperty('unavailable_note')
+        const legacy: Record<string,unknown> = {}
+        for (const [key,field] of Object.entries(row)) {
+          legacy[key]=field
+          // Only this legacy PATCH fixture supplied a non-null availability note.
+          if (key==='available') legacy.unavailable_note=labels[index].endsWith(': PATCH library-item')?'With a neighbor':null
+        }
+        return legacy
+      }
+      legacyBody=restoreRetiredField(legacyBody)
       const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(legacyBody))))
       const actualHash = [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')
       expect(actual.status, labels[index]).toBe(status)
