@@ -2,7 +2,7 @@
 export { consumeWriteLimit } from './limits'
 export { featureEnabled } from './flags'
 export { getProfile, updateProfile, setDisplayName, type Profile } from './profiles'
-export { profilePhotoKey, finishProfilePhoto, removeProfilePhoto, finishItemPhoto } from './photos'
+export { profilePhotoKey, finishProfilePhoto, removeProfilePhoto, finishItemPhoto, removeItemPhoto } from './photos'
 export { ownContact, saveContact, removeContact, requestContact } from './contacts'
 export { listMyCaches, homeSummary, invitePreview, createCache, cacheDetail, updateCache, type CacheInfo, type InvitePreview } from './caches'
 export { cacheJoinRequests, joinCache, decideCacheJoin, removeCacheMember } from './memberships'

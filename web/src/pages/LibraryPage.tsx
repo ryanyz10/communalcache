@@ -63,7 +63,7 @@ export function LibraryPage() {
           if (item.pending_count) {
             actionPath = '/requests'
             actionLabel = 'Review'
-          } else if (item.caches.length) {
+          } else if (item.caches.length || item.active === false) {
             actionPath = `/items/${item.id}/edit`
             actionLabel = 'Edit'
           } else {
@@ -74,7 +74,7 @@ export function LibraryPage() {
             <Link className="cc-library-item-main" to={`/items/${item.id}`}>
               {!item.caches.length && !item.photo_version ? <span className="cc-unshared-tile" aria-hidden="true" /> : <ThingTile item={item} library tone="deep" />}
               <strong>{item.title}</strong>
-              <span className="cc-library-kind">{item.is_consumable ? `Give · ${item.quantity}` : 'Lend'}{item.active === false && <span className="cc-inactive-tag">Inactive</span>}</span>
+              <span className="cc-library-kind">{item.is_consumable ? `Give · ${item.quantity}` : 'Lend'}</span>
             </Link>
             <span className="cc-library-shared">
               {item.caches.length ? <>
@@ -85,12 +85,12 @@ export function LibraryPage() {
               </> : <span>Not in a cache yet</span>}
             </span>
             <span className="cc-library-status">
-              {!!item.caches.length && <>
+              {(item.active === false || !!item.caches.length) && <>
                 <span className="cc-phone-copy"><ThingStatus item={item} pending={item.pending_count} compact /></span>
                 <span className="cc-desktop-copy"><ThingStatus item={item} pending={item.pending_count} quantityAsStatus={false} /></span>
               </>}
             </span>
-            <Link className={`cc-library-row-action${item.pending_count ? ' cc-library-review' : ''}${!item.caches.length ? ' cc-library-share' : ''}`} to={actionPath}
+            <Link className={`cc-library-row-action${item.pending_count ? ' cc-library-review' : ''}${!item.caches.length && item.active !== false ? ' cc-library-share' : ''}`} to={actionPath}
               state={actionPath.endsWith('/edit') ? { itemEditor: true } : undefined} data-item-editor-trigger={actionPath.endsWith('/edit') ? item.id : undefined}>
               {actionLabel}<span className="sr-only"> {item.title}</span>
             </Link>

@@ -28,7 +28,7 @@ const server = createServer(async (request, response) => {
     const requestedWidth=Number(url.searchParams.get('width'))
     const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
     const height=screen==='landing'?(wide?1050:1500):(wide?1080:780), scale=wide?Math.min(960/width,600/height):0.77
-    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}${['owner','requester'].includes(url.searchParams.get('queue'))?'&queue='+url.searchParams.get('queue'):''}${url.searchParams.get('activity')==='1'?'&activity=1':''}${url.searchParams.get('inactive')==='1'?'&inactive=1':''}"></iframe></section>`).join('')
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}${['owner','requester'].includes(url.searchParams.get('queue'))?'&queue='+url.searchParams.get('queue'):''}${url.searchParams.get('activity')==='1'?'&activity=1':''}${url.searchParams.get('inactive')==='1'?'&inactive=1':''}${url.searchParams.get('photo')==='1'?'&photo=1':''}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
   }
@@ -42,6 +42,10 @@ const server = createServer(async (request, response) => {
     users.set('sam@fixture.test',{id:sam,email:'sam@fixture.test',display_name:'Sam'})
     for (const [id,name,cacheOwner] of [[cacheId,'Maple St',owner],['55555555-5555-4555-8555-555555555555','Garden Club',member],['66666666-6666-4666-8666-666666666666','Book Swap',sam]]) caches.set(id,{id,name,members,owner_id:cacheOwner,requires_approval:false,invite_token:`${id}.${'A'.repeat(43)}`})
     const item={id:itemId,cache_id:cacheId,cache_ids:url.searchParams.get('activity')==='1'?[cacheId,'55555555-5555-4555-8555-555555555555']:[cacheId],active:url.searchParams.get('inactive')!=='1',owner_id:owner,owner_name:'Ryan',title:'Pressure washer',description:'Electric, 1800 psi. Comes with two nozzles. Happy to share!',is_consumable:false,quantity:null,available:true,created_at:1,photo_version:null}
+    if (url.searchParams.get('photo')==='1') {
+      item.photo_version='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      photos.set(itemId,{bytes:await readFile(fileURLToPath(new URL('../web/public/icon-192.png',import.meta.url))),type:'image/png'})
+    }
     items.set(itemId,item)
     items.set('77777777-7777-4777-8777-777777777777',{...item,id:'77777777-7777-4777-8777-777777777777',title:'Sourdough starter',is_consumable:true,quantity:3,active:true})
     if (url.searchParams.get('activity')==='1') items.set('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',{...item,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',title:'Camping tent',active:false})
@@ -310,6 +314,11 @@ const server = createServer(async (request, response) => {
         response.writeHead(204,{'Cache-Control':'no-store'}); response.end(); return
       }
       if (match[2]==='/photo') {
+        if (request.method==='DELETE') {
+          if (item.photo_version && item.photo_version!==body.photo_version) {json({error:'photo_changed'},409);return}
+          item.photo_version=null;photos.delete(item.id)
+          response.writeHead(204,{'Cache-Control':'no-store'});response.end();return
+        }
         if (request.method==='POST') { photos.set(item.id,{bytes:raw,type:request.headers['content-type']}); item.photo_version=randomUUID(); json(libraryInfo(item)); return }
         const photo=photos.get(item.id)
         if (!photo) { json({error:'not_found'},404); return }

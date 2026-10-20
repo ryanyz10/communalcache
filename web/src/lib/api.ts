@@ -86,6 +86,7 @@ export function errorMessage(error: unknown) {
   if (error.code === 'invalid_approval_message') return 'Keep the approval message within 500 characters.'
   if (error.code === 'invalid_reason') return 'Give a rejection reason between 1 and 500 characters.'
   if (error.code === 'invalid_photo_type' || error.code === 'invalid_photo') return "Couldn't read that image, try another JPEG, PNG or WebP."
+  if (error.code === 'photo_changed') return 'The photo has changed. Refresh the item or keep the current photo.'
   if (error.code === 'photo_too_large') return 'That photo is too large. Try a smaller image (maximum 5 MB after resizing).'
   if (error.code === 'invalid_push_endpoint' || error.code === 'invalid_push_keys') return 'This browser returned an unsupported push subscription.'
   if (error.code === 'owner_cannot_leave') return 'The cache owner cannot leave this cache.'

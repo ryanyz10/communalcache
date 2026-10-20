@@ -24,7 +24,7 @@ const routingCases: { path: string; outcomes: Record<string, RouteOutcome>; publ
   { path: `/api/users/${userId}/photo`, photo: true, outcomes: { GET: [404, 'not_found'] } },
   { path: '/api/me/items', outcomes: { GET: [200], POST: [409, 'profile_incomplete'] } },
   { path: privateItemPath, outcomes: { GET: [404, 'not_found'], PATCH: [409, 'profile_incomplete'], DELETE: [409, 'profile_incomplete'] } },
-  { path: `${privateItemPath}/photo`, photo: true, outcomes: { GET: [404, 'not_found'], POST: [409, 'profile_incomplete'] } },
+  { path: `${privateItemPath}/photo`, photo: true, outcomes: { GET: [404, 'not_found'], POST: [409, 'profile_incomplete'], DELETE: [409, 'profile_incomplete'] } },
   { path: `${privateItemPath}/attachments/${cacheId}`, outcomes: { PUT: [409, 'profile_incomplete'], DELETE: [409, 'profile_incomplete'] } },
   { path: cachePath, outcomes: { GET: [404, 'not_found'], PATCH: [409, 'profile_incomplete'] } },
   { path: `${cachePath}/invite/preview`, outcomes: { GET: [404, 'not_found'] } },

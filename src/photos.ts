@@ -1,9 +1,9 @@
-import { finishItemPhoto, finishProfilePhoto, getProfile, itemDetail, profilePhotoKey, readItem, removeProfilePhoto } from './db'
-import { HttpError, json } from './http'
+import { finishItemPhoto, finishProfilePhoto, getProfile, itemDetail, profilePhotoKey, readItem, removeProfilePhoto, removeItemPhoto } from './db'
+import { HttpError, json, readBody } from './http'
 import { requireWriteLimit } from './rate-limit'
 
 export async function serveItemPhoto(request: Request, env: Env, itemId: string, userId: string, cacheId: string | null = null) {
-  const authorizedItem = await readItem(env.DB, itemId, userId, cacheId, request.method === 'POST')
+  const authorizedItem = await readItem(env.DB, itemId, userId, cacheId, request.method !== 'GET')
   if (request.method === 'GET') {
     if (!authorizedItem.photo_path) throw new HttpError(404, 'not_found')
     const object = await env.BUCKET.get(authorizedItem.photo_path)
@@ -14,6 +14,13 @@ export async function serveItemPhoto(request: Request, env: Env, itemId: string,
       'Cache-Control': 'private, no-store',
       'X-Content-Type-Options': 'nosniff',
     } })
+  }
+  if (request.method === 'DELETE') {
+    if (cacheId !== null) throw new HttpError(405,'method_not_allowed')
+    const { photo_version } = await readBody(request)
+    if (typeof photo_version !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(photo_version)) throw new HttpError(400,'invalid_photo')
+    await removeItemPhoto(env.DB,itemId,userId,photo_version.toLowerCase())
+    return new Response(null,{status:204,headers:{'Cache-Control':'no-store'}})
   }
   await requireWriteLimit(env.DB, userId, 'photo_upload')
   const key = `${userId}/${itemId}/${crypto.randomUUID()}`

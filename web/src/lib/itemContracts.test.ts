@@ -15,7 +15,7 @@ import { invalidateRequestViews } from './requests'
 import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
-type Kind = 'delete' | 'sharing' | 'form' | 'photo' | 'add' | 'availability'
+type Kind = 'delete' | 'sharing' | 'form' | 'add' | 'availability'
 type MutationOptions = {
   mutationFn: (variables?: unknown) => Promise<unknown>
   onSuccess?: (data: unknown, variables?: unknown) => unknown
@@ -46,7 +46,7 @@ function text(node: Element): string {
 }
 function click(node: Element) { (node.props.onClick as () => void)() }
 
-function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean; available?: boolean; active?: boolean; pendingCount?: number } = {}) {
+function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean; available?: boolean; active?: boolean; pendingCount?: number; photoVersion?: string } = {}) {
   const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
@@ -57,7 +57,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   let sharedResult: boolean | undefined
   let elements: Element[] = [], stateIndex = 0, refIndex = 0, mutationIndex = 0
   let lastMutation: Promise<void> = Promise.resolve()
-  let libraryItem = { ...item, active:context.active ?? true, pending_count:context.pendingCount ?? 0, caches: [...item.caches] }
+  let libraryItem = { ...item, active:context.active ?? true, photo_version:context.photoVersion ?? null, pending_count:context.pendingCount ?? 0, caches: [...item.caches] }
   let focus = ''
   const photo = new Blob(['resized jpeg'], { type: 'image/jpeg' })
   const resizePhoto = vi.fn(async (_file: File) => photo)
@@ -107,7 +107,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     return element
   }
   const Null = () => null
-  const currentItem = { ...item, cache_id: context.cacheId ?? null, available: context.available ?? true, active:context.active ?? true }
+  const currentItem = { ...item, cache_id: context.cacheId ?? null, available: context.available ?? true, active:context.active ?? true, photo_version:context.photoVersion ?? null }
   const modules: Record<string, unknown> = {
     ...toasts.modules,
     react: {
@@ -139,7 +139,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }) },
     '../lib/api': { apiFetch, errorMessage }, '../lib/items': { ...items, useLibrary: () => ({ data: { pages: [{ items: [item, {...item,id:'unshared',title:'Ladder',caches:[]}, {...item,id:'other',title:'Tarp',caches:[]}] }] }, isSuccess:true }) }, '../lib/caches': { cacheDetailQuery },
     '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadPhoto }, '../lib/requests': { invalidateRequestViews },
-    './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null, PhotoUpload: Null },
+    './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null },
     './RequestsPage': { ItemRequests: Null }, './ItemRequests': { ItemRequests: Null }, './ItemForm': { ItemForm: Null }, './ShownIn': { ShownIn: Null },
     '../components/Avatar': { Avatar: Null }, '../components/Cat': { Cat: Null },
     '../components/PhotoPreview': { PhotoPreview: Null },
@@ -153,7 +153,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
   modules['../lib/usePhotoSelection'] = hook.exports
-  const oldFile = kind === 'delete' || kind === 'availability' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'ItemPhoto'
+  const oldFile = kind === 'delete' || kind === 'availability' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet'
   const newFile = kind === 'delete' || kind === 'availability' ? 'ItemPage' : oldFile
   const source = process.env.ITEM_CONTRACT_PARENT === '1'
     ? execFileSync('git', ['show', `${parent}:web/src/pages/${oldFile}.tsx`], { encoding: 'utf8' })
@@ -166,7 +166,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     if (!(name in modules)) throw new Error(`Unexpected item dependency: ${name}`)
     return modules[name]
   }, module, module.exports)
-  const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'availability' ? 'ItemAvailability' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'PhotoUpload']
+  const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'availability' ? 'ItemAvailability' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet']
   const props = kind === 'form' ? {
     cacheId: context.cacheId ?? null, item: context.editing ? currentItem : undefined,
     onStateChange: (state: typeof editorState) => { editorState = state },
@@ -222,9 +222,10 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     editorState: () => editorState,
     sharedInCurrentCache: () => sharedResult,
     setAvailability(available: boolean) { currentItem.available = available; render() },
+    setPhotoVersion(version: string) { currentItem.photo_version=version; libraryItem.photo_version=version; render() },
     cancel: () => click(buttons()[0]), confirm: () => click(buttons()[1]),
     row: (title: string) => elements.find(node => node.type === 'button' && node.props.className === 'cc-select-row' && text(node).startsWith(title))!,
-    button: (label: string) => elements.find(node => node.type === 'button' && text(node) === label)!,
+    button: (label: string) => elements.find(node => node.type === 'button' && (text(node) === label || node.props['aria-label'] === label))!,
   }
 }
 
@@ -605,19 +606,42 @@ it('retains atomic cache creation/first attachment, and editing PATCH omits immu
   expect(JSON.parse(call[1]?.body as string)).not.toHaveProperty('is_consumable')
 })
 
-it('photo upload failure retains selection, then retry updates cache data before invalidation and clears the file', async () => {
-  const saved = { ...item, photo_version: 'photo-version' }
-  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({ error: 'invalid_photo' }, { status: 400 })).mockResolvedValueOnce(Response.json(saved))
-  const page = fixture('photo', { cacheId: cacheA.id })
-  page.change('item-photo', new File(['png'], 'photo.png', { type: 'image/png' }))
+it('saved photos use the private preview and x stages removal with dirty state, no request until PATCH then DELETE', async () => {
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init)=>init?.method==='PATCH'?Response.json({...item,photo_version:'saved-version'}):new Response(null,{status:204}))
+  const page=fixture('form',{editing:true,photoVersion:'saved-version'})
+  expect(page.preview().props.src).toBe(`/api/me/items/${item.id}/photo?v=saved-version`)
+  expect(page.render()).toContain('Tap the photo to replace')
+  expect(page.render()).toContain('Click to replace')
+  expect(page.render()).not.toMatch(/Upload photo|Resized to|Camera or library/)
+  expect(page.editorState().dirty).toBe(false)
+  click(page.button('Remove saved photo'));page.render()
+  expect(page.preview().props.src).toBeNull()
+  expect(page.editorState().dirty).toBe(true)
+  expect(fetch).not.toHaveBeenCalled()
+  page.setPhotoVersion('newer-version')
+  page.submit();await page.settled()
+  expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','DELETE'])
+  expect(fetch.mock.calls[1][1]?.body).toBe('{"photo_version":"saved-version"}')
+})
+
+it('x discards a replacement selection and restores the saved photo without scheduling its removal', async () => {
+  const fetch=vi.spyOn(globalThis,'fetch'),page=fixture('form',{editing:true,photoVersion:'saved-version'})
+  page.change('new-item-photo',new File(['png'],'photo.png'))
   await page.prepared()
   expect(page.preview().props.src).toMatch(/^blob:/)
-  expect(page.render()).not.toContain('photo.png')
-  page.submit(); await page.settled(); expect(page.inputModel.value).toBe('selected-photo.png')
-  page.trace.length = 0; page.submit(); await page.settled()
-  expect(fetch.mock.calls.map(call => call[0])).toEqual(Array(2).fill(`/api/caches/${cacheA.id}/items/${item.id}/photo`))
-  expect(page.trace).toEqual([['set', ['item', cacheA.id, item.id], saved], ...invalidations.map(key => ['invalidate', [key]])])
-  expect(page.inputModel.value).toBe('')
-  page.render(); expect(page.preview().props.src).toBeNull()
-  expect(page.resizePhoto).toHaveBeenCalledOnce()
+  click(page.button('Remove selected photo'));page.render()
+  expect(page.preview().props.src).toBe(`/api/me/items/${item.id}/photo?v=saved-version`)
+  expect(page.editorState().dirty).toBe(false)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('photo removal failure keeps the editor recovery state and allows retry or explicit Keep current photo', async () => {
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init)=>init?.method==='PATCH'?Response.json({...item,photo_version:'saved-version'}):Response.json({error:'photo_changed'},{status:409}))
+  const page=fixture('form',{editing:true,photoVersion:'saved-version'})
+  click(page.button('Remove saved photo'));page.render();page.submit();await page.settled();page.render()
+  expect(page.render()).toContain('Retry photo')
+  expect(page.render()).toContain('The photo has changed')
+  click(page.button('Keep current photo'));await page.settled()
+  expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','DELETE'])
+  expect(page.trace.filter(row=>row[0]==='saved')).toEqual([['saved',item.id]])
 })

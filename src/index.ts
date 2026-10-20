@@ -155,7 +155,8 @@ async function dispatch(request: Request, env: Env) {
   else if (profilePhotoRoute) allowedMethods = ['GET']
   else if (libraryRoute) {
     if (libraryRoute[3]) allowedMethods = ['PUT', 'DELETE']
-    else if (libraryRoute[2] || !libraryRoute[1]) allowedMethods = ['GET', 'POST']
+    else if (libraryRoute[2]) allowedMethods = ['GET', 'POST', 'DELETE']
+    else if (!libraryRoute[1]) allowedMethods = ['GET', 'POST']
     else allowedMethods = ['GET', 'PATCH', 'DELETE']
   } else if (memberRoute) allowedMethods = ['DELETE']
   else if (path === '/api/push/subscribe') allowedMethods = ['POST', 'DELETE']
@@ -265,12 +266,12 @@ async function dispatch(request: Request, env: Env) {
       else await attachItem(env.DB, itemId!, libraryRoute[3], profile.id)
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
+    if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
     if (method === 'DELETE') {
       await readOptionalBody(request)
       await enqueueNotifications(env, await deleteItem(env.DB, itemId!, profile.id, cacheId))
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
     }
-    if (photoRoute) return serveItemPhoto(request, env, itemId!, profile.id, cacheId)
     if (!itemId && method === 'GET') {
       if (cacheId) return json(await cacheItems(env.DB, cacheId, profile.id))
       const params = new URL(request.url).searchParams

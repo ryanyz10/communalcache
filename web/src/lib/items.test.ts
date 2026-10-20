@@ -79,8 +79,8 @@ it('shows item details to members but edit, upload and confirmed delete controls
   expect(owner).toContain('your library and every cache')
   expect(owner).toContain('Confirm deletion')
   expect(owner).toContain('Neighbors with pending requests will be notified')
-  expect(owner).toContain('Upload photo')
-  expect(owner).toContain('accept="image/*"')
+  expect(owner).not.toContain('Upload photo')
+  expect(owner).not.toContain('type="file"')
 })
 
 it('renders labeled create/edit forms with immutable type and nullable reusable stock', () => {
@@ -91,7 +91,9 @@ it('renders labeled create/edit forms with immutable type and nullable reusable 
   expect(add).toContain('type="radio"')
   expect(add).toContain('Lend it')
   expect(add).toContain('Give it away')
-  expect(add).toContain('Camera or library · optional')
+  expect(add).toContain('accept="image/*"')
+  expect(add).not.toContain('capture=')
+  expect(add).not.toContain('Camera or library · optional')
   expect(add).toContain('>Save</button>')
   expect(add).not.toContain('item-quantity')
   expect(add).not.toContain('owner_id')
@@ -135,7 +137,7 @@ it('renders photos through same-origin authorized routes in lists and details, w
     expect(markup).not.toContain('r2.dev')
     expect(markup).not.toContain('Authorization')
   }
-  expect(render('detail', { item: photographed })).toContain('Replace photo')
+  expect(render('detail', { item: photographed })).not.toContain('Replace photo')
   expect(render('detail', { item: photographed, owner: false })).not.toContain('Upload photo')
 })
 

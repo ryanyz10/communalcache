@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import { Shimmer, LoadingStatus, LoadingLines, SkeletonRows } from '../Skeleton'
+import { Shimmer, LoadingStatus, SkeletonRows } from '../Skeleton'
 
 export function ItemSkeleton({ cacheId }: { cacheId?: string }) {
   return <main className="organic-item-detail cc-page-skeleton" data-skeleton="item" aria-busy="true">
@@ -34,11 +34,6 @@ export function ItemSkeleton({ cacheId }: { cacheId?: string }) {
             <h2>Shown in</h2>
             <p className="cc-form-hint">Choose which caches can see this item. Stock and availability are shared everywhere.</p>
             <SkeletonRows label="Loading sharing…" kind="plain" count={2} />
-          </section>
-          <section className="cc-owner-photo">
-            <h2>Photo</h2>
-            <Shimmer height={48} />
-            <LoadingLines label="Loading photo…" />
           </section>
         </div>}
       </div>

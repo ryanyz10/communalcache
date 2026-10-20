@@ -1,4 +1,4 @@
-import { ApiError, type Me } from './api'
+import { apiFetch, ApiError, type Me } from './api'
 import type { Item } from './items'
 
 export const PHOTO_READ_ERROR = "Couldn't read that image, try another."
@@ -35,6 +35,10 @@ export async function resizePhoto(file: File): Promise<Blob> {
 
 export function uploadPhoto(cacheId: string | null, itemId: string, photo: Blob) {
   return uploadImage<Item>(`${cacheId ? `/api/caches/${cacheId}/items` : '/api/me/items'}/${itemId}/photo`,photo)
+}
+
+export function removeItemPhoto(itemId: string, version: string) {
+  return apiFetch<void>(`/api/me/items/${itemId}/photo`,{method:'DELETE',body:{photo_version:version}})
 }
 
 export function uploadProfilePhoto(photo: Blob) { return uploadImage<Me>('/api/me/photo',photo) }
