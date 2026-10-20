@@ -54,8 +54,8 @@ export function ItemEditorSkeleton({ editing = false }: { editing?: boolean }) {
       {!editing && <Shimmer height={150} className="cc-skeleton-field" />}
       <Shimmer height={editing ? 20 : 46} />
       <div className="cc-item-title-field"><label>What is it?</label><Shimmer height={50} /></div>
-      {editing ? <div className="cc-item-description-editor">
-        <span>Description (optional)</span>
+      {editing ? <div className="cc-item-note-field">
+        <span>Note (optional)</span>
         <Shimmer height={90} className="cc-skeleton-field" />
       </div> : <>
         <span>Put it in</span>
