@@ -64,6 +64,7 @@ builder and skips Resend only then. A configured Resend key keeps the normal sen
 path; missing credentials outside the sink fail closed. Better Auth, D1 hashing,
 attempts, expiry, rate limits and session creation remain real. Terminal messages
 are sensitive local challenges: do not publish them, auth secrets, cookies or logs.
+Notification email uses the same opt-in + empty-key sink with APP_BASE_URL's loopback hostname (Queue/Cron have no request URL), logging only the normal recipient/subject/text and marking sent through the unchanged claimed outbox write; push and non-local delivery are unchanged.
 
 Siteverify is **never skipped**. Public test keys currently return success with
 `metadata.result_with_testing_key=true`, hostname example.com and no action; these

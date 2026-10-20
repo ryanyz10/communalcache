@@ -143,7 +143,7 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     rotate on resend; persistent database rate-limit storage, never per-isolate
     memory. Auth email awaits Resend from the request, not notification Queue.
     Magic-link landing pages never auto-verify; explicit Continue triggers the POST.
-    Opt-in LOCAL_DEV_AUTH on loopback may log auth mail only without a Resend key; D1 challenges stay real.
+    Opt-in LOCAL_DEV_AUTH on loopback may log auth/notification mail only without a Resend key; D1 challenges/outbox guards stay real.
 15. **Plans/quotas: one limits source, same-write enforcement.** User/cache plan
     columns default `free`; one `plan_limits` table keyed by `free` / `plus`
     controls limits inside the same guarded write or fresh-token batch. No client/

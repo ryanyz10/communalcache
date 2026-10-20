@@ -3,6 +3,7 @@ import {
   notificationEmail, pushSubscriptions, recordOutboxFailure, recoverableOutbox, type OutboxRow,
 } from './db'
 import { sendPush } from './push'
+import { localDevAuth } from './local-dev'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -37,7 +38,7 @@ export function notificationContent(row: OutboxRow, appBaseUrl: string) {
   else path = `/caches/${data.cache_id}`
 
   const base = new URL(appBaseUrl)
-  if (base.origin !== appBaseUrl || (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(base.hostname)))) {
+  if (base.origin !== appBaseUrl || (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)))) {
     throw new Error('Invalid app origin')
   }
   const link = new URL(path, base).href
@@ -67,6 +68,10 @@ async function sendEmail(env: Env, content: ReturnType<typeof notificationConten
   const email = await notificationEmail(env.DB, content.recipientId)
   signal.throwIfAborted()
   if (!email) throw new Error('Notification recipient unavailable')
+  if (localDevAuth(env,env.APP_BASE_URL) && !env.RESEND_API_KEY) {
+    console.log(`\n=== LOCAL DEV NOTIFICATION MAIL (delivered to console) ===\nTo: ${email}\nSubject: ${content.subject}\n\n${content.text}\n=== END LOCAL DEV NOTIFICATION MAIL ===\n`)
+    return
+  }
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST', redirect: 'manual',
     signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),

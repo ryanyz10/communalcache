@@ -37,6 +37,69 @@ async function row(id: string) {
     .first<{ attempts: number; claim_token: string | null; claim_until: number | null; sent_at: number | null; failed_at: number | null }>()
 }
 
+it.each(['http://localhost:8787','http://127.0.0.1:8787','http://[::1]:8787'])('local notification sink logs only rendered email and commits sent through normal claim guards for %s', async appBaseUrl => {
+  const event=await outbox({payload:{contact_value:'chosen-private-contact',approval_message:'private-approval-message',raw_payload:'must-not-log'}})
+  const log=vi.spyOn(console,'log').mockImplementation(()=>{}), fetch=vi.spyOn(globalThis,'fetch')
+  const local={...env,LOCAL_DEV_AUTH:'1',RESEND_API_KEY:'',APP_BASE_URL:appBaseUrl}
+  expect(await deliverNotification(local,event.id)).toBe('ack')
+  expect(fetch).not.toHaveBeenCalled()
+  expect(log).toHaveBeenCalledOnce()
+  const text=String(log.mock.calls[0][0]),content=notificationContent({id:event.id,kind:event.kind,payload:JSON.stringify(event.payload),attempts:1},appBaseUrl)
+  expect(text).toContain(`To: ${event.recipient}@example.test`)
+  expect(text).toContain(`Subject: ${content.subject}`)
+  expect(text).toContain(content.text)
+  for(const forbidden of ['chosen-private-contact','private-approval-message','must-not-log','recipient_id'])expect(text).not.toContain(forbidden)
+  expect(await row(event.id)).toMatchObject({attempts:1,sent_at:expect.any(Number),failed_at:null,claim_token:null,claim_until:null})
+  expect(await deliverNotification(local,event.id)).toBe('ack')
+  expect(log).toHaveBeenCalledOnce()
+})
+
+it('local notification sink requires every guard; missing opt-in/key/loopback condition retains the existing provider path',async()=>{
+  const log=vi.spyOn(console,'log').mockImplementation(()=>{}), mail=emailMock(503)
+  const local={...env,LOCAL_DEV_AUTH:'1',RESEND_API_KEY:'',APP_BASE_URL:'http://localhost:8787'}
+  const variants=[
+    {...local,LOCAL_DEV_AUTH:undefined},{...local,LOCAL_DEV_AUTH:''},{...local,LOCAL_DEV_AUTH:'true'},
+    {...local,RESEND_API_KEY:'test-only'},
+    {...local,APP_BASE_URL:'https://communalcache.com'},
+    {...local,APP_BASE_URL:'https://staging.example.test'},
+    {...local,APP_BASE_URL:'https://localhost.evil.test'},
+    {...local,APP_BASE_URL:'https://sub.localhost'},
+  ]
+  for(const bindings of variants) {
+    const event=await outbox()
+    expect(await deliverNotification(bindings,event.id)).toBe('retry')
+    expect(await row(event.id)).toMatchObject({attempts:1,sent_at:null,failed_at:null,claim_token:null})
+  }
+  expect(log).not.toHaveBeenCalled()
+  expect(mail).toHaveBeenCalledTimes(variants.length)
+})
+
+it('local console delivery does not bypass a failed sent write and remains recoverable at least once',async()=>{
+  const event=await outbox(),local={...env,LOCAL_DEV_AUTH:'1',RESEND_API_KEY:'',APP_BASE_URL:'http://localhost:8787'}
+  const log=vi.spyOn(console,'log').mockImplementation(()=>{}),fetch=vi.spyOn(globalThis,'fetch')
+  await env.DB.exec("CREATE TRIGGER fail_local_success BEFORE UPDATE ON outbox WHEN NEW.sent_at IS NOT NULL BEGIN SELECT RAISE(ABORT,'injected local sent failure'); END")
+  await expect(deliverNotification(local,event.id)).rejects.toThrow('injected local sent failure')
+  expect(await row(event.id)).toMatchObject({attempts:1,sent_at:null,failed_at:null})
+  await env.DB.exec('DROP TRIGGER fail_local_success')
+  await env.DB.prepare('UPDATE outbox SET claim_until=? WHERE id=?').bind(Date.now()-1,event.id).run()
+  expect(await deliverNotification(local,event.id)).toBe('ack')
+  expect(await row(event.id)).toMatchObject({attempts:2,sent_at:expect.any(Number),failed_at:null,claim_token:null})
+  expect(log).toHaveBeenCalledTimes(2)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('local delivery still refuses unverified recipients and terminal or currently claimed rows without logging',async()=>{
+  const event=await outbox(),local={...env,LOCAL_DEV_AUTH:'1',RESEND_API_KEY:'',APP_BASE_URL:'http://localhost:8787'}
+  const log=vi.spyOn(console,'log').mockImplementation(()=>{}),fetch=vi.spyOn(globalThis,'fetch')
+  await env.DB.prepare('UPDATE user SET emailVerified=0 WHERE id=?').bind(event.recipient).run()
+  expect(await deliverNotification(local,event.id)).toBe('retry')
+  const claimed=await outbox(),terminal=await outbox()
+  await claimOutbox(env.DB,claimed.id,'other-claim',Date.now())
+  await env.DB.prepare('UPDATE outbox SET failed_at=? WHERE id=?').bind(Date.now(),terminal.id).run()
+  for(const id of [claimed.id,terminal.id])expect(await deliverNotification(local,id)).toBe('ack')
+  expect(log).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()
+})
+
 it('competing consumers acquire one guarded claim and only one sends; duplicate, missing and invalid Queue IDs ack safely', async () => {
   const event = await outbox(), mail = emailMock()
   const results = await Promise.all([consume([event.id]), consume([event.id])])
