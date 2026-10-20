@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type Reac
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import { persistItem, type Item, type ItemSaveProgress } from '../lib/items'
+import { libraryItemQuery, persistItem, type Item, type LibraryItem, type ItemSaveProgress } from '../lib/items'
 import type { CacheSummary } from '../lib/caches'
 import { usePhotoSelection } from '../lib/usePhotoSelection'
 import { PhotoPreview } from '../components/PhotoPreview'
@@ -16,7 +16,7 @@ export type ItemEditorState = { dirty: boolean; committed: boolean }
 type ItemFormProps = {
   cacheId: string | null
   item?: Item
-  onSaved: (item: Item) => void
+  onSaved: (item: Item, sharedInCurrentCache?: boolean) => void
   onCancel: () => void
   onBusy?: (busy: boolean) => void
   onStateChange?: (state: ItemEditorState) => void
@@ -33,17 +33,28 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const photo = usePhotoSelection()
   const photoInput = useRef<HTMLInputElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
+  const detachDialog = useRef<HTMLDialogElement>(null)
+  const knownCacheNames = useRef<Record<string,string>>({})
   useLayoutEffect(() => { heading.current?.focus() }, [])
-  const [selectedCacheIds, setSelectedCacheIds] = useState<string[]>(cacheId ? [cacheId] : [])
-  const saveProgress = useRef<ItemSaveProgress>({ item: null, remainingCacheIds: [], photoPending: false, stage: 'saving' })
+  const [selectedCacheIds, setSelectedCacheIds] = useState<string[] | null>(null)
+  const saveProgress = useRef<ItemSaveProgress>({ item: null, remainingCacheIds: [], remainingDetachIds: [], failedCacheId: null, photoPending: false, stage: 'saving' })
   const [saveSnapshot, setSaveSnapshot] = useState<ItemSaveProgress | null>(null)
   const cachesQuery = useQuery({
     queryKey: ['caches'],
     queryFn: () => apiFetch<CacheSummary[]>('/api/caches'),
-    enabled: !item && !!me?.display_name,
+    enabled: !!me?.display_name,
   })
+  const libraryItem = useQuery({ ...libraryItemQuery(me?.id, item?.id ?? ''), enabled: !!item && !!me?.display_name })
+  const initialCacheIds = libraryItem.data?.caches.map(cache => cache.id) ?? []
+  const cacheIds = selectedCacheIds ?? (item ? initialCacheIds : cacheId ? [cacheId] : [])
+  const cacheNames = { ...knownCacheNames.current, ...Object.fromEntries([...(libraryItem.data?.caches ?? []),...(cachesQuery.data ?? [])].map(cache => [cache.id,cache.name])) }
+  const removed = item ? (libraryItem.data?.caches.filter(cache => !cacheIds.includes(cache.id)) ?? []) : []
+  // A committed retry uses its saved plan, not a new diff from a failed metadata refresh.
+  const sharingReady = !item || !!saveProgress.current.item || (libraryItem.isSuccess && cachesQuery.isSuccess)
   const saveItem = useMutation({
     mutationFn: async () => {
+      knownCacheNames.current = cacheNames
+      if (!saveProgress.current.item) setSelectedCacheIds(cacheIds)
       const pendingPhoto = !saveProgress.current.item || saveProgress.current.photoPending ? photo.photo : null
       const itemChanges = {
         title,
@@ -54,29 +65,50 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       return persistItem(saveProgress.current, {
         cacheId,
         itemId: item?.id,
-        cacheIds: selectedCacheIds,
+        cacheIds,
+        initialCacheIds: item ? initialCacheIds : undefined,
         photo: pendingPhoto,
         body: itemChanges,
-      }, () => setSaveSnapshot({ ...saveProgress.current }))
+      }, () => setSaveSnapshot({ ...saveProgress.current }), (id,shared) => {
+        queryClient.setQueryData<LibraryItem>(['library-item', me?.id, saveProgress.current.item!.id], current => {
+          if (!current) return current
+          const otherCaches = current.caches.filter(cache => cache.id !== id)
+          return { ...current, caches: shared ? [...otherCaches,{id,name:cacheNames[id]}] : otherCaches }
+        })
+      })
     },
-    onSuccess: persisted => { showToast(item ? 'Item saved.' : 'Item added.'); onSaved(persisted) },
-    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
+    onSuccess: persisted => {
+      detachDialog.current?.close()
+      showToast(item ? 'Item saved.' : 'Item added.')
+      onSaved(persisted, !!cacheId && cacheIds.includes(cacheId))
+    },
+    onError: error => {
+      const failedId = saveProgress.current.failedCacheId
+      if (failedId) showToast(`Couldn't save sharing for ${cacheNames[failedId] ?? 'selected cache'}. ${errorMessage(error)}`, 'error')
+      else if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
+    },
     onSettled: async () => {
       onBusy?.(false)
       await invalidateRequestViews(queryClient)
     },
   })
 
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    if (photo.processing || photo.error) return
+  function save() {
+    if (submitDisabled) return
     onBusy?.(true)
     saveItem.mutate()
+  }
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    if (submitDisabled) return
+    if (!saveProgress.current.item && removed.length) detachDialog.current?.showModal()
+    else save()
   }
 
   const hasCommittedItem = !!saveSnapshot?.item
   const fieldsLocked = saveItem.isPending || hasCommittedItem
-  const selectionChanged = !item && (selectedCacheIds.length !== (cacheId ? 1 : 0) || (!!cacheId && !selectedCacheIds.includes(cacheId)))
+  const savedIds = item ? initialCacheIds : cacheId ? [cacheId] : []
+  const selectionChanged = cacheIds.length !== savedIds.length || cacheIds.some(id => !savedIds.includes(id))
   const dirty = title !== (item?.title ?? '') || description !== (item?.description ?? '') ||
     isConsumable !== (item?.is_consumable ?? false) || quantityText !== String(item?.quantity ?? 1) ||
     selectionChanged || !!photo.photo || photo.processing || !!photo.error || hasCommittedItem
@@ -85,12 +117,15 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const validQuantity = !isConsumable || (
     quantityText !== '' && Number.isInteger(quantity) && quantity >= 0 && quantity <= 9999
   )
-  const submitDisabled = saveItem.isPending || photo.processing || !!photo.error || !title.trim() || !validQuantity
+  const submitDisabled = saveItem.isPending || photo.processing || !!photo.error || !title.trim() || !validQuantity || !sharingReady
   let submitLabel = 'Save'
   if (saveSnapshot?.item) submitLabel = saveSnapshot.photoPending ? 'Retry photo' : 'Retry sharing'
-  const saveError = errorMessage(saveItem.error)
+  const failedCacheId = saveSnapshot?.failedCacheId
+  const saveError = `${failedCacheId ? `Couldn't save sharing for ${cacheNames[failedCacheId] ?? 'selected cache'}. ` : ''}${errorMessage(saveItem.error)}`
+  const removalsToConfirm = saveSnapshot?.item
+    ? saveSnapshot.remainingDetachIds.map(id => ({id,name:cacheNames[id] ?? 'selected cache'})) : removed
   const orderedCaches = cachesQuery.data && [...cachesQuery.data].sort((a, b) =>
-    Number(selectedCacheIds.includes(b.id)) - Number(selectedCacheIds.includes(a.id)),
+    Number(cacheIds.includes(b.id)) - Number(cacheIds.includes(a.id)),
   )
 
   let recoveryAction: ReactNode
@@ -100,13 +135,16 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       onBusy?.(true)
       saveItem.mutate()
     }}>Continue without photo</button>
-  } else if (saveSnapshot?.item && saveSnapshot.remainingCacheIds.length) {
+  } else if (saveSnapshot?.item && (saveSnapshot.remainingCacheIds.length || saveSnapshot.remainingDetachIds.length)) {
     recoveryAction = <button
       type="button"
       disabled={saveItem.isPending}
       className="cc-profile-secondary"
-      onClick={() => onSaved(saveSnapshot.item!)}
-    >Keep item without remaining shares</button>
+      onClick={() => {
+        const stillShared = !!cacheId && (item ? initialCacheIds.includes(cacheId) && !saveSnapshot.remainingDetachIds.includes(cacheId) : true)
+        onSaved(saveSnapshot.item!, stillShared)
+      }}
+    >{item ? 'Keep item with current sharing' : 'Keep item without remaining shares'}</button>
   }
 
   return <form className="cc-item-form" onSubmit={submit}>
@@ -169,34 +207,36 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         <button type="button" aria-label="Increase stock quantity" disabled={quantity >= 9999} onClick={() => setQuantityText(String(Math.min(9999, quantity + 1)))}>+</button>
         <span id="quantity-help" className="sr-only">Stock quantity 0–9999. One stock count across all caches; pending requests must stay covered.</span>
       </div>}
-      {!item && <fieldset className="cc-put-it-in">
+      <fieldset className="cc-put-it-in">
         <legend>Put it in</legend>
-        {cachesQuery.isPending && <div className="cc-skeleton-cache-options">
+        {(cachesQuery.isPending || (!!item && libraryItem.isPending)) && <div className="cc-skeleton-cache-options">
           <LoadingStatus label="Loading caches…" /><Shimmer width={130} height={38} /><Shimmer width={110} height={38} />
         </div>}
-        {cachesQuery.isError && <div className="cc-read-error">
-          <p role="alert">{errorMessage(cachesQuery.error)}</p>
-          <button type="button" onClick={() => void cachesQuery.refetch()}>Try caches again</button>
+        {(cachesQuery.isError || (!!item && libraryItem.isError)) && <div className="cc-read-error">
+          <p role="alert">{errorMessage(cachesQuery.error ?? libraryItem.error)}</p>
+          <button type="button" onClick={() => { void cachesQuery.refetch(); if (item) void libraryItem.refetch() }}>Try caches again</button>
         </div>}
         <div className="cc-select-options">
           {orderedCaches && orderedCaches.map(cache => {
-            const isSelected = selectedCacheIds.includes(cache.id)
+            const isSelected = cacheIds.includes(cache.id)
             return <button
               key={cache.id}
               type="button"
               className="cc-select-pill"
               aria-pressed={isSelected}
-              disabled={cache.id === cacheId || fieldsLocked}
-              onClick={() => setSelectedCacheIds(current => current.includes(cache.id)
-                ? current.filter(id => id !== cache.id) : [...current, cache.id])}
+              disabled={(!item && cache.id === cacheId) || fieldsLocked || !sharingReady}
+              onClick={() => setSelectedCacheIds(current => {
+                const ids = current ?? cacheIds
+                return ids.includes(cache.id) ? ids.filter(id => id !== cache.id) : [...ids,cache.id]
+              })}
             >
               {cache.name}
-              {cache.id === cacheId && <span className="sr-only">, shared here in the same create operation</span>}
+              {!item && cache.id === cacheId && <span className="sr-only">, shared here in the same create operation</span>}
             </button>
           })}
           {cachesQuery.isSuccess && !cachesQuery.data.length && <p className="cc-list-empty">No caches yet. Your item stays private in your library.</p>}
         </div>
-      </fieldset>}
+      </fieldset>
       <details className="cc-item-description-editor" open={!!item?.description}>
         <summary>{description ? 'Edit note' : 'Add a note (optional)'}</summary>
         <label htmlFor="item-description">Description (optional)</label>
@@ -211,17 +251,35 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       </details>
     </fieldset>
     {saveSnapshot?.item && saveItem.isError && <div className="cc-item-save-progress" role="status">
-      <p>Your item is saved{cacheId ? ' and shared here' : ' in your library'}. {saveSnapshot.photoPending ? 'The photo needs retrying.' : 'Sharing needs retrying.'}</p>
+      <p>Your item is saved{!item && cacheId ? ' and shared here' : ' in your library'}. {saveSnapshot.photoPending ? 'The photo needs retrying.' : 'Sharing needs retrying.'}</p>
       {!!saveSnapshot.remainingCacheIds.length && <p>
         Still to share in: {saveSnapshot.remainingCacheIds.map(id => cachesQuery.data?.find(cache => cache.id === id)?.name ?? 'selected cache').join(', ')}. Already shared caches are kept.
       </p>}
+      {!!saveSnapshot.remainingDetachIds.length && <p>Still to stop sharing in: {saveSnapshot.remainingDetachIds.map(id => cacheNames[id] ?? 'selected cache').join(', ')}. Successful changes are kept.</p>}
     </div>}
-    {saveItem.isError && !transientActionFailure(saveItem.error) && <p role="alert" className="cc-form-error">{saveError}</p>}
+    {saveItem.isError && (!!failedCacheId || !transientActionFailure(saveItem.error)) && <p role="alert" className="cc-form-error">{saveError}</p>}
     {saveItem.isError && recoveryAction && <div className="cc-item-recovery-actions">{recoveryAction}</div>}
     </div>
     <div className="cc-item-editor-desktop-actions">
       <button type="button" disabled={saveItem.isPending} onClick={onCancel} className="cc-profile-secondary">Cancel</button>
       <button type="submit" disabled={submitDisabled} className="cc-profile-primary">{saveItem.isPending ? 'Saving…' : submitLabel}</button>
     </div>
+    <dialog ref={detachDialog} className="cc-item-confirm" aria-labelledby="detach-item-heading" onCancel={event => {
+      event.stopPropagation()
+      if (saveItem.isPending) event.preventDefault()
+    }}>
+      <h2 id="detach-item-heading">Stop sharing in these caches?</h2>
+      <ul>{removalsToConfirm.map(cache => <li key={cache.id}>{cache.name}</li>)}</ul>
+      <ul>
+        <li>The item is removed from these caches only. Added caches are saved first.</li>
+        <li>Pending asks in these caches get declined and requesters are notified.</li>
+        <li>Your library item, photos, stock and other caches are kept.</li>
+      </ul>
+      {saveItem.isError && <p role="alert" className="cc-form-error">{saveError} Successful changes are kept. You can retry here.</p>}
+      <div className="cc-inline-actions">
+        <button type="button" autoFocus disabled={saveItem.isPending} className="cc-profile-secondary" onClick={() => detachDialog.current?.close()}>Cancel</button>
+        <button type="button" disabled={submitDisabled} className="cc-profile-primary" onClick={save}>{saveItem.isPending ? 'Saving…' : 'Confirm stop sharing'}</button>
+      </div>
+    </dialog>
   </form>
 }

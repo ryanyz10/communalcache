@@ -104,8 +104,8 @@ it('keeps join requests, the add-item selector and sharing empties inside their 
   const adding = render(createElement(AddItemSheet, { cacheId, cacheName: 'Tools', dialog: { current: null } }))
   emptyList(adding, 'No items yet. Choose New item to start your library.', 'cc-add-selection')
   const sharing = render(createElement(ShownIn, { item }))
-  emptyList(sharing, 'Your item stays private in your library.', 'cc-select-options')
-  expect(sharing).toContain('Go to Home')
+  emptyList(sharing, 'Not in any caches yet.', 'cc-cache-list')
+  expect(sharing).toContain('Edit item')
 })
 
 it('keeps admin empty states in the switch list and full-width table cells', () => {

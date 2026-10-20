@@ -67,7 +67,7 @@ export function LibraryPage() {
             actionPath = `/items/${item.id}/edit`
             actionLabel = 'Edit'
           } else {
-            actionPath = `/items/${item.id}#sharing`
+            actionPath = `/items/${item.id}/edit`
             actionLabel = <><span className="cc-desktop-copy">Share it</span><span className="cc-phone-copy">Share</span></>
           }
           return <li key={item.id} className="cc-library-row">

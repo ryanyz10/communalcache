@@ -60,7 +60,7 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
         key={formKey}
         cacheId={cacheId ?? null}
         item={editing ? itemQuery.data : undefined}
-        onSaved={saved => navigate(cacheId ? `/caches/${cacheId}/items/${saved.id}` : `/items/${saved.id}`, { replace: true })}
+        onSaved={(saved, sharedInCurrentCache = true) => navigate(cacheId && sharedInCurrentCache ? `/caches/${cacheId}/items/${saved.id}` : `/items/${saved.id}`, { replace: true })}
         onCancel={dismiss}
         onBusy={setBusy}
         onStateChange={setState}

@@ -135,4 +135,6 @@ it('preserves owner guards, keeps loading inside the dialog and replaces the edi
   expect(editor.dialog()).toMatchObject({dirty:true,committed:true,busy:true})
   ;(editor.form().onSaved as (item:unknown)=>void)({id:'saved'})
   expect(editor.navigate).toHaveBeenCalledWith('/caches/cache/items/saved',{replace:true})
+  ;(editor.form().onSaved as (item:unknown, shared:boolean)=>void)({id:'saved'},false)
+  expect(editor.navigate).toHaveBeenCalledWith('/items/saved',{replace:true})
 })

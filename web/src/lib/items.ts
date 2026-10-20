@@ -63,14 +63,24 @@ export function sharingHint(item: LibraryItem, cacheId?: string) {
   return names ? `${cacheId ? 'In ' : ''}${names}` : cacheId ? 'Not shared yet' : 'Not in a cache yet'
 }
 
-export type ItemSaveProgress = { item: Item | null; remainingCacheIds: string[]; photoPending: boolean; stage: 'saving' | 'photo' | 'sharing' | 'done' }
+export type ItemSaveProgress = {
+  item: Item | null; remainingCacheIds: string[]; remainingDetachIds: string[]; failedCacheId: string | null
+  photoPending: boolean; stage: 'saving' | 'photo' | 'sharing' | 'done'
+}
 
-export async function persistItem(progress: ItemSaveProgress, input: {cacheId:string|null;itemId?:string;body:unknown;cacheIds:string[];photo:Blob|null}, changed: () => void) {
+export async function persistItem(progress: ItemSaveProgress, input: {
+  cacheId:string|null;itemId?:string;body:unknown;cacheIds:string[];initialCacheIds?:string[];photo:Blob|null
+}, changed: () => void, attachmentChanged?: (cacheId: string, shared: boolean) => void) {
+  progress.failedCacheId = null
   if (!progress.item) {
     progress.item = await apiFetch<Item>(`${input.cacheId ? `/api/caches/${input.cacheId}/items` : '/api/me/items'}${input.itemId ? `/${input.itemId}` : ''}`, {
       method:input.itemId?'PATCH':'POST',body:input.body,
     })
-    progress.remainingCacheIds = input.cacheIds.filter(id=>id!==input.cacheId)
+    const initialIds = input.initialCacheIds ?? []
+    progress.remainingCacheIds = input.cacheIds.filter(id => input.itemId ? !initialIds.includes(id) : id !== input.cacheId)
+    // Keep the current route usable until every other cache change has succeeded.
+    progress.remainingDetachIds = input.itemId ? initialIds.filter(id => !input.cacheIds.includes(id))
+      .sort((a,b) => Number(a === input.cacheId) - Number(b === input.cacheId)) : []
     progress.photoPending = !!input.photo
     changed()
   }
@@ -80,9 +90,17 @@ export async function persistItem(progress: ItemSaveProgress, input: {cacheId:st
     progress.photoPending=false; changed()
   }
   progress.stage='sharing'; changed()
-  for (const cacheId of [...progress.remainingCacheIds]) {
-    await apiFetch(`/api/me/items/${progress.item.id}/attachments/${cacheId}`,{method:'PUT'})
-    progress.remainingCacheIds=progress.remainingCacheIds.filter(id=>id!==cacheId)
+  const operations = [...progress.remainingCacheIds.map(cacheId => ({cacheId,shared:true})), ...progress.remainingDetachIds.map(cacheId => ({cacheId,shared:false}))]
+  for (const {cacheId,shared} of operations) {
+    try {
+      await apiFetch(`/api/me/items/${progress.item.id}/attachments/${cacheId}`,{method:shared?'PUT':'DELETE'})
+    } catch (error) {
+      progress.failedCacheId=cacheId; changed()
+      throw error
+    }
+    if (shared) progress.remainingCacheIds=progress.remainingCacheIds.filter(id=>id!==cacheId)
+    else progress.remainingDetachIds=progress.remainingDetachIds.filter(id=>id!==cacheId)
+    attachmentChanged?.(cacheId,shared)
     changed()
   }
   progress.stage='done'; changed()
