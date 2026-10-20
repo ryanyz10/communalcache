@@ -462,10 +462,23 @@
 .cc-put-it-in label > span:not(.sr-only) {
   display: grid;
   place-items: center;
-  width: 12px;
-  height: 10px;
+  width: 26px;
+  height: 26px;
+  aspect-ratio: 1;
   flex: none;
-  border-radius: 3px;
+  border: 1.5px solid currentColor;
+  border-radius: 6px;
+}
+
+.cc-put-it-in label > span > svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.cc-put-it-in label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: .65;
 }
 
 .cc-put-it-in > p {

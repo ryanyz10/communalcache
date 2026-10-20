@@ -1,11 +1,13 @@
 import { afterEach,expect,it,vi } from 'vitest'
 import { createElement,type ReactElement } from 'react'
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter,Route,Routes } from 'react-router'
 import { QueryClient,QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
 import { LibraryPage } from '../pages/LibraryPage'
 import { ItemEditorPage } from '../pages/ItemEditorPage'
+import { ItemForm } from '../pages/ItemForm'
 import { ItemPage } from '../pages/ItemPage'
 import type { LibraryItem } from './items'
 const cacheId='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222'
@@ -50,4 +52,18 @@ it('keeps the new form empty, photo optional, type native, caches selectable and
   expect(html).not.toContain('One item, one stock count')
   expect(html).not.toContain('value="Mason jars"')
   expect(html).not.toContain('private@example.com')
+})
+it('keeps Put it in native checkboxes with square indicators, centered SVG ticks and disabled/focus states', () => {
+  const unchecked = render(createElement(ItemEditorPage), '/items/new', '/items/new')
+  const selected = render(createElement(ItemForm, { cacheId, onSaved: vi.fn(), onCancel: vi.fn() }), '/', '/')
+  expect(unchecked).toMatch(/<input type="checkbox"\/>/)
+  expect(selected).toMatch(/<input type="checkbox" disabled="" checked=""\/>/)
+  expect(selected).toContain('shared here in the same create operation')
+  expect(selected).toMatch(/<span aria-hidden="true"[^>]*><svg viewBox="0 0 24 24"/)
+  expect(selected).toContain('<path d="m5 13 4 4L19 7">')
+  const css = readFileSync(new URL('../items.css', import.meta.url), 'utf8')
+  const indicator = css.match(/\.cc-put-it-in label > span:not\(\.sr-only\) \{([^}]+)\}/)![1]
+  for (const rule of ['width: 26px', 'height: 26px', 'aspect-ratio: 1', 'flex: none', 'display: grid', 'place-items: center']) expect(indicator).toContain(rule)
+  expect(css).toContain('.cc-put-it-in label:has(input:focus-visible)')
+  expect(css).toContain('.cc-put-it-in label:has(input:disabled)')
 })
