@@ -7,6 +7,9 @@ GOOGLE_CLIENT_ID=590020154161-97ja6t1utnkdndn0kshrg5qutgjaobml.apps.googleuserco
 GOOGLE_CLIENT_SECRET=
 # Registered local OAuth callback: http://localhost:8787/api/auth/callback/google
 # Use localhost:8787 for Google; the Vite :5173 origin is not a registered callback.
+# Local-only opt-in: terminal sign-in mail, public Turnstile testing-key verdicts.
+# Never put LOCAL_DEV_AUTH in wrangler.jsonc or staging/production vars.
+LOCAL_DEV_AUTH=1
 RESEND_API_KEY=
 EMAIL_FROM=Communal Cache <signin@send.communalcache.com>
 # Optional local-only VAPID P-256 pair, never production keys. Leave blank to disable push UI.
@@ -14,12 +17,11 @@ EMAIL_FROM=Communal Cache <signin@send.communalcache.com>
 VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 # For Vite development, change BOTH URLs above to http://localhost:5173.
-# Tests/UI fixture mock email; real Resend/domain setup needs approval.
-# The owner-configured real widget allows localhost. Put its real secret ONLY in
-# your gitignored .dev.vars; never commit it or copy deployment secrets into tests.
-TURNSTILE_SITE_KEY=0x4AAAAAAFX8jA_m3iHxQbuL
-TURNSTILE_SECRET=
+# Public Cloudflare always-pass TEST keys, not deployment credentials.
+# Siteverify still runs. Its testing-key metadata is accepted only with the
+# explicit local opt-in AND an actual localhost/127.0.0.1/[::1] request URL.
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
 TURNSTILE_HOSTNAMES=localhost
-# Cloudflare dummy keys do not satisfy our strict action/hostname checks (their
-# verdict has hostname example.com and no action). Tests mock exact claims instead.
-# Official docs: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+# Official source: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+# Without local mode, real widget/Resend credentials need separate approval.

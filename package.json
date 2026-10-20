@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler dev",
+    "dev": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=${CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV:-false} wrangler dev",
     "types": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler types --strict-vars=false",
     "ui:fixture": "node scripts/ui-fixture.mjs",
     "typecheck": "tsc --noEmit",

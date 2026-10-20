@@ -143,6 +143,7 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     rotate on resend; persistent database rate-limit storage, never per-isolate
     memory. Auth email awaits Resend from the request, not notification Queue.
     Magic-link landing pages never auto-verify; explicit Continue triggers the POST.
+    Opt-in LOCAL_DEV_AUTH on loopback may log auth mail only without a Resend key; D1 challenges stay real.
 15. **Plans/quotas: one limits source, same-write enforcement.** User/cache plan
     columns default `free`; one `plan_limits` table keyed by `free` / `plus`
     controls limits inside the same guarded write or fresh-token batch. No client/
@@ -171,8 +172,9 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     message starts empty, never prefilled. No chat, email relay or SMS auth/service.
 17. **Owner setup is not authorization or release approval.** Turnstile email-send/
     cache-create protection needs Worker siteverify; Google linking requires
-    verified email through Better Auth; Apple remains deferred. Future `/admin`
-    and all backing APIs require Access + Worker-verified JWT + current allowlisted
+    verified email through Better Auth; Apple remains deferred. LOCAL_DEV_AUTH may
+    accept Siteverify-confirmed testing-key verdicts only on loopback; never set it
+    in Wrangler config. Future `/admin` and all backing APIs require Access + Worker-verified JWT + current allowlisted
     app user ID, including alternate-host calls; fail closed, no privacy bypass.
     Suspension must be enforced server-side. Tips stay hidden until configured:
     hosted link only, no webhooks/app records/unlocks. Provisioning, secrets, Bot

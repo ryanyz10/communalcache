@@ -26,9 +26,9 @@ it('pins explicit named-environment logs with invocation logs/traces off', () =>
   expect(config.observability).toBeUndefined()
 })
 
-it('audits every source console call as a single reviewed structured event with no obvious private values', () => {
+it('audits production console events and pins the one guarded localhost mail exception', () => {
   const events = new Set<string>()
-  let count = 0
+  let count = 0, localMailCount = 0
   function scan(directory: string) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name)
@@ -41,6 +41,17 @@ it('audits every source console call as a single reviewed structured event with 
           expect(ts.isCallExpression(call) && call.expression === node, `${path}: console aliases require review`).toBe(true)
           if (!ts.isCallExpression(call)) return
           const method = ts.isPropertyAccessExpression(node) ? node.name.text : node.argumentExpression.getText(source).replace(/['"]/g, '')
+          if (path === fileURLToPath(new URL('src/auth-mail.ts',root)) && method === 'log') {
+            const guard=call.parent.parent.parent
+            expect(ts.isIfStatement(guard)).toBe(true)
+            if (!ts.isIfStatement(guard)) return
+            expect(guard.expression.getText(source)).toBe('localDevAuth(env,requestUrl) && !env.RESEND_API_KEY')
+            expect(call.arguments).toHaveLength(1)
+            expect(ts.isTemplateExpression(call.arguments[0])).toBe(true)
+            expect(call.getText(source)).toContain('LOCAL DEV SIGN-IN MAIL')
+            localMailCount++
+            return
+          }
           expect(['info', 'warn', 'error']).toContain(method)
           expect(call.arguments).toHaveLength(1)
           const object = call.arguments[0]
@@ -66,11 +77,12 @@ it('audits every source console call as a single reviewed structured event with 
   }
   scan(fileURLToPath(new URL('src', root)))
   expect(count).toBe(9)
+  expect(localMailCount).toBe(1)
   expect([...events].sort()).toEqual(Object.keys(fields).sort())
 })
 
 it('keeps Better Auth library logging disabled rather than risking provider/token error output', () => {
   const source = readFileSync(new URL('src/auth.ts', root), 'utf8')
   expect(source).toMatch(/logger:\s*\{\s*disabled:\s*true\s*\}/)
-  expect(source).toContain('betterAuth(authOptions(env, delivery, requestPath))')
+  expect(source).toContain('betterAuth(authOptions(env, delivery, requestPath, requestUrl))')
 })

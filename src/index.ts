@@ -83,7 +83,7 @@ async function dispatch(request: Request, env: Env) {
       await requireTurnstile(request, env, 'signin')
     }
     const delivery: DeliveryResult = { status: 'not_called' }
-    const response = await createAuth(env, delivery, path).handler(request)
+    const response = await createAuth(env, delivery, path, request.url).handler(request)
     if ((path.endsWith('/send-verification-otp') || path === '/api/auth/sign-in/magic-link') && delivery.status === 'failed') {
       await response.body?.cancel()
       return json({ error: 'email_unavailable' }, 502)
