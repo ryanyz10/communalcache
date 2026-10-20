@@ -36,6 +36,8 @@ it('renders caller library cards, names, shared stock, pending asks, private pho
   expect(markup).toContain(`/items/${item.id}`)
   expect(markup).toContain(`/api/me/items/${item.id}/photo?v=version`)
   expect(markup).toContain('cc-library-slip')
+  expect(markup).toContain('href="/items/unshared/edit"')
+  expect(markup).not.toContain('#sharing')
   expect(markup).not.toContain('/api/caches/null')
   expect(markup).not.toContain('private@example.test')
 })
@@ -109,13 +111,14 @@ it('keeps partial attachment successes and retries only failures, using idempote
   expect(fetchMock.mock.calls.every(call=>call[1]?.method==='PUT' && call[1]?.credentials==='same-origin')).toBe(true)
 })
 
-it('renders private owner item controls and active-cache pills with explicit detach consequences', () => {
+it('renders saved cache links on the overview and leaves attachment editing to the item editor', () => {
   const markup = render(createElement(ItemPage),{route:'/items/:itemId',path:`/items/${item.id}`})
-  for (const text of ['Shown in','Maple Street','Garden Club','Tool Shed','Save availability','Back Sunday','Pending asks in these caches get declined','Your library item, photos, stock and other caches are kept','Confirm stop sharing','Delete item','your library and every cache']) expect(markup).toContain(text)
-  const sharing = markup.match(/<ul class="cc-select-options mt-3">([\s\S]*?)<\/ul>/)![1]
-  expect(sharing.match(/aria-pressed="true"/g)).toHaveLength(2)
-  expect(sharing).toContain('aria-pressed="false"')
-  expect(sharing).not.toMatch(/<input|<svg/)
+  for (const text of ['Shown in','Maple Street','Garden Club','Save availability','Back Sunday','Delete item','your library and every cache']) expect(markup).toContain(text)
+  const sharing = markup.match(/<ul class="cc-cache-list">([\s\S]*?)<\/ul>/)![1]
+  expect(sharing).toContain(`href="/caches/${cacheId}"`)
+  expect(sharing).toContain('href="/caches/garden"')
+  expect(sharing).not.toMatch(/<button|<input|<svg|aria-pressed|Tool Shed/)
+  expect(markup).not.toContain('Confirm stop sharing')
   expect(markup).toContain('role="switch"')
   expect(markup).toContain(`/items/${item.id}/edit`)
   expect(markup).toContain('View asks in Requests')

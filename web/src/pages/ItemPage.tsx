@@ -197,7 +197,7 @@ export function ItemPage() {
             <DeleteItem item={item} />
           </div>
           <ItemAvailability key={`${item.id}:${item.available}:${item.unavailable_note ?? ''}`} item={item} />
-          <div id="sharing"><ShownIn key={item.id} item={item} /></div>
+          <div id="sharing"><ShownIn item={item} /></div>
           <PhotoUpload item={item} />
           {!cacheId && <Link to="/requests" className="cc-profile-secondary">View asks in Requests</Link>}
         </div>}

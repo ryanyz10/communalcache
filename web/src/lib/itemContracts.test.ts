@@ -46,7 +46,7 @@ function text(node: Element): string {
 }
 function click(node: Element) { (node.props.onClick as () => void)() }
 
-function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = {}) {
+function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean } = {}) {
   const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
@@ -54,6 +54,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
   const effects: {dependencies: unknown[]; cleanup?: () => void}[] = []
   let pendingEffects: (() => void)[] = [], effectIndex = 0
   let editorState = {dirty:false,committed:false}
+  let sharedResult: boolean | undefined
   let elements: Element[] = [], stateIndex = 0, refIndex = 0, mutationIndex = 0
   let lastMutation: Promise<void> = Promise.resolve()
   let libraryItem = { ...item, caches: [...item.caches] }
@@ -131,8 +132,8 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
     '@tanstack/react-query': {
       useMutation, useQueryClient: () => queryClient,
       useQuery: ({ queryKey }: { queryKey: string[] }) => ({
-        data: queryKey[0] === 'caches' ? [cacheA, cacheB, cacheC] : queryKey[0] === 'cache' ? { ...cacheA, owner_id: 'owner' } : queryKey[0] === 'library-item' ? libraryItem : currentItem,
-        error: null, isPending: false, isError: false, isSuccess: true,
+        data: queryKey[0] === 'caches' ? [cacheA, cacheB, cacheC] : queryKey[0] === 'cache' ? { ...cacheA, owner_id: 'owner' } : queryKey[0] === 'library-item' ? context.sharingLoading ? undefined : libraryItem : currentItem,
+        error: null, isPending: queryKey[0] === 'library-item' && !!context.sharingLoading, isError: false, isSuccess: queryKey[0] !== 'library-item' || !context.sharingLoading,
       }),
     },
     '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }) },
@@ -169,7 +170,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
   const props = kind === 'form' ? {
     cacheId: context.cacheId ?? null, item: context.editing ? item : undefined,
     onStateChange: (state: typeof editorState) => { editorState = state },
-    onSaved: (saved: items.Item) => trace.push(['saved', saved.id]), onCancel: () => trace.push(['cancel']),
+    onSaved: (saved: items.Item, shared?: boolean) => { sharedResult = shared; trace.push(['saved', saved.id]) }, onCancel: () => trace.push(['cancel']),
     onBusy: (busy: boolean) => trace.push(['busy', busy]),
   } : kind === 'delete' ? {} : kind === 'add' ? { cacheId: cacheA.id, cacheName: cacheA.name, dialog: {current: dialogModel} } : { item: currentItem }
   function render() {
@@ -197,7 +198,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
     if (kind === 'delete') click(elements.find(node => node.type === 'button' && text(node) === 'Delete item')!)
     else {
       selectCache(cacheA.id, false)
-      click(elements.find(node => node.type === 'button' && text(node) === 'Save')!)
+      submit()
     }
     render()
   }
@@ -207,7 +208,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
   }
   function escape() {
     const preventDefault = vi.fn()
-    ;(dialog().props.onCancel as (event: unknown) => void)({ preventDefault })
+    ;(dialog().props.onCancel as (event: unknown) => void)({ preventDefault, stopPropagation:vi.fn() })
     if (!preventDefault.mock.calls.length) dialogModel.close()
     return preventDefault
   }
@@ -219,13 +220,14 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = 
     preview: () => elements.find(node => String(node.props.alt).startsWith('Selected'))!,
     recoveryActions: () => elements.find(node => node.props.className === 'cc-item-recovery-actions'),
     editorState: () => editorState,
+    sharedInCurrentCache: () => sharedResult,
     cancel: () => click(buttons()[0]), confirm: () => click(buttons()[1]),
     row: (title: string) => elements.find(node => node.type === 'button' && node.props.className === 'cc-select-row' && text(node).startsWith(title))!,
     button: (label: string) => elements.find(node => node.type === 'button' && text(node) === label)!,
   }
 }
 
-for (const kind of ['delete', 'sharing'] as const) {
+for (const kind of ['delete'] as const) {
   it(`${kind} keeps safe Cancel focus and idle Cancel/Escape without a request`, () => {
     const fetch = vi.spyOn(globalThis, 'fetch')
     const page = fixture(kind, { cacheId: cacheA.id })
@@ -242,7 +244,7 @@ for (const kind of ['delete', 'sharing'] as const) {
     page.open(); page.confirm(); page.render()
     expect(page.buttons().every(button => button.props.disabled)).toBe(true)
     expect(page.escape()).toHaveBeenCalledOnce(); expect(page.dialogModel.open).toBe(true)
-    expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/me/items/${item.id}${kind === 'sharing' ? `/attachments/${cacheA.id}` : ''}`, expect.objectContaining({ method: 'DELETE', body: undefined, credentials: 'same-origin' }))
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/me/items/${item.id}`, expect.objectContaining({ method: 'DELETE', body: undefined, credentials: 'same-origin' }))
     respond(Response.json({ error: 'not_found' }, { status: 404 })); await page.settled()
     expect(page.render()).toContain('This cache, item or invite is not available, or you are no longer a member.')
     expect(page.dialogModel.open).toBe(true)
@@ -252,101 +254,98 @@ for (const kind of ['delete', 'sharing'] as const) {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
     const page = fixture(kind, { cacheId: cacheA.id })
     page.open(); page.trace.length = 0; page.confirm(); await page.settled()
-    const expected: unknown[][] = kind === 'delete'
-      ? [['close', 'delete-item-heading'], ['navigate', '/items'], ...['item', 'library-item', 'item-requests'].map(key => ['remove', [key]])]
-      : [['set', ['library-item', 'owner', item.id], [cacheB.id]], ['close', 'detach-item-heading'], ['navigate', `/items/${item.id}`, { replace: true }]]
+    const expected: unknown[][] = [['close', 'delete-item-heading'], ['navigate', '/items'], ...['item', 'library-item', 'item-requests'].map(key => ['remove', [key]])]
     expected.push(...invalidations.map(key => ['invalidate', [key]]))
     expect(page.trace).toEqual(expected)
     expect(page.dialogModel.open).toBe(false)
   })
 }
 
-it('sharing taps remain a local draft and Cancel restores the current saved set without writes', () => {
-  const fetch = vi.spyOn(globalThis, 'fetch'), page = fixture('sharing')
-  expect(page.button('Save')).toBeUndefined()
-  page.selectCache(cacheA.id,false); page.selectCache(cacheC.id,true)
-  expect(page.button('Tools').props['aria-pressed']).toBe(false)
-  expect(page.button('Club').props['aria-pressed']).toBe(true)
-  expect(page.dialogModel.open).toBe(false)
-  expect(fetch).not.toHaveBeenCalled()
-  click(page.button('Cancel')); page.render()
-  expect(page.button('Tools').props['aria-pressed']).toBe(true)
-  expect(page.button('Club').props['aria-pressed']).toBe(false)
-  expect(page.button('Save')).toBeUndefined()
+it('item overview lists only saved cache links and the edit hint, with no sharing controls', () => {
+  const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('sharing')
+  const html = page.render()
+  expect(html).toContain(`href="/caches/${cacheA.id}"`)
+  expect(html).toContain(`href="/caches/${cacheB.id}"`)
+  expect(html).not.toMatch(/<button|aria-pressed|<dialog/)
+  expect(html).toContain('to change where it&#x27;s shown')
   expect(fetch).not.toHaveBeenCalled()
 })
 
-it('sharing additions wait for Save, disable the draft while pending and refresh after success', async () => {
-  let respond!: (response:Response) => void
-  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(() => new Promise(resolve => { respond = resolve }))
-  const page = fixture('sharing'); page.selectCache(cacheC.id,true)
+it('edit cache pills start from saved attachments, remain a local draft and leave on Cancel without writing', () => {
+  const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('form',{editing:true})
+  expect(page.button('Tools').props['aria-pressed']).toBe(true)
+  expect(page.button('Garden').props['aria-pressed']).toBe(true)
+  expect(page.button('Club').props['aria-pressed']).toBe(false)
+  page.selectCache(cacheA.id,false); page.selectCache(cacheC.id,true)
+  expect(page.editorState().dirty).toBe(true)
+  expect(page.dialogModel.open).toBe(false)
+  click(page.button('Cancel'))
+  expect(page.trace.at(-1)).toEqual(['cancel'])
   expect(fetch).not.toHaveBeenCalled()
-  click(page.button('Save')); page.render()
+  expect(fixture('form',{editing:true}).button('Tools').props['aria-pressed']).toBe(true)
+})
+
+it('edit waits for attachment metadata before Save and cannot silently clear unknown caches', () => {
+  const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('form',{editing:true,sharingLoading:true})
+  expect(page.button('Save').props.disabled).toBe(true)
+  expect(page.button('Tools').props.disabled).toBe(true)
+  page.submit();expect(fetch).not.toHaveBeenCalled()
+})
+
+it('edit additions wait for Save, follow the item PATCH and disable controls while pending', async () => {
+  let respond!: (response:Response) => void
+  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init) => init?.method === 'PATCH' ? Response.json(item) : new Promise(resolve => {respond=resolve}))
+  const page = fixture('form',{editing:true}); page.selectCache(cacheC.id,true)
+  expect(fetch).not.toHaveBeenCalled()
+  page.submit();await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));page.render()
   expect(page.button('Club').props.disabled).toBe(true)
   expect(page.button('Cancel').props.disabled).toBe(true)
-  expect(page.dialogModel.open).toBe(false)
-  respond(new Response(null,{status:204})); await page.settled(); page.render()
-  expect(fetch).toHaveBeenCalledExactlyOnceWith(`/api/me/items/${item.id}/attachments/${cacheC.id}`,expect.objectContaining({method:'PUT',body:undefined}))
+  respond(new Response(null,{status:204}));await page.settled();page.render()
+  expect(fetch.mock.calls.map(call => call[1]?.method)).toEqual(['PATCH','PUT'])
   expect(page.libraryItem().caches.map(cache => cache.id)).toEqual([cacheA.id,cacheB.id,cacheC.id])
-  expect(page.button('Save')).toBeUndefined()
-  expect(page.toasts.notice).toMatchObject({message:'Saved',tone:'success'})
-  expect(page.trace.filter(row => row[0] === 'invalidate')).toEqual(invalidations.map(key => ['invalidate',[key]]))
+  expect(page.toasts.notice).toMatchObject({message:'Item saved.',tone:'success'})
 })
 
-it('sharing confirms all removals, saves additions first and removes the active route cache last', async () => {
-  const fetch = vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(null,{status:204}))
-  const page = fixture('sharing',{cacheId:cacheA.id})
-  page.selectCache(cacheA.id,false); page.selectCache(cacheB.id,false); page.selectCache(cacheC.id,true)
-  click(page.button('Save')); page.render()
-  expect(page.dialogModel.open).toBe(true)
-  expect(fetch).not.toHaveBeenCalled()
-  expect(page.render()).toContain('<li>Garden</li><li>Tools</li>')
+it('editor confirms all removals before any write, then saves fields, adds and removes with the route cache last', async () => {
+  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init) => init?.method === 'PATCH' ? Response.json(item) : new Response(null,{status:204}))
+  const page = fixture('form',{editing:true,cacheId:cacheA.id})
+  page.selectCache(cacheA.id,false);page.selectCache(cacheB.id,false);page.selectCache(cacheC.id,true)
+  page.submit();page.render()
+  expect(page.dialogModel.open).toBe(true);expect(fetch).not.toHaveBeenCalled()
+  expect(page.render()).toContain('<li>Tools</li><li>Garden</li>')
   expect(page.render()).toContain('Pending asks in these caches get declined')
-  page.confirm(); await page.settled(); page.render()
+  page.cancel();page.render();expect(fetch).not.toHaveBeenCalled()
+  page.submit();page.render();expect(page.escape()).not.toHaveBeenCalled()
+  page.submit();page.render();page.confirm();await page.settled();page.render()
   expect(fetch.mock.calls.map(call => [call[0],call[1]?.method])).toEqual([
+    [`/api/caches/${cacheA.id}/items/${item.id}`,'PATCH'],
     [`/api/me/items/${item.id}/attachments/${cacheC.id}`,'PUT'],
     [`/api/me/items/${item.id}/attachments/${cacheB.id}`,'DELETE'],
     [`/api/me/items/${item.id}/attachments/${cacheA.id}`,'DELETE'],
   ])
   expect(page.libraryItem().caches.map(cache => cache.id)).toEqual([cacheC.id])
-  expect(page.trace.filter(row => row[0] === 'navigate')).toEqual([['navigate',`/items/${item.id}`,{replace:true}]])
+  expect(page.sharedInCurrentCache()).toBe(false)
 })
 
-it('sharing keeps completed changes, names the failed cache and retries only remaining work', async () => {
-  let gardenAttempts = 0
-  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(async path => String(path).endsWith(cacheB.id) && ++gardenAttempts === 1
-    ? Response.json({error:'not_found'},{status:404}) : new Response(null,{status:204}))
-  const page = fixture('sharing',{cacheId:cacheA.id})
-  page.selectCache(cacheA.id,false); page.selectCache(cacheB.id,false); page.selectCache(cacheC.id,true)
-  click(page.button('Save')); page.render(); page.confirm(); await page.settled(); page.render()
+it('editor keeps sharing successes and names failures; retry does not repeat fields or successful cache calls', async () => {
+  let gardenAttempts=0
+  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(async (path,init) => init?.method==='PATCH' ? Response.json(item)
+    : String(path).endsWith(cacheB.id) && ++gardenAttempts===1 ? Response.json({error:'not_found'},{status:404}) : new Response(null,{status:204}))
+  const context={editing:true,cacheId:cacheA.id,sharingLoading:false}
+  const page=fixture('form',context)
+  page.selectCache(cacheA.id,false);page.selectCache(cacheB.id,false);page.selectCache(cacheC.id,true)
+  page.submit();page.render();page.confirm();await page.settled();page.render()
   expect(page.toasts.notice?.message).toContain("Couldn't save sharing for Garden.")
   expect(page.libraryItem().caches.map(cache => cache.id)).toEqual([cacheA.id,cacheB.id,cacheC.id])
-  expect(page.trace.filter(row => row[0] === 'navigate')).toEqual([])
+  expect(page.trace.filter(row => row[0]==='saved')).toEqual([])
   expect(page.render()).toContain('Successful changes are kept')
-  expect(page.dialogModel.open).toBe(true)
-  page.confirm(); await page.settled(); page.render()
-  expect(fetch.mock.calls.map(call => [call[0],call[1]?.method])).toEqual([
-    [`/api/me/items/${item.id}/attachments/${cacheC.id}`,'PUT'],
-    [`/api/me/items/${item.id}/attachments/${cacheB.id}`,'DELETE'],
-    [`/api/me/items/${item.id}/attachments/${cacheB.id}`,'DELETE'],
-    [`/api/me/items/${item.id}/attachments/${cacheA.id}`,'DELETE'],
-  ])
-  expect(page.toasts.notice).toMatchObject({message:'Saved'})
-})
-
-it('Cancel after a partial sharing failure keeps successful additions as the new saved set', async () => {
-  const fetch = vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init) => init?.method === 'PUT'
-    ? new Response(null,{status:204}) : Response.json({error:'not_found'},{status:404}))
-  const page = fixture('sharing')
-  page.selectCache(cacheA.id,false); page.selectCache(cacheC.id,true)
-  click(page.button('Save')); page.render(); page.confirm(); await page.settled(); page.render()
-  page.cancel(); page.render()
-  click(page.button('Cancel')); page.render()
-  expect(page.button('Tools').props['aria-pressed']).toBe(true)
-  expect(page.button('Club').props['aria-pressed']).toBe(true)
-  expect(page.button('Save')).toBeUndefined()
-  expect(page.render()).not.toContain('Successful changes are kept')
-  expect(fetch).toHaveBeenCalledTimes(2)
+  context.sharingLoading=true;page.render()
+  expect(page.button('Retry sharing').props.disabled).toBe(false)
+  expect(page.render()).toContain('<li>Garden</li><li>Tools</li>')
+  page.confirm();await page.settled();page.render()
+  expect(fetch.mock.calls.map(call => call[1]?.method)).toEqual(['PATCH','PUT','DELETE','DELETE','DELETE'])
+  expect(fetch.mock.calls.filter(call => String(call[0]).endsWith(cacheC.id))).toHaveLength(1)
+  expect(page.sharedInCurrentCache()).toBe(false)
 })
 
 it('existing-item row buttons toggle locally, keep already-shared rows disabled and retain partial additions', async () => {
@@ -474,16 +473,16 @@ it('keeps decode failure before create, explicit Continue without photo and Keep
   expect(page.trace.filter(row => row[0] === 'saved')).toEqual([['saved', item.id]])
 })
 
-it('keeps sharing recovery guidance inline after an operational error toast is dismissed', async () => {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ error: 'internal_error' }, { status: 503 }))
-  const page = fixture('sharing', { cacheId: cacheA.id })
+it('keeps editor sharing recovery guidance inline after an operational error toast is dismissed', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_path,init) => init?.method==='PATCH' ? Response.json(item) : Response.json({ error: 'internal_error' }, { status: 503 }))
+  const page = fixture('form', { editing:true, cacheId: cacheA.id })
   page.open(); page.confirm(); await page.settled()
   expect(page.toasts.notice).toMatchObject({ message: "Couldn't save sharing for Tools. Could not complete that request. Please try again.", tone: 'error' })
   page.toasts.modules['../components/Toast'].useToast().dismissToast()
   const html = page.render()
   expect(page.toasts.notice).toBeNull()
   expect(html).not.toContain('cc-toast-message')
-  expect(html).toContain('Successful changes are kept. Retry Save for the remaining changes')
+  expect(html).toContain('Successful changes are kept')
   expect(html).toContain('You can retry here.')
   expect(html).toContain('save sharing for Tools.')
   expect(page.dialogModel.open).toBe(true)
@@ -495,7 +494,7 @@ it('toasts an operational partial-save failure while keeping recovery state inli
   page.change('item-title', 'Tent'); page.selectCache(cacheA.id, true)
   page.submit(); await page.settled()
   const html = page.render()
-  expect(page.toasts.notice).toMatchObject({ message: 'Could not complete that request. Please try again.', tone: 'error' })
+  expect(page.toasts.notice).toMatchObject({ message: "Couldn't save sharing for Tools. Could not complete that request. Please try again.", tone: 'error' })
   expect(html).toContain('cc-toast-error')
   expect(html).toContain('Your item is saved')
   expect(html).toContain('Sharing needs retrying.')

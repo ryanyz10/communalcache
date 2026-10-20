@@ -2,7 +2,7 @@ import { afterEach,expect,it,vi } from 'vitest'
 import { persistItem,type Item,type ItemSaveProgress } from './items'
 const item:Item={id:'one-canonical-id',cache_id:null,owner_id:'owner',owner_name:'Ryan',title:'Jars',description:null,is_consumable:true,quantity:8,created_at:1,photo_version:null}
 const input={cacheId:null,itemId:undefined,cacheIds:['a','b','c'],photo:null,body:{title:'Jars',is_consumable:true,quantity:8,description:null}}
-function progress():ItemSaveProgress{return {item:null,remainingCacheIds:[],photoPending:false,stage:'saving'}}
+function progress():ItemSaveProgress{return {item:null,remainingCacheIds:[],remainingDetachIds:[],failedCacheId:null,photoPending:false,stage:'saving'}}
 afterEach(()=>{vi.restoreAllMocks()})
 it('creates once, retains earlier attachment successes and retries only the remaining cache IDs',async()=>{
   let fail=true
@@ -56,6 +56,39 @@ it('does not upload again when a later sharing failure is retried, and preserves
   fail=false
   expect((await persistItem(state,{...input,photo},()=>{})).photo_version).toBe('uploaded')
   expect(fetch.mock.calls.filter(call=>String(call[0]).endsWith('/photo'))).toHaveLength(1)
+})
+it('edits fields then photo then cache diff, preserving successes and retrying only remaining removals',async()=>{
+  let fail=true
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async(path,init)=>{
+    if(init?.method==='PATCH')return Response.json(item)
+    if(String(path).endsWith('/photo'))return Response.json({...item,photo_version:'uploaded'})
+    if(String(path).endsWith('/b') && fail)return Response.json({error:'not_found'},{status:404})
+    return new Response(null,{status:204})
+  })
+  const state=progress(),applied=vi.fn(),photo=new Blob(['jpeg'],{type:'image/jpeg'})
+  const edit={...input,itemId:item.id,cacheId:'a',cacheIds:['c'],initialCacheIds:['a','b'],photo}
+  await expect(persistItem(state,edit,()=>{},applied)).rejects.toMatchObject({status:404})
+  expect(state).toMatchObject({photoPending:false,remainingCacheIds:[],remainingDetachIds:['b','a'],failedCacheId:'b'})
+  expect(applied.mock.calls).toEqual([['c',true]])
+  fail=false
+  expect((await persistItem(state,edit,()=>{},applied)).photo_version).toBe('uploaded')
+  expect(fetch.mock.calls.map(call=>[call[0],call[1]?.method])).toEqual([
+    [`/api/caches/a/items/${item.id}`,'PATCH'],[`/api/me/items/${item.id}/photo`,'POST'],
+    [`/api/me/items/${item.id}/attachments/c`,'PUT'],[`/api/me/items/${item.id}/attachments/b`,'DELETE'],
+    [`/api/me/items/${item.id}/attachments/b`,'DELETE'],[`/api/me/items/${item.id}/attachments/a`,'DELETE'],
+  ])
+  expect(state.remainingDetachIds).toEqual([])
+  expect(state.failedCacheId).toBeNull()
+})
+it('does not reattach unchanged edit caches or remove anything after an addition fails',async()=>{
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async(_path,init)=>init?.method==='PATCH'?Response.json(item):Response.json({error:'not_found'},{status:404}))
+  await persistItem(progress(),{...input,itemId:item.id,cacheIds:['a','b'],initialCacheIds:['a','b']},()=>{})
+  expect(fetch).toHaveBeenCalledOnce()
+  fetch.mockClear()
+  const state=progress()
+  await expect(persistItem(state,{...input,itemId:item.id,cacheIds:['c'],initialCacheIds:['a','b']},()=>{})).rejects.toMatchObject({status:404})
+  expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','PUT'])
+  expect(state.remainingDetachIds).toEqual(['a','b'])
 })
 it('edits by PATCH, never creates a second item and keeps the item type out of edit input',async()=>{
   const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json(item)),state=progress()

@@ -929,6 +929,27 @@
   background: var(--cc-card);
 }
 
+.cc-cache-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.cc-cache-list a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--cc-chip);
+  font: 600 13px var(--font-body);
+}
+
+.cc-owner-sharing .cc-form-hint a {
+  text-decoration: underline;
+}
+
 .cc-owner-availability-toggle {
   display: flex;
   justify-content: space-between;
