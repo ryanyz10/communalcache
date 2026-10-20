@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Navigate, useSearchParams } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
@@ -7,7 +7,7 @@ import { sendSignInEmail } from '../lib/magicLinks'
 import { AuthScreen, AuthBrand, SignInBox } from '../components/AuthScreen'
 import { CodeInput } from '../components/CodeInput'
 import { landingCopy } from '../lib/landingCopy'
-import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
+import { Turnstile, type TurnstileHandle, type TurnstileStatus } from '../components/Turnstile'
 import { LegalLinks } from '../components/LegalLinks'
 import { GoogleSignInButton } from '../components/GoogleSignInButton'
 import { googleSignInError, googleSignInUrl } from '../lib/googleSignIn'
@@ -21,6 +21,12 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
   const emailInput = useRef<HTMLInputElement>(null)
   const botCheck = useRef<TurnstileHandle>(null)
   const [botToken, setBotToken] = useState('')
+  const [botStatus, setBotStatus] = useState<TurnstileStatus>('checking')
+  const botFailure = "Couldn't verify your browser. Tap Try again."
+  const onBotStatus = useCallback((status: TurnstileStatus) => {
+    setBotStatus(status)
+    if (status === 'failed') showToast(botFailure, 'error')
+  }, [showToast])
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [pending, setPending] = useState(false)
@@ -58,6 +64,7 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (sentMode !== 'code') {
+      if (!botToken) return
       await sendEmail('link')
       return
     }
@@ -111,17 +118,31 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
     <form className="cc-login-form" onSubmit={submit}>
       {!sentMode && <GoogleSignInButton disabled={pending} onClick={() => void continueWithGoogle()} />}
       <div className={sentMode ? 'sr-only' : 'cc-email-field'} aria-hidden={sentMode ? true : undefined}>
-        <label htmlFor="email">Email</label>
-        <input
-          ref={emailInput} id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required
-          readOnly={!!sentMode} disabled={pending} tabIndex={sentMode ? -1 : undefined} value={email}
-          onChange={event => setEmail(event.target.value)} className="cc-profile-input"
-        />
+        <label htmlFor="email" className="sr-only">Email</label>
+        <div className="cc-email-input">
+          <input
+            ref={emailInput} id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required
+            readOnly={!!sentMode} disabled={pending} tabIndex={sentMode ? -1 : undefined} value={email}
+            onChange={event => setEmail(event.target.value)} className="cc-profile-input"
+          />
+          {botStatus !== 'verified' && <span className={`cc-email-check cc-email-check-${botStatus}`} aria-hidden="true">
+            {botStatus === 'checking'
+              ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" opacity=".25" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
+              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 10 18H2L12 3Z" /><path d="M12 9v4m0 4h.01" /></svg>}
+          </span>}
+        </div>
       </div>
       {sentMode === 'code' && <CodeInput value={code} onChange={setCode} />}
-      <div className="cc-signin-bot"><Turnstile ref={botCheck} action="signin" onToken={setBotToken} /></div>
+      <div className="cc-signin-bot">
+        <Turnstile ref={botCheck} action="signin" onToken={setBotToken} onStatus={onBotStatus} inlineFeedback={false} />
+        {botStatus === 'checking' && <span className="sr-only" role="status">Checking your browser…</span>}
+        {botStatus === 'failed' && <span className="sr-only" role="alert">{botFailure}</span>}
+      </div>
       {error && <p role="alert" className="cc-form-error">{error}</p>}
-      <button type="submit" disabled={pending || (sentMode !== 'code' && !botToken)} className={sentMode === 'link' ? 'cc-profile-secondary' : 'cc-profile-primary'}>{submitLabel}</button>
+      {botStatus === 'failed' && sentMode !== 'code'
+        ? <button type="button" disabled={pending} className="cc-profile-primary" onClick={() => botCheck.current?.retry()}>Try again</button>
+        : <button type="submit" disabled={pending || (sentMode !== 'code' && !botToken)} className={sentMode === 'link' ? 'cc-profile-secondary' : 'cc-profile-primary'}>{submitLabel}</button>}
+      {botStatus === 'failed' && sentMode === 'code' && <button type="button" className="cc-text-action" onClick={() => botCheck.current?.retry()}>Try again</button>}
       <div className="cc-login-fallbacks">
         <button type="button" disabled={pending || !botToken} onClick={() => void sendEmail('code')} className="cc-text-action">{sentMode === 'code' ? 'Resend code' : 'Use a 6-digit code instead'}</button>
         {sentMode === 'code' && <button type="button" disabled={pending || !botToken} onClick={() => void sendEmail('link')} className="cc-text-action">Email a link instead</button>}

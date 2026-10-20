@@ -1,18 +1,41 @@
-import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { loadConfig } from '../lib/config'
 import { loadTurnstile, mountTurnstile, turnstileTheme } from '../lib/turnstile'
 import { Shimmer, LoadingStatus } from './Skeleton'
 
-export type TurnstileHandle = { reset(): void }
-export function Turnstile({ action, onToken, ref }: { action: 'signin' | 'create_cache'; onToken: (token: string) => void; ref?: Ref<TurnstileHandle> }) {
+export type TurnstileStatus = 'checking' | 'verified' | 'failed'
+export type TurnstileHandle = { reset(): void; retry(): void }
+export function Turnstile({ action, onToken, onStatus, inlineFeedback = true, ref }: {
+  action: 'signin' | 'create_cache'
+  onToken: (token: string) => void
+  onStatus?: (status: TurnstileStatus) => void
+  inlineFeedback?: boolean
+  ref?: Ref<TurnstileHandle>
+}) {
   const configQuery = useQuery({ queryKey: ['config'], queryFn: loadConfig })
   const container = useRef<HTMLDivElement>(null)
   const widget = useRef<ReturnType<typeof mountTurnstile> | null>(null)
+  const autoRetried = useRef(false)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
   const [verified, setVerified] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const sitekey = configQuery.data?.turnstile_site_key
+  const unavailable = configQuery.isError || (configQuery.isSuccess && !sitekey)
+
+  const { isError: configError, refetch: refetchConfig } = configQuery
+  const retryCheck = useCallback((automatic = false) => {
+    onToken('')
+    onStatus?.('checking')
+    setVerified(false)
+    setError('')
+    if (!automatic) autoRetried.current = false
+    if (configError || (automatic && unavailable)) void refetchConfig()
+    else if (unavailable) location.reload()
+    else setRetry(value => value + 1)
+  }, [onToken, onStatus, configError, refetchConfig, unavailable])
+
   useEffect(() => {
     const preference = matchMedia('(prefers-color-scheme: dark)')
     function sync() { setTheme(turnstileTheme()) }
@@ -22,13 +45,15 @@ export function Turnstile({ action, onToken, ref }: { action: 'signin' | 'create
   }, [])
   useImperativeHandle(ref, () => ({
     reset() {
+      autoRetried.current = false
       onToken('')
+      onStatus?.('checking')
       setVerified(false)
       setError('')
       widget.current?.reset()
     },
-  }), [onToken])
-  const sitekey = configQuery.data?.turnstile_site_key
+    retry() { retryCheck() },
+  }))
   useEffect(() => {
     onToken('')
     setVerified(false)
@@ -53,21 +78,32 @@ export function Turnstile({ action, onToken, ref }: { action: 'signin' | 'create
     }
   }, [sitekey, action, theme, retry, onToken])
 
-  const unavailable = configQuery.isError || (configQuery.isSuccess && !sitekey)
+  useEffect(() => {
+    if (configQuery.isFetching) { onStatus?.('checking'); return }
+    if (error || unavailable) {
+      if (!inlineFeedback && !autoRetried.current) {
+        autoRetried.current = true
+        retryCheck(true)
+        return
+      }
+      onStatus?.('failed')
+      return
+    }
+    onStatus?.(verified ? 'verified' : 'checking')
+  }, [error, unavailable, verified, configQuery.isFetching, onStatus, inlineFeedback, retryCheck])
+
   let loading: ReactNode = null
   if (configQuery.isPending) loading = <div><LoadingStatus label="Loading bot check…" /><Shimmer width={300} height={64} /></div>
   else if (sitekey && !verified && !error) loading = <p role="status" className="text-sm text-slate-600">Checking your browser…</p>
 
   return <section className="mt-3" aria-label="Bot protection">
     <div ref={container} />
-    {loading}
-    {(error || unavailable) && <div>
-      <p role="alert" className="text-sm text-red-700">{error || 'Bot protection is unavailable. Please retry.'}</p>
-      <button type="button" className="mt-2 text-sm underline" onClick={() => {
-        if (configQuery.isError) void configQuery.refetch()
-        else if (unavailable) location.reload()
-        else { onToken(''); setRetry(value => value + 1) }
-      }}>Retry bot check</button>
-    </div>}
+    {inlineFeedback && <>
+      {loading}
+      {(error || unavailable) && <div>
+        <p role="alert" className="text-sm text-red-700">{error || 'Bot protection is unavailable. Please retry.'}</p>
+        <button type="button" className="mt-2 text-sm underline" onClick={() => retryCheck()}>Retry bot check</button>
+      </div>}
+    </>}
   </section>
 }

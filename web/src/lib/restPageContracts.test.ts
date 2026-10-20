@@ -53,7 +53,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     removeQueries: vi.fn(({ predicate }: { predicate: (query: { queryKey: string[] }) => boolean }) => { trace.push(['remove-private', predicate({ queryKey: ['me'] }), predicate({ queryKey: ['items'] })]) }),
     getQueryData: () => me,
   }
-  const bot = { reset: vi.fn(() => trace.push(['bot-reset'])) }
+  const bot = { reset: vi.fn(() => trace.push(['bot-reset'])), retry: vi.fn(() => trace.push(['bot-retry'])) }
   const email = { reportValidity: vi.fn(() => true), focus: vi.fn(() => trace.push(['focus', 'email'])) }
   const edit = { focus: vi.fn(() => trace.push(['focus', 'edit-name'])) }
   function dialogNode(name: string) {
@@ -89,6 +89,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
   }
   const record = (factory: typeof jsx) => (...args: Parameters<typeof jsx>) => { const node = factory(...args); elements.push(node as Element); return node }
   const Null = () => null
+  const GoogleButton = () => null
   const Container = ({ children }: { children: ReactNode }) => createElement('div', null, children)
   const modules: Record<string, unknown> = {
     ...toasts.modules,
@@ -100,6 +101,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
         return [states[index], (value: unknown) => { states[index] = typeof value === 'function' ? value(states[index]) : value }]
       },
       useRef(initial: unknown) { const index = refIndex++; return refs[index] ?? (refs[index] = { current: initial }) },
+      useCallback(callback: unknown) { return callback },
       useEffect(effect: () => void) { if (!mounted) effects.push(effect) },
     },
     'react/jsx-runtime': { jsx: record(jsx), jsxs: record(jsxs), Fragment: React.Fragment },
@@ -128,7 +130,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     '../components/Skeleton': { SkeletonRows: Null, LoadingStatus: Null, Shimmer: Null },
     '../components/skeletons/HomeSkeleton': { HomeBoxesSkeleton: Null },
     '../components/Turnstile': { Turnstile: Null }, '../components/CodeInput': { CodeInput: Null },
-    '../components/GoogleSignInButton': { GoogleSignInButton: Null },
+    '../components/GoogleSignInButton': { GoogleSignInButton: GoogleButton },
     '../components/LegalLinks': { LegalLinks: Null }, '../components/InviteBox': { InviteBox: Null },
     '../components/NamePreview': { NamePreview: Null }, '../components/CoatPicker': { CoatPicker: Null },
     '../components/InstallHint': { InstallHint: Null },
@@ -189,8 +191,10 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
   render()
   return {
     toasts, trace, render, queries, query, client, auth, email, bot, dialog, button, click, change, submit, escape,
+    googleButton: () => elements.find(node => node.type === GoogleButton)!,
     field: (id: string) => elements.find(node => node.props.id === id)!,
     token(value = 'public-local-bot-token') { (elements.find(node => node.props.action === 'create_cache' || node.props.action === 'signin')!.props.onToken as (value: string) => void)(value); render() },
+    botStatus(value: 'checking' | 'verified' | 'failed') { (elements.find(node => node.props.action === 'signin')!.props.onStatus as (value: string) => void)(value); render() },
     code(value: string) { (elements.find(node => node.props.onChange && node.props.value === '')!.props.onChange as (value: string) => void)(value); render() },
     settled: () => lastMutation, action: () => lastAction,
   }
@@ -268,6 +272,28 @@ it('uses an error toast for a Google callback failure without reflecting provide
   expect(page.toasts.notice).toMatchObject({ message: googleSignIn.googleSignInError, tone: 'error' })
   expect(page.render()).not.toContain('private-provider-detail')
   expect(page.render()).toContain('cc-toast-error')
+})
+
+it('Login keeps bot checking inside the accessible email field and offers retry without blocking Google', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch'), page = fixture('LoginPage')
+  expect(page.render()).toContain('<label for="email" class="sr-only">Email</label>')
+  expect(page.render()).toContain('cc-email-check-checking')
+  expect(page.render()).toContain('<span class="sr-only" role="status">Checking your browser…</span>')
+  expect(page.render()).not.toContain('<p role="status"')
+  expect(page.button('Email me a sign-in link').props.disabled).toBe(true)
+  expect(page.googleButton().props.disabled).toBe(false)
+  page.botStatus('failed')
+  expect(page.render()).toContain('cc-email-check-failed')
+  expect(page.render()).toContain('role="alert"')
+  expect(page.toasts.notice).toMatchObject({ message: "Couldn't verify your browser. Tap Try again.", tone: 'error' })
+  expect(page.button('Try again').props).toMatchObject({ type: 'button', disabled: false })
+  expect(page.googleButton().props.disabled).toBe(false)
+  expect(page.button('Use a 6-digit code instead').props.disabled).toBe(true)
+  page.click('Try again'); expect(page.bot.retry).toHaveBeenCalledOnce()
+  expect(fetch).not.toHaveBeenCalled()
+  page.botStatus('verified'); page.token()
+  expect(page.render()).not.toContain('cc-email-check')
+  expect(page.button('Email me a sign-in link').props.disabled).toBe(false)
 })
 
 it('Login validates before send, retains errors, transitions link→code, verifies code then refreshes, and resets on wrong email', async () => {
