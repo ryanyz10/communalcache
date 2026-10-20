@@ -67,7 +67,7 @@ it('fails and allows retry when the script loads without exposing the API', asyn
   expect(await retry).toBe(provider)
 })
 
-it('uses the owner-approved shared sitekey with separate exact production/staging hostnames and no secret values', () => {
+it('keeps production/staging keys exact and documents only public local test keys', () => {
   const config=JSON.parse(readFileSync(new URL('../../../wrangler.jsonc',import.meta.url),'utf8'))
   for(const vars of [config.vars,config.env.production.vars,config.env.staging.vars]) {
     expect(vars.TURNSTILE_SITE_KEY).toBe('0x4AAAAAAFX8jA_m3iHxQbuL')
@@ -77,7 +77,9 @@ it('uses the owner-approved shared sitekey with separate exact production/stagin
   expect(config.env.production.vars.TURNSTILE_HOSTNAMES).toBe('communalcache.com')
   expect(config.env.staging.vars.TURNSTILE_HOSTNAMES).toBe('communalcache-staging.ryanyz10-be6.workers.dev')
   const local=readFileSync(new URL('../../../.dev.vars.example',import.meta.url),'utf8')
-  expect(local).toContain('TURNSTILE_SECRET=\n')
+  expect(local).toContain('TURNSTILE_SECRET=1x0000000000000000000000000000000AA\n')
+  expect(local).toContain('TURNSTILE_SITE_KEY=1x00000000000000000000AA\n')
+  expect(local).toContain('LOCAL_DEV_AUTH=1\n')
   expect(local).toContain('TURNSTILE_HOSTNAMES=localhost')
 })
 

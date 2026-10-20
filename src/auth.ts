@@ -5,13 +5,15 @@ import { magicLandingUrl } from './magic-links'
 import { escapeHtml } from './notifications'
 import { APIError } from 'better-auth/api'
 import { featureEnabled } from './db/flags'
+import { sendAuthMail } from './auth-mail'
 
 export type AuthEnv = {
   DB: D1Database
   APP_BASE_URL: string
   BETTER_AUTH_URL: string
   BETTER_AUTH_SECRET: string
-  RESEND_API_KEY: string
+  RESEND_API_KEY?: string
+  LOCAL_DEV_AUTH?: string
   EMAIL_FROM: string
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
@@ -32,11 +34,11 @@ async function discardOAuthTokens() {
 
 export type DeliveryResult = { status: 'not_called' | 'sent' | 'failed' }
 
-export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath?: string) {
+export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath?: string, requestUrl?: string) {
   if (env.BETTER_AUTH_URL !== env.APP_BASE_URL) throw new Error('Auth URL must match app URL')
   const appUrl = new URL(env.APP_BASE_URL)
   if (appUrl.origin !== env.APP_BASE_URL) throw new Error('App URL must be an exact origin')
-  if (appUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(appUrl.hostname)) {
+  if (appUrl.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(appUrl.hostname)) {
     throw new Error('App URL must use HTTPS')
   }
   return {
@@ -125,23 +127,11 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
         // Better Auth 1.7.7 catches callback errors (context/create-context.mjs:215–224).
         // This request's handler inspects the result after the awaited callback finishes.
         if (delivery) delivery.status = 'failed'
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          redirect: 'manual',
-          signal: AbortSignal.timeout(10_000),
-          headers: {
-            Authorization: `Bearer ${env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: env.EMAIL_FROM,
-            to: [email],
-            subject: 'Your Communal Cache sign-in code',
-            text: `Your sign-in code is ${otp}. It expires in 5 minutes. Use the most recent code you requested, even if an older email arrives later.`,
-          }),
+        await sendAuthMail(env,requestUrl,{
+          to: [email],
+          subject: 'Your Communal Cache sign-in code',
+          text: `Your sign-in code is ${otp}. It expires in 5 minutes. Use the most recent code you requested, even if an older email arrives later.`,
         })
-        await response.body?.cancel()
-        if (!response.ok) throw new Error('Could not send sign-in code')
         if (delivery) delivery.status = 'sent'
       },
     }), magicLink({
@@ -152,16 +142,7 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
       async sendMagicLink({ email, url, token }) {
         const link = magicLandingUrl(env.APP_BASE_URL, token, url)
         if (delivery) delivery.status = 'failed'
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          redirect: 'manual',
-          signal: AbortSignal.timeout(10_000),
-          headers: {
-            Authorization: `Bearer ${env.RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: env.EMAIL_FROM,
+        await sendAuthMail(env,requestUrl,{
             to: [email],
             subject: 'Your Communal Cache sign-in link',
             text: `Sign in to Communal Cache:\n${link}\n\nThis link expires in 5 minutes. Use the newest link if you requested another. Open it, then press Continue to sign in.`,
@@ -176,16 +157,13 @@ export function authOptions(env: AuthEnv, delivery?: DeliveryResult, requestPath
 <p style="margin:0;color:#475569;font-size:14px;line-height:21px;">This link works once and expires in 5 minutes. If you asked for more than one, use the newest email.</p>
 <p style="margin:16px 0 0;color:#475569;font-size:14px;line-height:21px;">Didn't ask for this? You can ignore it.</p>
 </td></tr></table></td></tr></table></body></html>`,
-          }),
         })
-        await response.body?.cancel()
-        if (!response.ok) throw new Error('Could not send sign-in link')
         if (delivery) delivery.status = 'sent'
       },
     })],
   } satisfies BetterAuthOptions
 }
 
-export function createAuth(env: AuthEnv, delivery?: DeliveryResult, requestPath?: string) {
-  return betterAuth(authOptions(env, delivery, requestPath))
+export function createAuth(env: AuthEnv, delivery?: DeliveryResult, requestPath?: string, requestUrl?: string) {
+  return betterAuth(authOptions(env, delivery, requestPath, requestUrl))
 }

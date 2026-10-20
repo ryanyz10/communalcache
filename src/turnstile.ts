@@ -1,8 +1,9 @@
 import { HttpError } from './http'
+import { localDevAuth } from './local-dev'
 
 export async function requireTurnstile(
   request: Request,
-  env: { TURNSTILE_SECRET?: string; TURNSTILE_HOSTNAMES?: string },
+  env: { TURNSTILE_SECRET?: string; TURNSTILE_HOSTNAMES?: string; LOCAL_DEV_AUTH?: string },
   action: 'signin' | 'create_cache',
 ) {
   const token = request.headers.get('X-Turnstile-Token')
@@ -20,9 +21,11 @@ export async function requireTurnstile(
       await response.body?.cancel()
       throw new Error('Rejected')
     }
-    const verification = await response.json() as { success?: unknown; action?: unknown; hostname?: unknown }
+    const verification = await response.json() as { success?: unknown; action?: unknown; hostname?: unknown; metadata?: {result_with_testing_key?: unknown} }
+    // Public test keys omit real action/hostname claims; still require Siteverify.
+    if (localDevAuth(env,request.url) && verification.success === true && verification.metadata?.result_with_testing_key === true) return
     if (
-      verification.success !== true || verification.action !== action ||
+      verification.success !== true || verification.metadata?.result_with_testing_key === true || verification.action !== action ||
       typeof verification.hostname !== 'string' || !hostnames.includes(verification.hostname)
     ) throw new Error('Rejected')
   } catch {

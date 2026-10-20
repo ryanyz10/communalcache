@@ -37,6 +37,54 @@ Remote migrations/deploy/provider/resource/secret operations require approval.
 
 ## Local checks first
 
+### Real local sign-in
+
+1. If `.dev.vars` does not exist, copy `.dev.vars.example` to `.dev.vars` (gitignored).
+   **Never overwrite an existing file.** Set a fresh local-only `BETTER_AUTH_SECRET`
+   in that private file; never copy deployment secrets. Keep APP_BASE_URL and
+   BETTER_AUTH_URL equal to the exact local origin (default http://localhost:8787).
+2. Set `LOCAL_DEV_AUTH=1`, leave RESEND_API_KEY empty, and use the public test
+   Turnstile site key `1x00000000000000000000AA` and secret
+   `1x0000000000000000000000000000000AA` from
+   [Cloudflare's official testing docs](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+   `/api/config` exposes this local site-key override to the real web app; no
+   staging/production value changes. Internet access to the test widget/Siteverify
+   is still required, but no Resend account or real Turnstile secret is needed.
+3. Apply migrations with local bindings and run the real Worker:
+   `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler d1 migrations apply communalcache --local`,
+   then `npm run dev`. Never use `--remote`. Open the exact local origin, request
+   a magic link or explicitly choose email-code fallback, then use the link/code
+   from the clearly labelled LOCAL DEV SIGN-IN MAIL terminal block. Complete the
+   normal profile step. A magic-link GET still does not sign in; Continue is explicit.
+
+The **mail** sink needs all three conditions: `LOCAL_DEV_AUTH==='1'`, an empty/unset
+RESEND_API_KEY, and the actual request URL hostname localhost / 127.0.0.1 / [::1].
+It prints the same requested message text (link OR six-digit code) as the email
+builder and skips Resend only then. A configured Resend key keeps the normal send
+path; missing credentials outside the sink fail closed. Better Auth, D1 hashing,
+attempts, expiry, rate limits and session creation remain real. Terminal messages
+are sensitive local challenges: do not publish them, auth secrets, cookies or logs.
+
+Siteverify is **never skipped**. Public test keys currently return success with
+`metadata.result_with_testing_key=true`, hostname example.com and no action; these
+are accepted only with LOCAL_DEV_AUTH=1 AND an actual loopback request URL. Without
+both guards, testing-key verdicts are rejected and real action/hostname checks
+remain strict. Do not define this flag in Wrangler config or any deployed env.
+
+For an isolated run when `.dev.vars` already exists, use a temporary dotenv-format
+file instead of reading, renaming or overwriting it. The pinned Wrangler supports
+`--env-file=/absolute/path/local.env`; a supplied file bypasses default `.env` and
+`.dev.vars` loading. Run
+`CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=true npm run dev -- --env-file=/absolute/path/local.env --local`.
+The dev script defaults dotenv loading to false but honors this explicit override.
+If 8787 is occupied, use `--port=18787` (or another free port) and set BOTH local
+URL variables to that exact origin; leave the existing service alone.
+Use the same `--env-file` and `--persist-to` for local migration/application checks.
+For automated proof, a sanitized child process may inject a fresh random auth
+secret in process environment with `CLOUDFLARE_INCLUDE_PROCESS_ENV=true`; use only
+explicit disposable environment values, never inherit real provider credentials.
+Wrangler treats these as secret bindings; do not print their values.
+
 No account is needed for local invariant tests. Gitignored .dev.vars, local test
 bindings and disabled legacy .env fallback; never wrangler dev --remote for tests.
 Local gates (dry-run validates bundles only, never authorizes deletion/deploy):
@@ -630,11 +678,11 @@ to a production allowlist. Only `TURNSTILE_SITE_KEY` is exposed by `/api/config`
 Missing secret/hostnames fails closed with 403. This feature PR runs no secret or
 remote Cloudflare setup command; owner provisioning is separate.
 
-For local development, use localhost and the real widget's secret in gitignored
-`.dev.vars` as described by `.dev.vars.example` (no secret value in that example).
-Official dummy keys do not include the required hostname/action verdicts; do not
-add a local/test bypass to the Worker. Automated tests mock strict siteverify
-responses, including the documented always-fail and spent-token outcomes.
+For local development, use the public always-pass testing keys and explicit
+loopback-only LOCAL_DEV_AUTH mode described above and in `.dev.vars.example`.
+No early-success bypass exists: Siteverify must confirm a successful testing-key
+verdict. Real/deployed requests retain strict action/hostname validation and reject
+testing-key responses. Automated tests cover both paths and failure/spent tokens.
 
 The owner reports staging-secret provisioning; after approved merge/deploy,
 validate real widget tokens for magic-link sends, code fallback/resends and cache
