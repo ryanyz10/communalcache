@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { libraryItemQuery } from '../lib/items'
-import { relativeWhen, stockAfterApproval, type ItemRequest } from '../lib/requests'
+import { ordinal, requesterQueueLabel, relativeWhen, stockAfterApproval, type ItemRequest } from '../lib/requests'
 import { RequestStatus } from '../components/RequestStatus'
 import { Avatar } from '../components/Avatar'
 import { Shimmer, LoadingStatus } from '../components/Skeleton'
@@ -45,6 +45,9 @@ export function RequestCard({ request, callerId, compactAnswered = false }: {
   const photoVersion = isIncoming ? request.requester_photo_version : request.owner_photo_version
   const catCoat = isIncoming ? request.requester_cat_coat : request.owner_cat_coat
   const itemPath = `/caches/${request.cache_id}/items/${request.item_id}`
+  const queueLabel = needsAnswer && request.queue_position
+    ? request.queue_position === 1 ? 'Next up' : ordinal(request.queue_position)
+    : requesterQueueLabel(request, callerId)
 
   let time: string
   if (request.status === 'approved' && !isIncoming) {
@@ -73,6 +76,7 @@ export function RequestCard({ request, callerId, compactAnswered = false }: {
       <Avatar userId={personId} name={personName} photoVersion={photoVersion} coat={catCoat} size={isCompact ? 34 : 40} />
       <div className="cc-request-copy">
         <p>{description}</p>
+        {queueLabel && <p className="cc-request-queue-position">{queueLabel}</p>}
         <p className="cc-request-meta">
           {request.status === 'rejected' ? `Reason: ${request.decision_reason ?? 'Declined'}` : <>
             {request.cache_name} · {time}

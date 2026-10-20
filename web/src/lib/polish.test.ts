@@ -32,6 +32,7 @@ function render(element: ReactElement, options: { route?: string; path?: string;
   client.setQueryData(['items', id], [])
   client.setQueryData(['join-requests', id], [])
   client.setQueryData(['requests'], { pages: [{ requests: [], unavailable_cache_ids: options.unavailable ?? [], next_cursor: options.next ?? null }], pageParams: [null] })
+  client.setQueryData(['requests', 'incoming'], { pages: [{ requests: [], unavailable_cache_ids: [], next_cursor: null }], pageParams: [null] })
   for (const key of options.errors ?? []) client.getQueryCache().build(client, { queryKey: key }).setState({ status: 'error', error: new ApiError(503, 'unavailable') })
   const page = createElement(Routes, null, createElement(Route, { path: options.route ?? '/', element }))
   const result = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [options.path ?? '/'] }, page) })))
@@ -65,9 +66,16 @@ it('never presents partial, paginated or failed aggregate lists as complete empt
   expect(empty).not.toContain('may be incomplete')
   for (const options of [{ unavailable: ['cache'] }, { next: 'next' }, { errors: [['requests']] }]) {
     const partial = render(createElement(RequestsPage), options)
-    expect(partial).toContain('No asks need your answer in the loaded results. This list may be incomplete.')
+    expect(partial).toContain('No asks need your answer in the loaded results.')
+    expect(partial).toContain('No answered asks for your things in the loaded results. This list may be incomplete.')
     expect(partial).not.toContain('Refresh all requests')
   }
+})
+
+it('keeps owner-queue errors separate from successful request history', () => {
+  const failed = render(createElement(RequestsPage), { errors: [['requests', 'incoming']] })
+  expect(failed).toContain('Try incoming requests again')
+  expect(failed).not.toContain('No asks need your answer in the loaded results.')
 })
 
 it('keeps unavailable cache/item/editor data out of mutation forms and offers retry', () => {

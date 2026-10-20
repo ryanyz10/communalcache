@@ -51,6 +51,21 @@
   display: none;
 }
 
+.cc-request-item-queue + .cc-request-item-queue {
+  border-top: 2px solid var(--cc-line);
+}
+
+.cc-request-item-queue > h3 {
+  margin: 0;
+  padding-top: 18px;
+  font: 400 20px var(--font-heading);
+}
+
+.cc-request-queue-position, .cc-request-copy > p.cc-request-queue-position {
+  color: var(--cc-accent-text);
+  font: 700 13px/1.5 var(--font-body);
+}
+
 .cc-request-card {
   display: flex;
   flex-direction: column;

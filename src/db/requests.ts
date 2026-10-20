@@ -13,7 +13,7 @@ export type D1Request = {
   owner_photo_version?: string | null; requester_photo_version?: string | null
   owner_cat_coat?: CatCoat | null; requester_cat_coat?: CatCoat | null
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
-  decided_at: number | null; created_at: number; approval_message?: string | null
+  decided_at: number | null; created_at: number; approval_message?: string | null; queue_position?: number | null
 }
 
 async function requestPhotos(db: D1Database, readerId: string, rows: D1Request[]) {
@@ -21,12 +21,19 @@ async function requestPhotos(db: D1Database, readerId: string, rows: D1Request[]
   return rows.map(row=>({...row,owner_photo_version:photos.get(row.owner_id) ?? null,requester_photo_version:photos.get(row.requester_id) ?? null}))
 }
 
-const requestRead = `SELECT r.id AS id,r.item_id,r.cache_id,c.name AS cache_name,i.title AS item_title,
+const requestColumns = `r.id AS id,r.item_id,r.cache_id,c.name AS cache_name,i.title AS item_title,
   i.owner_id,owner.display_name AS owner_name,owner.cat_coat AS owner_cat_coat,
   r.requester_id,requester.display_name AS requester_name,requester.cat_coat AS requester_cat_coat,
-  r.quantity,r.status,r.decision_reason,r.approval_message,r.decided_at,r.created_at AS created_at FROM requests r
+  r.quantity,r.status,r.decision_reason,r.approval_message,r.decided_at,r.created_at AS created_at`
+const requestFrom = `FROM requests r
   JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
   JOIN user owner ON owner.id=i.owner_id JOIN user requester ON requester.id=r.requester_id`
+const requestRead = `SELECT ${requestColumns} ${requestFrom}`
+// Only the owner, or this pending reusable request's requester, receives the count.
+const queueRead = `SELECT ${requestColumns},CASE WHEN r.status='pending'
+  AND (i.owner_id=? OR (r.requester_id=? AND i.is_consumable=0))
+  THEN (SELECT 1+COUNT(*) FROM requests earlier WHERE earlier.item_id=r.item_id AND earlier.status='pending'
+    AND (earlier.created_at,earlier.id)<(r.created_at,r.id)) ELSE NULL END AS queue_position ${requestFrom}`
 
 export async function createRequest(db: D1Database, itemId: string, cacheId: string, userId: string, quantity: number | null) {
   // Bound JS integers can be REAL in SQLite; integer equality avoids relying on parameter typeof().
@@ -67,9 +74,11 @@ export async function createRequest(db: D1Database, itemId: string, cacheId: str
 export async function itemRequests(db: D1Database, itemId: string, cacheId: string, userId: string) {
   const [item, requests] = await db.batch([
     db.prepare(`${itemRead} WHERE i.id=? AND (${itemAccess})`).bind(itemId,cacheId,userId,userId,cacheId),
-    db.prepare(`${requestRead} WHERE r.item_id=? AND r.cache_id=? AND (${itemAccess})
-      AND (r.status='pending' OR r.requester_id=? OR i.owner_id=?) ORDER BY r.created_at DESC,r.id DESC`)
-      .bind(itemId,cacheId,cacheId,userId,userId,cacheId,userId,userId),
+    db.prepare(`${queueRead} WHERE r.item_id=? AND r.cache_id=? AND (${itemAccess})
+      AND (r.status='pending' OR r.requester_id=? OR i.owner_id=?)
+      ORDER BY (r.status='pending') DESC,CASE WHEN r.status='pending' THEN r.created_at END ASC,
+        CASE WHEN r.status='pending' THEN r.id END ASC,r.created_at DESC,r.id DESC`)
+      .bind(userId,userId,itemId,cacheId,cacheId,userId,userId,cacheId,userId,userId),
   ])
   if (!item.results.length) throw new HttpError(404,'not_found')
   return requestPhotos(db,userId,requests.results as D1Request[])
@@ -109,8 +118,8 @@ export async function decideRequest(db: D1Database, requestId: string, userId: s
 }
 
 export async function requestDetail(db: D1Database, requestId: string, userId: string) {
-  const row = await db.prepare(`${requestRead} WHERE r.id=? AND (i.owner_id=? OR r.requester_id=?)`)
-    .bind(requestId,userId,userId).first<D1Request>()
+  const row = await db.prepare(`${queueRead} WHERE r.id=? AND (i.owner_id=? OR r.requester_id=?)`)
+    .bind(userId,userId,requestId,userId,userId).first<D1Request>()
   if (!row) throw new HttpError(404,'not_found')
   // Party history is not cache/item/photo/contact permission.
   return (await requestPhotos(db,userId,[row]))[0]
@@ -124,9 +133,31 @@ export async function requestsPage(db: D1Database, userId: string, after: string
     time = Number(match[1]); id = match[2].toLowerCase()
   }
   const cursor = '(? IS NULL OR r.created_at<? OR (r.created_at=? AND r.id<?))'
-  const rows = (await db.prepare(`${requestRead} WHERE i.owner_id=? AND ${cursor}
-    UNION ${requestRead} WHERE r.requester_id=? AND ${cursor} ORDER BY created_at DESC,id DESC LIMIT 26`)
-    .bind(userId,time,time,time,id,userId,time,time,time,id).all<D1Request>()).results
+  const rows = (await db.prepare(`${queueRead} WHERE i.owner_id=? AND ${cursor}
+    UNION ${queueRead} WHERE r.requester_id=? AND ${cursor} ORDER BY created_at DESC,id DESC LIMIT 26`)
+    .bind(userId,userId,userId,time,time,time,id,userId,userId,userId,time,time,time,id).all<D1Request>()).results
   const requests = await requestPhotos(db,userId,rows.slice(0,25)), last = requests.at(-1)
   return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
+}
+
+export async function incomingRequestsPage(db: D1Database, userId: string, after: string | null) {
+  let cursor: [number, string, number, string] | null = null
+  if (after !== null) {
+    const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    const match = after.match(new RegExp(`^([0-9]{1,16})\\.(${uuid})\\.([0-9]{1,16})\\.(${uuid})$`, 'i'))
+    if (!match || !Number.isSafeInteger(Number(match[1])) || !Number.isSafeInteger(Number(match[3]))) throw new HttpError(400,'invalid_cursor')
+    cursor = [Number(match[1]), match[2].toLowerCase(), Number(match[3]), match[4].toLowerCase()]
+  }
+  const rows = (await db.prepare(`WITH pending AS (
+    SELECT r.id,MIN(r.created_at) OVER (PARTITION BY r.item_id) AS oldest_at,
+      ROW_NUMBER() OVER (PARTITION BY r.item_id ORDER BY r.created_at,r.id) AS queue_position
+    FROM requests r JOIN items i ON i.id=r.item_id WHERE i.owner_id=? AND r.status='pending'
+  ) SELECT ${requestColumns},q.queue_position,q.oldest_at ${requestFrom} JOIN pending q ON q.id=r.id
+    WHERE i.owner_id=? AND (? IS NULL OR (q.oldest_at,r.item_id,r.created_at,r.id)>(?,?,?,?))
+    ORDER BY q.oldest_at,r.item_id,r.created_at,r.id LIMIT 26`)
+    .bind(userId,userId,cursor?.[0] ?? null,...(cursor ?? [null,null,null,null])).all<D1Request & { oldest_at: number }>()).results
+  const page = rows.slice(0,25), last = page.at(-1)
+  const requests = await requestPhotos(db,userId,page.map(({ oldest_at: _oldest, ...row }) => row))
+  return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25
+    ? `${last!.oldest_at}.${last!.item_id}.${last!.created_at}.${last!.id}` : null }
 }

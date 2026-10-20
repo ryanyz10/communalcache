@@ -8,7 +8,7 @@ export type ItemRequest = {
   owner_photo_version?: string | null; requester_photo_version?: string | null
   owner_cat_coat?: CatCoat | null; requester_cat_coat?: CatCoat | null
   quantity: number | null; status: 'pending' | 'approved' | 'rejected'; decision_reason: string | null
-  created_at: number; decided_at: number | null; approval_message?: string | null
+  created_at: number; decided_at: number | null; approval_message?: string | null; queue_position?: number | null
 }
 export const DEFAULT_MARK_LENT_OUT = true
 
@@ -30,10 +30,26 @@ export function stockAfterApproval(quantity:number,asked:number) { return quanti
 
 export type RequestsPageData = { requests: ItemRequest[]; unavailable_cache_ids: string[]; next_cursor: string | null }
 
-export function useRequests(enabled: boolean) {
+export function ordinal(position: number) {
+  const lastTwo = position % 100
+  const suffix = lastTwo >= 11 && lastTwo <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[position % 10] ?? 'th'
+  return `${position}${suffix}`
+}
+
+export function requesterQueueLabel(request: ItemRequest, callerId: string) {
+  if (request.requester_id !== callerId || request.status !== 'pending' || request.quantity !== null || !request.queue_position) return null
+  return request.queue_position === 1 ? "You're next" : `You're ${ordinal(request.queue_position)} in line`
+}
+
+export function useRequests(enabled: boolean, view?: 'incoming') {
   return useInfiniteQuery({
-    queryKey: ['requests'], initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => apiFetch<RequestsPageData>(`/api/requests${pageParam ? `?after=${encodeURIComponent(pageParam)}` : ''}`),
+    queryKey: view ? ['requests', view] : ['requests'], initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams()
+      if (view) params.set('view', view)
+      if (pageParam) params.set('after', pageParam)
+      return apiFetch<RequestsPageData>(`/api/requests${params.size ? `?${params}` : ''}`)
+    },
     getNextPageParam: page => page.next_cursor ?? undefined, enabled,
   })
 }

@@ -94,7 +94,7 @@ CREATE TABLE requests (
   CHECK((status = 'pending') = (decided_at IS NULL)),
   CHECK(status <> 'rejected' OR decision_reason IS NOT NULL)
 );
-CREATE INDEX pending_requests ON requests(item_id) WHERE status = 'pending';
+CREATE INDEX pending_requests ON requests(item_id,created_at,id) WHERE status = 'pending';
 CREATE INDEX requests_cache_requester ON requests(cache_id,requester_id,status);
 CREATE INDEX requests_requester ON requests(requester_id,created_at,id);
 ```
@@ -425,6 +425,12 @@ plans/counters and durable state are untouched. Apply the migration before the
 new Worker; an unavailable table fails Google entry closed rather than bypassing
 policy. The owner performs any desired production toggle in protected admin
 following approved rollout; this feature performs no remote assignment.
+
+Migration **0019_request_queue** replaces the pending item index with
+(item_id,created_at,id), preserving rows and the item-first stock lookup. Owner
+pending queues use SQL ordinals and a separate oldest-item/request keyset cursor.
+A caller's own pending reusable request may expose only its all-cache position,
+never another cache's requester identities or details; decision guards are unchanged.
 
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
 Legacy PostgreSQL migrations were removed with the Go service code and remain

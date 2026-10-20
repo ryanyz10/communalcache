@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
-import { relativeWhen, type ItemRequest } from '../lib/requests'
+import { relativeWhen, requesterQueueLabel, type ItemRequest } from '../lib/requests'
 import { Stamp } from '../components/Stamp'
 import { Avatar } from '../components/Avatar'
 import { SkeletonRows } from '../components/Skeleton'
@@ -63,7 +63,9 @@ export function ItemRequests({ item, compact = false, askOpen = false, onAskClos
               photoVersion={request.requester_photo_version}
               size={30}
             />
-            <span><b>{requesterName}</b> asked {relativeWhen(request.created_at)}{request.quantity !== null ? ` for ${request.quantity}` : ''}</span>
+            <span><b>{requesterName}</b> asked {relativeWhen(request.created_at)}{request.quantity !== null ? ` for ${request.quantity}` : ''}
+              {requesterQueueLabel(request, me?.id ?? '') && <span className="cc-request-queue-position"> · {requesterQueueLabel(request, me?.id ?? '')}</span>}
+            </span>
             <Stamp>Pending</Stamp>
           </li>
         })}

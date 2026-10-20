@@ -88,7 +88,11 @@ Intended production URL is https://communalcache.com; provisioning needs approva
    Your items filters owner_id; incoming/outgoing Requests filter owner/requester.
    Every cache-context query includes current membership/attachment predicates.
    Party-only request history never grants cache/item/photo access or reveals
-   another cache's queue. Paginate/index real tables; no my_caches, request_index,
+   another cache's queue, except the owner-approved count-only position: a requester
+   with their own pending reusable-item request may see the count of earlier pending
+   requests for that item across all caches, in the same caller-guarded SQL read.
+   Never expose those other requests' names, IDs, caches or details. Cache-context
+   request rows remain cache-scoped. Paginate/index real tables; no my_caches, request_index,
    listings, owner_targets, registry or revocation-tombstone copies.
 8. **Outbox eligibility is bounded by failed_at, never attempts.** A guarded
    expiring claim decides who sends; zero D1 meta.changes means ack/skip. Both
