@@ -74,6 +74,15 @@ it('pages whole owner item queues longest-waiting first and keeps ordinals acros
   }
   const columns = (await env.DB.prepare('PRAGMA index_info(pending_requests)').all<{name:string}>()).results.map(row => row.name)
   expect(columns).toEqual(['item_id','created_at','id'])
+  const filtered=await incomingRequestsPage(env.DB,f.owner.id,null,f.item.id.toUpperCase())
+  const filteredNext=await incomingRequestsPage(env.DB,f.owner.id,filtered.next_cursor,f.item.id)
+  expect(filtered.requests.map(row=>[row.id,row.queue_position])).toEqual(Array.from({length:25},(_,n)=>[id(n+1),n+1]))
+  expect(filteredNext.requests.map(row=>[row.id,row.queue_position])).toEqual([[id(26),26],[id(27),27],[id(28),28]])
+  expect(filteredNext.next_cursor).toBeNull()
+  const othersItem=await createItem(env.DB,f.neighbor.id,itemChanges({title:'Other owner item',is_consumable:false},true),f.a.id)
+  await f.insert(200,1,f.a,f.first,othersItem.id)
+  expect((await incomingRequestsPage(env.DB,f.owner.id,null,othersItem.id)).requests).toEqual([])
+  expect((await incomingRequestsPage(env.DB,f.neighbor.id,null,othersItem.id)).requests).toHaveLength(1)
 })
 
 it('upgrades the pending index without changing populated request rows', async () => {
@@ -95,4 +104,9 @@ it('guards the owner queue API by the current caller and rejects unknown views',
   const other = await worker.fetch(appRequest('/api/requests?view=incoming',{cookie:f.neighbor.cookie}),env)
   expect(await other.json()).toMatchObject({requests:[],next_cursor:null})
   expect((await worker.fetch(appRequest('/api/requests?view=everyone',{cookie:f.owner.cookie}),env)).status).toBe(400)
+  const path=`/api/requests?view=incoming&item_id=${f.item.id}`
+  expect(await (await worker.fetch(appRequest(path,{cookie:f.owner.cookie}),env)).json()).toMatchObject({requests:[{item_id:f.item.id,queue_position:1}]})
+  expect(await (await worker.fetch(appRequest(path,{cookie:f.first.cookie}),env)).json()).toMatchObject({requests:[]})
+  expect(await (await worker.fetch(appRequest(path,{cookie:f.neighbor.cookie}),env)).json()).toMatchObject({requests:[]})
+  for(const path of ['/api/requests?view=incoming&item_id=bad','/api/requests?view=incoming&item_id=','/api/requests?item_id='+f.item.id])expect((await worker.fetch(appRequest(path,{cookie:f.owner.cookie}),env)).status).toBe(400)
 })

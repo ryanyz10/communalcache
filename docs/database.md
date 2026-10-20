@@ -479,6 +479,13 @@ following approved rollout; this feature performs no remote assignment.
 Migration **0019_request_queue** replaces the pending item index with
 (item_id,created_at,id), preserving rows and the item-first stock lookup. Owner
 pending queues use SQL ordinals and a separate oldest-item/request keyset cursor.
+Private owner item detail uses `GET /api/requests?view=incoming&item_id=UUID`:
+the optional validated/lowercased ID is bound inside the pending CTE, retaining
+`items.owner_id=caller` in both CTE and outer query. It uses the existing pending
+item index and pages that item's all-cache queue directly, not a client-filtered
+first page. Non-owner filters return no rows; cache item queues remain restricted
+to their cache. The UI reuses the existing decision endpoints/sheets and broad
+request invalidation. No new schema or cache/item/photo grant is introduced.
 A caller's own pending reusable request may expose only its all-cache position,
 never another cache's requester identities or details; decision guards are unchanged.
 

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, Navigate, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
@@ -16,58 +16,9 @@ import { boxColor } from '../components/Box'
 import { ShownIn } from './ShownIn'
 import { ItemSkeleton } from '../components/skeletons/ItemSkeletons'
 import { useToast } from '../components/Toast'
-import { transientActionFailure } from '../lib/feedback'
+import { ItemWaiting } from './ItemWaiting'
 
-function DeleteItem({ item }: { item: Item }) {
-  const { showToast } = useToast()
-  const deleteDialog = useRef<HTMLDialogElement>(null)
-  const queryClient = useQueryClient()
-  const navigate = useNavigate()
-  const deleteItem = useMutation({
-    mutationFn: () => apiFetch<void>(`/api/me/items/${item.id}`, { method: 'DELETE' }),
-    onSuccess: async () => {
-      deleteDialog.current?.close()
-      navigate('/items')
-      queryClient.removeQueries({ queryKey: ['item'] })
-      queryClient.removeQueries({ queryKey: ['library-item'] })
-      queryClient.removeQueries({ queryKey: ['item-requests'] })
-      await invalidateRequestViews(queryClient)
-      showToast('Item deleted.')
-    },
-    onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
-  })
-
-  return <>
-    <button type="button" className="cc-profile-secondary cc-delete-item" onClick={() => {
-      deleteItem.reset()
-      deleteDialog.current?.showModal()
-    }}>Delete item</button>
-    <dialog
-      ref={deleteDialog}
-      className="cc-item-confirm"
-      aria-labelledby="delete-item-heading"
-      onCancel={event => { if (deleteItem.isPending) event.preventDefault() }}
-    >
-      <h2 id="delete-item-heading">Delete {item.title} everywhere?</h2>
-      <ul>
-        <li>This permanently removes the item from your library and every cache.</li>
-        <li>Its request history is erased. Neighbors with pending requests will be notified.</li>
-        <li>Its private photos are queued for cleanup.</li>
-      </ul>
-      {deleteItem.isError && !transientActionFailure(deleteItem.error) && <p role="alert" className="cc-form-error">{errorMessage(deleteItem.error)}</p>}
-      <div className="cc-inline-actions">
-        <button type="button" autoFocus disabled={deleteItem.isPending} className="cc-profile-secondary" onClick={() => deleteDialog.current?.close()}>
-          Cancel
-        </button>
-        <button type="button" disabled={deleteItem.isPending} className="cc-profile-primary" onClick={() => deleteItem.mutate()}>
-          {deleteItem.isPending ? 'Deleting…' : 'Confirm deletion'}
-        </button>
-      </div>
-    </dialog>
-  </>
-}
-
-export function ItemAvailability({ item }: { item: Item }) {
+export function ItemAvailability({ item, compact = false }: { item: Item;compact?:boolean }) {
   const { showToast } = useToast()
   const queryClient = useQueryClient()
   const isLentOut = item.available === false
@@ -78,12 +29,14 @@ export function ItemAvailability({ item }: { item: Item }) {
     onSettled: () => invalidateRequestViews(queryClient),
   })
 
-  return <section className="cc-owner-availability" aria-label="Item availability">
+  return <section className={compact ? 'cc-item-availability' : 'cc-owner-availability'} aria-label="Item availability">
     <h2>Availability</h2>
+    <div className={compact ? 'cc-item-availability-row' : undefined}>
     <p role="status">{isLentOut ? 'Lent out' : 'Available'}</p>
     <button type="button" disabled={saveAvailability.isPending} className="cc-profile-secondary" onClick={() => saveAvailability.mutate(isLentOut)}>
       {saveAvailability.isPending ? 'Saving…' : isLentOut ? 'Mark as available' : 'Mark as lent out'}
     </button>
+    </div>
   </section>
 }
 
@@ -92,7 +45,7 @@ export function ItemPage() {
   const { me } = useAuth()
   const location = useLocation()
   const [isAskOpen, setIsAskOpen] = useState(false)
-  const itemQuery = useQuery<Item & Partial<Pick<LibraryItem, 'caches'>>>({
+  const itemQuery = useQuery<Item & Partial<Pick<LibraryItem, 'caches' | 'pending_count'>>>({
     ...(cacheId ? {
       queryKey: ['item', cacheId, itemId],
       queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`),
@@ -126,6 +79,29 @@ export function ItemPage() {
   if (cacheId) contextLabel = cacheName
   else if (item.caches?.length) contextLabel = item.caches.map(cache => cache.name).join(' · ')
   const editPath = cacheId ? `/caches/${cacheId}/items/${itemId}/edit` : `/items/${itemId}/edit`
+
+  if (isOwner && !cacheId) return <main className={`cc-owner-item-detail${item.active === false ? ' cc-item-detail-inactive' : ''}`}>
+    <div className="cc-owner-item-layout">
+      <div className="cc-owner-hero">
+        <ItemPhoto key={item.photo_version} item={item} />
+        <nav className="cc-owner-hero-links" aria-label="Item actions">
+          <Link to="/items">‹ Back</Link>
+          <Link to={editPath} state={{itemEditor:true}} data-item-editor-trigger={item.id}>Edit</Link>
+        </nav>
+      </div>
+      <div className="cc-owner-info">
+        <div className="cc-owner-title"><h1>{item.title}</h1>
+          {item.active === false && <Stamp tone="muted">Inactive</Stamp>}
+          <Link className="cc-owner-edit-desktop" to={editPath} state={{itemEditor:true}} data-item-editor-trigger={item.id}>Edit</Link>
+        </div>
+        <p className="cc-owner-kind">{item.is_consumable ? `Give · ${item.available_quantity ?? item.quantity}` : 'Lend'}</p>
+        {item.description && <section className="cc-owner-note"><h2>Note</h2><p>{item.description}</p></section>}
+        <ItemAvailability item={item} compact />
+        <ShownIn item={item} compact />
+      </div>
+      <ItemWaiting item={item} pendingCount={item.pending_count} />
+    </div>
+  </main>
 
   return <main className={`organic-item-detail${item.active === false ? ' cc-item-detail-inactive' : ''}${!isOwner && cacheId ? ' cc-member-item-detail' : ''}`}>
     <nav className="cc-item-breadcrumb" aria-label="Breadcrumb">
@@ -169,7 +145,6 @@ export function ItemPage() {
         {isOwner && <div className="cc-owner-item-controls">
           <div className="cc-inline-actions">
             <Link to={editPath} state={{ itemEditor: true }} data-item-editor-trigger={item.id} className="cc-profile-primary">Edit item</Link>
-            <DeleteItem item={item} />
           </div>
           <ItemAvailability item={item} />
           <div id="sharing"><ShownIn item={item} /></div>

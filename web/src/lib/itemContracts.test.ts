@@ -141,6 +141,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadPhoto }, '../lib/requests': { invalidateRequestViews },
     './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null },
     './RequestsPage': { ItemRequests: Null }, './ItemRequests': { ItemRequests: Null }, './ItemForm': { ItemForm: Null }, './ShownIn': { ShownIn: Null },
+    './ItemWaiting': { ItemWaiting: Null }, './DeleteItem': { DeleteItem: Null },
     '../components/Avatar': { Avatar: Null }, '../components/Cat': { Cat: Null },
     '../components/PhotoPreview': { PhotoPreview: Null },
     '../components/Stamp': { Stamp: ({ children }: { children: ReactNode }) => createElement('span', null, children) },
@@ -154,7 +155,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
   modules['../lib/usePhotoSelection'] = hook.exports
   const oldFile = kind === 'delete' || kind === 'availability' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet'
-  const newFile = kind === 'delete' || kind === 'availability' ? 'ItemPage' : oldFile
+  const newFile = kind === 'delete' ? 'DeleteItem' : kind === 'availability' ? 'ItemPage' : oldFile
   const source = process.env.ITEM_CONTRACT_PARENT === '1'
     ? execFileSync('git', ['show', `${parent}:web/src/pages/${oldFile}.tsx`], { encoding: 'utf8' })
     : readFileSync(new URL(`../pages/${newFile}.tsx`, import.meta.url), 'utf8')
@@ -166,13 +167,13 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     if (!(name in modules)) throw new Error(`Unexpected item dependency: ${name}`)
     return modules[name]
   }, module, module.exports)
-  const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'availability' ? 'ItemAvailability' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet']
+  const component = module.exports[kind === 'delete' ? 'DeleteItem' : kind === 'availability' ? 'ItemAvailability' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet']
   const props = kind === 'form' ? {
     cacheId: context.cacheId ?? null, item: context.editing ? currentItem : undefined,
     onStateChange: (state: typeof editorState) => { editorState = state },
     onSaved: (saved: items.Item, shared?: boolean) => { sharedResult = shared; trace.push(['saved', saved.id]) }, onCancel: () => trace.push(['cancel']),
     onBusy: (busy: boolean) => trace.push(['busy', busy]),
-  } : kind === 'delete' ? {} : kind === 'add' ? { cacheId: cacheA.id, cacheName: cacheA.name, dialog: {current: dialogModel} } : { item: currentItem }
+  } : kind === 'add' ? { cacheId: cacheA.id, cacheName: cacheA.name, dialog: {current: dialogModel} } : { item: currentItem }
   function render() {
     elements = []; stateIndex = 0; refIndex = 0; mutationIndex = 0; effectIndex = 0; pendingEffects = []
     const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(React.Fragment, null, createElement(component as React.ComponentType<Record<string, unknown>>, props), toasts.element())))
@@ -256,7 +257,7 @@ for (const kind of ['delete'] as const) {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }))
     const page = fixture(kind, { cacheId: cacheA.id })
     page.open(); page.trace.length = 0; page.confirm(); await page.settled()
-    const expected: unknown[][] = [['close', 'delete-item-heading'], ['navigate', '/items'], ...['item', 'library-item', 'item-requests'].map(key => ['remove', [key]])]
+    const expected: unknown[][] = [['close', 'delete-item-heading'], ['navigate', '/items', {replace:true}], ...['item', 'library-item', 'item-requests'].map(key => ['remove', [key]])]
     expected.push(...invalidations.map(key => ['invalidate', [key]]))
     expect(page.trace).toEqual(expected)
     expect(page.dialogModel.open).toBe(false)
