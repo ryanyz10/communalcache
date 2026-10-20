@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router'
 import { AuthProvider } from '../auth/AuthProvider'
 import { LoginForm } from '../pages/LoginPage'
 import { Turnstile } from '../components/Turnstile'
+import { FieldCheck } from '../components/FieldCheck'
 import { apiFetch, ApiError, errorMessage, turnstileHeaders } from './api'
 import { sendSignInEmail, verifyMagicLink } from './magicLinks'
 import { mountTurnstile, turnstileTheme, type TurnstileApi } from './turnstile'
@@ -139,7 +140,20 @@ it('rejects absent/oversized client tokens before sending and provides clear ser
   expect(errorMessage(new ApiError(403,'turnstile_failed'))).toContain('complete the new check')
 })
 
-it('keeps initial email-send actions disabled until a token exists and exposes configuration failures', () => {
+it('shares theme-aware field feedback with static reduced-motion checking and room for the name count', () => {
+  expect(renderToStaticMarkup(createElement(FieldCheck,{status:'verified'}))).toBe('')
+  const checking = renderToStaticMarkup(createElement(FieldCheck,{status:'checking'}))
+  expect(checking).toContain('cc-field-check-checking')
+  expect(checking).toContain('aria-hidden="true"')
+  expect(renderToStaticMarkup(createElement(FieldCheck,{status:'failed'}))).toContain('cc-field-check-failed')
+  const css = readFileSync(new URL('../profile.css',import.meta.url),'utf8')
+  expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{\s*\.cc-field-check-checking svg \{\s*animation: cc-field-check-spin/)
+  const cacheCss = readFileSync(new URL('../caches.css',import.meta.url),'utf8')
+  expect(cacheCss).toMatch(/#cache-name-count \{\s*position: absolute;\s*right: 50px/)
+  expect(cacheCss).toContain('padding-right: 112px')
+})
+
+it('keeps initial email-send actions disabled until a token exists and leaves feedback to the caller', () => {
   const client = new QueryClient({defaultOptions:{queries:{retry:false}}})
   client.setQueryData(['me'],null)
   const markup = renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,null,createElement(LoginForm))})))
@@ -147,7 +161,8 @@ it('keeps initial email-send actions disabled until a token exists and exposes c
   expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Use a 6-digit code instead<\/button>/)
   client.setQueryData(['config'],{turnstile_site_key:''})
   const unavailable = renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(Turnstile,{action:'signin',onToken:()=>{}})))
-  expect(unavailable).toContain('Bot protection is unavailable')
-  expect(unavailable).toContain('Retry bot check')
+  expect(unavailable).toContain('aria-label="Bot protection"')
+  expect(unavailable).not.toContain('Bot protection is unavailable')
+  expect(unavailable).not.toContain('Retry bot check')
   client.clear()
 })

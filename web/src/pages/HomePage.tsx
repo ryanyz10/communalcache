@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useCallback, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
@@ -16,7 +16,8 @@ import { Stamp } from '../components/Stamp'
 import { ThingTile, ThingStatus } from '../components/ThingTile'
 import { LandingPage } from './LandingPage'
 import { JoinInviteSheet } from './JoinInviteSheet'
-import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
+import { FieldCheck } from '../components/FieldCheck'
+import { Turnstile, type TurnstileHandle, type TurnstileStatus } from '../components/Turnstile'
 import { HomeBoxesSkeleton } from '../components/skeletons/HomeSkeleton'
 import { SkeletonRows } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
@@ -34,6 +35,12 @@ export function HomePage() {
   const botCheck = useRef<TurnstileHandle>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [botToken, setBotToken] = useState('')
+  const [botStatus, setBotStatus] = useState<TurnstileStatus>('checking')
+  const botFailure = "Couldn't verify your browser. Tap Try again."
+  const onBotStatus = useCallback((status: TurnstileStatus) => {
+    setBotStatus(status)
+    if (status === 'failed') showToast(botFailure, 'error')
+  }, [showToast])
   const [name, setName] = useState('')
   const [requiresApproval, setRequiresApproval] = useState(false)
   const cachesQuery = useQuery({
@@ -72,6 +79,7 @@ export function HomePage() {
   }
   function submitCreate(event: FormEvent) {
     event.preventDefault()
+    if (!botToken || !name.trim() || createCache.isPending) return
     createCache.mutate()
   }
 
@@ -187,7 +195,7 @@ export function HomePage() {
       ref={createDialog}
       className="cc-new-cache"
       aria-labelledby="new-cache-heading"
-      onClose={() => { setCreateOpen(false); setBotToken('') }}
+      onClose={() => { setCreateOpen(false); setBotToken(''); setBotStatus('checking') }}
       onCancel={event => { if (createCache.isPending) event.preventDefault() }}
     >
       <div className="cc-sheet-grip" aria-hidden="true" />
@@ -209,20 +217,27 @@ export function HomePage() {
         <p className="cc-create-description">A cache is a shared box for one group of people. You can invite them once it's made.</p>
         <div className="cc-create-name">
           <label htmlFor="cache-name">Name</label>
-          <div>
+          <div className="cc-field-input">
             <input autoFocus id="cache-name" type="text" required maxLength={120} value={name} onChange={event => setName([...event.target.value].slice(0, 60).join(''))} aria-describedby="cache-name-count" className="cc-profile-input" />
             <span id="cache-name-count">{[...name].length} / 60</span>
+            {createOpen && <FieldCheck status={botStatus} />}
           </div>
         </div>
         <label className="cc-create-approval">
           <span><strong>Approve new members</strong><span>{requiresApproval ? 'On: you review everyone who uses the invite.' : 'Off: anyone with the invite joins right away.'}</span></span>
           <input type="checkbox" role="switch" aria-checked={requiresApproval} checked={requiresApproval} onChange={event => setRequiresApproval(event.target.checked)} className="cc-switch" />
         </label>
-        {createOpen && <div className="cc-create-bot"><Turnstile ref={botCheck} action="create_cache" onToken={setBotToken} /></div>}
+        {createOpen && <div className="cc-create-bot">
+          <Turnstile ref={botCheck} action="create_cache" onToken={setBotToken} onStatus={onBotStatus} />
+          {botStatus === 'checking' && <span className="sr-only" role="status">Checking your browser…</span>}
+          {botStatus === 'failed' && <span className="sr-only" role="alert">{botFailure}</span>}
+        </div>}
         {createCache.isError && !transientActionFailure(createCache.error) && <p role="alert" className="cc-form-error">{errorMessage(createCache.error)}</p>}
         <div className="cc-create-buttons">
           <button type="button" disabled={createCache.isPending} onClick={() => createDialog.current?.close()} className="cc-profile-secondary">Cancel</button>
-          <button type="submit" disabled={createCache.isPending || !name.trim() || !botToken} className="cc-profile-primary">{createCache.isPending ? 'Creating…' : 'Create cache'}</button>
+          {botStatus === 'failed'
+            ? <button type="button" disabled={createCache.isPending} className="cc-profile-primary" onClick={() => botCheck.current?.retry()}>Try again</button>
+            : <button type="submit" disabled={createCache.isPending || !name.trim() || !botToken} className="cc-profile-primary">{createCache.isPending ? 'Creating…' : 'Create cache'}</button>}
         </div>
       </form>
     </dialog>
