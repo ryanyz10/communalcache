@@ -244,8 +244,10 @@ fan-out library is superseded by the direct-D1 library in D1 PR 6.
 **Next: D1 PRs 2–7**, following [build-guide status](docs/build-guide.md#status).
 PR 7 retires Cache DOs with an explicitly approved destructive `deleted_classes`
 migration and staging test-data reset. This spec performs neither operation.
-The legacy Go foundation/Fly app and Supabase remain live until approved cutover;
-Go PRs #2/#3 are historical references, not Cloudflare ports. Legacy migration maps
+Legacy Go/Fly/Supabase code and deployment files were removed from this repo;
+they remain in git history. The external Fly app and Supabase remain live until
+separately approved cutover and decommissioning. Go PRs #2/#3 are historical
+references, not Cloudflare ports. Legacy migration maps
 verified-email identities into Better Auth and imports caches, memberships, items,
 attachments and requests straight into D1, rewriting outbox/photo identity
 references. Equal titles never imply item identity; old sessions do not transfer.

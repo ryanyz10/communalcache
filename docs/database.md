@@ -427,7 +427,8 @@ policy. The owner performs any desired production toggle in protected admin
 following approved rollout; this feature performs no remote assignment.
 
 Wrangler records versions in d1_migrations; no custom boot-time ledger.
-Do not point it at legacy `internal/db/migrations/`.
+Legacy PostgreSQL migrations were removed with the Go service code and remain
+in git history; Wrangler uses only `migrations/d1/`.
 
 The approved database communalcache is binding DB; committed ID
 b4257b89-22d6-40f1-b250-ccd1985bf1d1. Staging uses its distinct named environment
@@ -469,8 +470,9 @@ its independent outbox/cleanup sweeps still run. Do not roll back to code that
 expects those tables: prefer a compatible fix-forward. Worker rollback cannot
 restore deleted class data or undo D1 DDL.
 
-Legacy Go/Supabase migration later maps verified-email users to Better Auth,
-imports caches/memberships/items/item_caches/requests directly to D1 and rewrites
+A separately approved legacy-data import from Supabase later maps verified-email
+users to Better Auth, imports caches/memberships/items/item_caches/requests directly
+to D1 and rewrites
 all identity references in outbox/photo paths. Preserve display names, reconcile
 ownership/stock/status, reject ambiguous identities and approve duplicate-item
 mapping rather than merging equal titles. No old sessions transfer. Staging has

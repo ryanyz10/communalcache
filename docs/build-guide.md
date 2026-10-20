@@ -70,7 +70,8 @@ CI remains secret-free on all PR bases and master/production pushes, with all
 three named/default dry-runs. After approved setup, successful master push CI
 releases staging; fast-forward `git push origin master:production` runs production
 CI before release. See [pipeline](deploy.md#pipeline); opening this docs PR does
-not deploy. Legacy Go make test/vet is reference validation, not D1 protocol proof.
+not deploy. Legacy Go/Fly/Supabase source and deployment files were removed from
+the repo and remain in git history; their local build/test commands no longer apply.
 
 ## Status
 
