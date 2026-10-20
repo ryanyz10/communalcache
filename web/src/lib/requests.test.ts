@@ -9,7 +9,7 @@ import { RequestCard } from '../pages/RequestCard'
 import { RequestsPage } from '../pages/RequestsPage'
 import { AskSheet } from '../pages/AskSheet'
 import { ApiError, apiFetch, errorMessage } from './api'
-import { invalidateRequestViews, type ItemRequest, type RequestsPageData } from './requests'
+import { invalidateRequestViews, ordinal, requesterQueueLabel, type ItemRequest, type RequestsPageData } from './requests'
 import type { Item } from './items'
 
 const item: Item = { id: 'item', cache_id: 'cache', title: 'Sugar', description: null, owner_id: 'owner', owner_name: 'Owner', is_consumable: true, quantity: 5, available_quantity: 3, available: true, unavailable_note: null, photo_version: null, created_at: 1 }
@@ -26,6 +26,7 @@ function render(page: 'item' | 'all' | 'ask', options: { caller?: string; item?:
   else client.setQueryData(key, rows)
   const data: RequestsPageData = { requests: rows, unavailable_cache_ids: options.unavailable ?? [], next_cursor: options.next ?? null }
   client.setQueryData(['requests'], { pages: [data], pageParams: [null] })
+  client.setQueryData(['requests', 'incoming'], { pages: [{ ...data, requests: rows.filter(row => row.owner_id === (options.caller ?? 'member') && row.status === 'pending') }], pageParams: [null] })
   const element = page === 'item' ? createElement(ItemRequests, { item: options.item ?? item }) : page === 'ask' ? createElement(AskSheet,{item:options.item ?? item,onClose:()=>{}}) : createElement(RequestsPage)
   const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, null, element) })))
   client.clear()
@@ -81,6 +82,24 @@ it('groups pending incoming decisions separately and includes answered incoming 
   expect(markup).toContain('/caches/cache/items/item')
   expect(markup.match(/Approve request from/g)).toHaveLength(1)
   expect(markup).not.toContain('Cancel request')
+})
+
+it('shows per-item owner queue labels and only caller reusable pending positions', () => {
+  const pending = { ...request, quantity: null, queue_position: 1 }
+  const rows = [pending, { ...pending, id: 'second', requester_name: 'Second', created_at: 2, queue_position: 2 }, { ...pending, id: 'third', requester_name: 'Third', created_at: 3, queue_position: 3 }]
+  const owner = render('all', { caller: 'owner', requests: rows })
+  expect(owner).toContain('cc-request-item-queue')
+  expect(owner).toContain('Next up')
+  expect(owner).toContain('>2nd</p>')
+  expect(owner).toContain('>3rd</p>')
+  expect(owner.indexOf('Next up')).toBeLessThan(owner.indexOf('>2nd</p>'))
+  expect(owner.match(/Approve request from/g)).toHaveLength(3)
+  expect(render('all', { requests: [pending] })).toContain('You&#x27;re next')
+  expect(render('all', { requests: [{ ...pending, queue_position: 2 }] })).toContain('You&#x27;re 2nd in line')
+  expect(requesterQueueLabel({ ...pending, quantity: 1 }, 'member')).toBeNull()
+  expect(requesterQueueLabel({ ...pending, status: 'approved' }, 'member')).toBeNull()
+  expect(requesterQueueLabel(pending, 'stranger')).toBeNull()
+  expect([1,2,3,11,12,13,21,22,23,111].map(ordinal)).toEqual(['1st','2nd','3rd','11th','12th','13th','21st','22nd','23rd','111th'])
 })
 
 it('preserves partial-unavailable warnings and continuation instead of pretending the aggregate is complete', () => {

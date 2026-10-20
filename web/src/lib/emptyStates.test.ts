@@ -37,6 +37,7 @@ function render(element: ReactElement, options: { incomplete?: boolean; moreItem
   if (options.libraryError) client.getQueryCache().find({ queryKey: ['library', 'owner'] })!.setState({ status: 'error', error: new Error('Unavailable') })
   client.setQueryData(['home-summary'], { owned_item_count: 0, pending_answer_count: 0, incoming: [], outgoing: [] })
   client.setQueryData(['requests'], { pages: [{ requests: [], unavailable_cache_ids: options.incomplete ? ['unavailable'] : [], next_cursor: null }], pageParams: [null] })
+  client.setQueryData(['requests', 'incoming'], { pages: [{ requests: [], unavailable_cache_ids: [], next_cursor: null }], pageParams: [null] })
   client.setQueryData(['admin', 'owner', 'overview'], { users: 0, caches: 0, items: 0, pending_requests: 0, outbox_pending: 0, outbox_failed: 0, outbox_oldest_age_ms: null, cleanup_pending: 0, cleanup_oldest_age_ms: null, plans: [{ plan: 'free' }] })
   for (const key of ['caches', 'users', 'failed-outbox']) client.setQueryData(['admin', 'owner', key, null], { rows: [], next_cursor: null })
   client.setQueryData(['admin', 'owner', 'flags'], { flags: [] })
@@ -82,7 +83,7 @@ it.each([false, true])('keeps incomplete library guidance in-row even after reta
 it.each([false, true])('puts all three request-group empty messages inside their lists (incomplete=%s)', incomplete => {
   const html = render(createElement(RequestsPage), { incomplete })
   for (const message of ['No asks need your answer in the loaded results.', 'No answered asks for your things in the loaded results.', 'None of your asks are visible in the loaded results.']) {
-    emptyList(html, message + (incomplete ? ' This list may be incomplete.' : ''), 'cc-request-slip')
+    emptyList(html, message + (incomplete && !message.startsWith('No asks need') ? ' This list may be incomplete.' : ''), 'cc-request-slip')
   }
 })
 

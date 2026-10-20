@@ -4,7 +4,7 @@ import {
   attachItem, cacheDetail, cacheItems, cacheJoinRequests, createCache, createItem, createRequest,
   decideCacheJoin, decideRequest, deleteItem, deletePush, detachItem, getProfile, itemDetail,
   itemRequests, joinCache, invitePreview, libraryPage, listMyCaches, homeSummary, removeCacheMember,
-  requestDetail, requestsPage, savePush, updateProfile, updateCache, updateItem, type Profile,
+  requestDetail, requestsPage, incomingRequestsPage, savePush, updateProfile, updateCache, updateItem, type Profile,
   ownContact, saveContact, removeContact, requestContact,
 } from './db'
 import { contactInput } from './contacts'
@@ -236,7 +236,10 @@ async function dispatch(request: Request, env: Env) {
     return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
   }
   if (path === '/api/requests') {
-    return json(await requestsPage(env.DB, profile.id, new URL(request.url).searchParams.get('after')))
+    const params = new URL(request.url).searchParams
+    const view = params.get('view')
+    if (view !== null && view !== 'incoming') throw new HttpError(400, 'invalid_view')
+    return json(await (view === 'incoming' ? incomingRequestsPage : requestsPage)(env.DB, profile.id, params.get('after')))
   }
   if (requestRoute || ownRequestRoute) {
     const requestId = requestRoute?.[2] ?? ownRequestRoute![1]

@@ -28,7 +28,7 @@ const server = createServer(async (request, response) => {
     const requestedWidth=Number(url.searchParams.get('width'))
     const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
     const height=screen==='landing'?(wide?1050:1500):(wide?1080:780), scale=wide?Math.min(960/width,600/height):0.77
-    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}"></iframe></section>`).join('')
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}${['owner','requester'].includes(url.searchParams.get('queue'))?'&queue='+url.searchParams.get('queue'):''}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
   }
@@ -46,10 +46,20 @@ const server = createServer(async (request, response) => {
     items.set('77777777-7777-4777-8777-777777777777',{...item,id:'77777777-7777-4777-8777-777777777777',title:'Sourdough starter',is_consumable:true,quantity:3})
     const row={id:'88888888-8888-4888-8888-888888888888',cache_id:cacheId,cache_name:'Maple St',item_id:itemId,item_title:'Pressure washer',owner_id:owner,owner_name:'Ryan',requester_id:member,requester_name:'Priya',quantity:null,status:'approved',decision_reason:null,approval_message:'It is by my side gate.',decided_at:2,created_at:1}
     requests.set(row.id,row)
+    const queueMode = url.searchParams.get('queue')
+    if (queueMode === 'owner' || queueMode === 'requester') {
+      requests.clear()
+      for (const [index,requester_id,requester_name] of [[1,sam,'Sam'],[2,member,'Priya'],[3,'fixture-member-3','Lee']]) {
+        const pending = {...row,id:`88888888-8888-4888-8888-${String(index).padStart(12,'0')}`,requester_id,requester_name,
+          status:'pending',approval_message:null,decided_at:null,created_at:Date.now()-(4-index)*3600000,
+          ...(index===1?{cache_id:'55555555-5555-4555-8555-555555555555',cache_name:'Garden Club'}:{})}
+        requests.set(pending.id,pending)
+      }
+    }
     contacts.set(owner,{kind:'messenger',value:'ryan.zhou',link:'https://m.me/ryan.zhou'})
     contacts.set(member,{kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'})
     const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login',landing:'/',admin:'/admin'}
-    response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'||screen==='landing'?'':owner}; HttpOnly; SameSite=Lax; Path=/`)
+    response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'||screen==='landing'?'':queueMode==='requester'?member:owner}; HttpOnly; SameSite=Lax; Path=/`)
     response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}`});response.end();return
   }
   async function fixtureHtml(html) {
@@ -143,7 +153,9 @@ const server = createServer(async (request, response) => {
     const avatar = id => id===me?.id || caches.size>0 ? [...users.values()].find(user=>user.id===id)?.profile_photo_version ?? null : null
     const coat = id => [...users.values()].find(user=>user.id===id)?.cat_coat ?? null
     const itemAvatar = item => ({...item,owner_photo_version:avatar(item.owner_id),owner_cat_coat:coat(item.owner_id)})
-    const requestAvatars = row => ({...row,owner_photo_version:avatar(row.owner_id),requester_photo_version:avatar(row.requester_id),owner_cat_coat:coat(row.owner_id),requester_cat_coat:coat(row.requester_id)})
+    const requestAvatars = row => ({...row,owner_photo_version:avatar(row.owner_id),requester_photo_version:avatar(row.requester_id),owner_cat_coat:coat(row.owner_id),requester_cat_coat:coat(row.requester_id),
+      queue_position:row.status==='pending' && (row.owner_id===me?.id || (row.requester_id===me?.id && !items.get(row.item_id)?.is_consumable))
+        ? 1+[...requests.values()].filter(earlier=>earlier.item_id===row.item_id && earlier.status==='pending' && (earlier.created_at<row.created_at || (earlier.created_at===row.created_at && earlier.id<row.id))).length : null})
     if (path === '/api/auth/sign-in/magic-link') {
       if (body.email === 'failure@example.test') { json({error:'email_unavailable'},502); return }
       const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
@@ -252,7 +264,11 @@ const server = createServer(async (request, response) => {
     }
     if (path === '/api/requests') {
       if (!authenticated) { json({error:'unauthorized'},401); return }
-      json({requests:[...requests.values()].filter(row=>row.owner_id===me.id || row.requester_id===me.id).map(requestAvatars),unavailable_cache_ids:[],next_cursor:null})
+      const incoming = url.searchParams.get('view') === 'incoming'
+      const rows = [...requests.values()].filter(row=>incoming ? row.owner_id===me.id && row.status==='pending' : row.owner_id===me.id || row.requester_id===me.id)
+      const oldest = itemId => Math.min(...rows.filter(row=>row.item_id===itemId).map(row=>row.created_at))
+      rows.sort((a,b)=>incoming ? oldest(a.item_id)-oldest(b.item_id) || a.item_id.localeCompare(b.item_id) || a.created_at-b.created_at || a.id.localeCompare(b.id) : b.created_at-a.created_at || b.id.localeCompare(a.id))
+      json({requests:rows.map(requestAvatars),unavailable_cache_ids:[],next_cursor:null})
       return
     }
     function libraryInfo(item) {
@@ -364,7 +380,7 @@ const server = createServer(async (request, response) => {
         const item=items.get(requestRoute[2])
         if (!item || !(item.cache_ids??[item.cache_id]).includes(requestRoute[1])) { json({error:'not_found'},404); return }
         const queue=[...requests.values()].filter(row=>row.item_id===item.id)
-        if (request.method==='GET') { json(queue.filter(row=>row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id).map(requestAvatars)); return }
+        if (request.method==='GET') { json(queue.filter(row=>row.cache_id===requestRoute[1] && (row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id)).sort((a,b)=>a.created_at-b.created_at || a.id.localeCompare(b.id)).map(requestAvatars)); return }
         if (item.owner_id===me.id) { json({error:'not_found'},404); return }
         if (item.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<1 || body.quantity>9999)) { json({error:'invalid_request_quantity'},400); return }
         const pending=queue.filter(row=>row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)

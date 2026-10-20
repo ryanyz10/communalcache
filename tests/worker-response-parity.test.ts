@@ -206,6 +206,23 @@ it('matches the frozen parent response fixture across routes, methods and caller
         delete profile.tour_completed_at
         legacyBody = profile
       }
+      if (actual.status === 200 && /: GET (requests|cache-item-requests|request-detail)$/.test(labels[index])) {
+        const reader = callers.find(caller => labels[index].startsWith(`${caller.name}:`))?.id
+        function legacyRequest(row: Record<string, unknown>) {
+          const expectedPosition = row.status === 'pending' && (row.owner_id === reader || (row.requester_id === reader && row.quantity === null)) ? 1 : null
+          expect(row.queue_position, labels[index]).toBe(expectedPosition)
+          const { queue_position: _position, ...legacy } = row
+          return legacy
+        }
+        if (labels[index].endsWith('cache-item-requests')) {
+          legacyBody = (actual.body as Record<string, unknown>[]).map(legacyRequest)
+            .sort((a,b) => Number(b.created_at)-Number(a.created_at) || String(b.id).localeCompare(String(a.id)))
+        } else if (labels[index].endsWith('request-detail')) legacyBody = legacyRequest(actual.body as Record<string, unknown>)
+        else {
+          const body = actual.body as { requests: Record<string, unknown>[] }
+          legacyBody = { ...body, requests: body.requests.map(legacyRequest) }
+        }
+      }
       const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(legacyBody))))
       const actualHash = [...digest].map(byte => byte.toString(16).padStart(2, '0')).join('')
       expect(actual.status, labels[index]).toBe(status)

@@ -32,6 +32,7 @@ function render(element: ReactElement, options: { caller?: string | null; path?:
   client.setQueryData(['item-requests', id, itemId], [request])
   client.setQueryData(['join-requests', id], [{ user_id: 'applicant', display_name: 'Lee', created_at: 1 }])
   client.setQueryData(['requests'], { pages: [{ requests: [request], unavailable_cache_ids: [], next_cursor: null }], pageParams: [null] })
+  client.setQueryData(['requests', 'incoming'], { pages: [{ requests: options.caller && options.caller !== 'owner' ? [] : [request], unavailable_cache_ids: [], next_cursor: null }], pageParams: [null] })
   const page = createElement(Routes, null, createElement(Route, { path: options.route ?? '/', element }))
   const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, { initialEntries: [options.path ?? '/'] }, page) })))
   client.clear()

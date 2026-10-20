@@ -8,7 +8,7 @@ export { listMyCaches, homeSummary, invitePreview, createCache, cacheDetail, upd
 export { cacheJoinRequests, joinCache, decideCacheJoin, removeCacheMember } from './memberships'
 export { libraryItems, libraryPage, cacheItems, readItem, itemDetail, createItem, updateItem, deleteItem } from './items'
 export { attachItem, detachItem } from './attachments'
-export { createRequest, itemRequests, decideRequest, requestDetail, requestsPage, type D1Request } from './requests'
+export { createRequest, itemRequests, decideRequest, requestDetail, requestsPage, incomingRequestsPage, type D1Request } from './requests'
 export { savePush, deletePush, currentPush, removeExpiredPush, pushSubscriptions, type PushRow } from './push'
 export { claimOutbox, notificationEmail, markOutboxSent, recordOutboxFailure, notificationCursor, recoverableOutbox, advanceNotificationCursor, type OutboxRow } from './outbox'
 export { cleanupCursor, cleanupPage, cleanupPageSize, claimCleanup, finishCleanup, advanceCleanupCursor, type CleanupRow } from './cleanup'

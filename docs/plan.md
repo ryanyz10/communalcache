@@ -243,7 +243,12 @@ caller for ownership, never a request-body owner. These are invariants 1–7 in
 
 The cache pending queue deliberately exposes requester display name, quantity,
 time, user_id/request_id to active members of **that cache only**. The all-cache
-availability sum does not expose other caches' requester identities. Decided rows
+availability sum does not expose other caches' requester identities. **Owner-approved
+count-only exception:** a requester with their own pending reusable-item request
+may see only the count of earlier pending requests for that item across all caches,
+computed in the same caller-guarded SQL read. Never expose those other requests'
+names, IDs, caches or details. Consumables and decided requests have no requester
+position; cache-context request rows remain restricted to that cache. Decided rows
 are party-scoped. Party history may survive membership loss; cache details, photos,
 queue access and new writes do not. No endpoint returns another user's
 **authentication email**; `GET /api/me` and auth endpoints return only the caller's
@@ -254,6 +259,14 @@ approved-request/current-membership visibility rule; never derive it from auth.
 Home directly joins memberships/caches. Your items directly filters owner_id,
 including unattached items. Incoming/outgoing Requests join items and filter owner/
 requester, with stable cursor pagination; no cache/owner RPC fan-out or request_index.
+Owner pending requests are grouped by item, longest-waiting item first, then
+oldest request first (`created_at ASC, id ASC`). The oldest is labelled **Next up**;
+later requests show their ordinal. This is advisory: the owner can still approve
+or reject any pending request, with unchanged stock and authorization guards.
+`GET /api/requests?view=incoming` pages that owner-only queue separately; ordinary
+party history keeps its existing newest-first cursor. SQL ordinals span page and
+cache boundaries. Requesters see **You're next** or **You're Nth in line** only
+under the count-only exception above. Home previews are unchanged.
 Apply current membership again for every cache-context follow-on operation.
 Name enrichment never selects email. Cache admins cannot edit another owner's item.
 
