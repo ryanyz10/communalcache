@@ -28,7 +28,7 @@ const server = createServer(async (request, response) => {
     const requestedWidth=Number(url.searchParams.get('width'))
     const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
     const height=screen==='landing'?(wide?1050:1500):(wide?1080:780), scale=wide?Math.min(960/width,600/height):0.77
-    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}"></iframe></section>`).join('')
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
   }
@@ -50,7 +50,7 @@ const server = createServer(async (request, response) => {
     contacts.set(member,{kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'})
     const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login',landing:'/',admin:'/admin'}
     response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'||screen==='landing'?'':owner}; HttpOnly; SameSite=Lax; Path=/`)
-    response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}`});response.end();return
+    response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}`});response.end();return
   }
   async function fixtureHtml(html) {
     // Presentation-only bot widget: never loads Cloudflare or proves a real verdict.
@@ -63,7 +63,11 @@ const server = createServer(async (request, response) => {
           button.type='button';button.textContent='Complete fixture bot check';
           root.dataset.action=options.action;root.dataset.theme=options.theme;
           button.onclick=()=>{button.textContent='Fixture bot check complete';options.callback('fixture-'+options.action)};
-          root.append(button);fixtureWidgets.set(id,{root,button});return id;
+          const mode=new URLSearchParams(location.search).get('bot');
+          if(mode==='verified')queueMicrotask(()=>options.callback('fixture-'+options.action));
+          else if(mode==='failed')setTimeout(()=>options['error-callback'](),50);
+          else if(mode!=='checking')root.append(button);
+          fixtureWidgets.set(id,{root,button});return id;
         },
         reset:id=>{const widget=fixtureWidgets.get(id);if(widget)widget.button.textContent='Complete fixture bot check'},
         remove:id=>{fixtureWidgets.get(id)?.root.replaceChildren();fixtureWidgets.delete(id)}

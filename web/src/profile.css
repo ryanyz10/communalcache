@@ -299,12 +299,42 @@
   border-top: 1px solid var(--cc-line);
 }
 
-.cc-email-field label {
+.cc-email-input {
+  position: relative;
+}
+
+.cc-email-input .cc-profile-input {
+  padding-right: 52px;
+}
+
+.cc-email-check {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  color: var(--cc-sub);
+  pointer-events: none;
+}
+
+.cc-email-check svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cc-email-check-failed {
+  color: var(--cc-bad);
+}
+
+@keyframes cc-email-check-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cc-email-check-checking svg {
+    animation: cc-email-check-spin 1s linear infinite;
+  }
 }
 
 .cc-login-fallbacks {
@@ -1323,18 +1353,6 @@
   .cc-login-form {
     padding: 24px 0 0;
     gap: 16px;
-  }
-
-  .cc-email-field label {
-    position: static;
-    display: block;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
-    margin-bottom: 6px;
-    color: var(--cc-sub);
-    font: 600 13px var(--font-body);
   }
 
   .cc-signin-privacy {
