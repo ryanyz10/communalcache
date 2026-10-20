@@ -29,6 +29,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const [title, setTitle] = useState(item?.title ?? '')
   const [description, setDescription] = useState(item?.description ?? '')
   const [isConsumable, setIsConsumable] = useState(item?.is_consumable ?? false)
+  const [active, setActive] = useState(item?.active !== false)
   const [quantityText, setQuantityText] = useState(String(item?.quantity ?? 1))
   const photo = usePhotoSelection()
   const photoInput = useRef<HTMLInputElement>(null)
@@ -49,6 +50,9 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const cacheIds = selectedCacheIds ?? (item ? initialCacheIds : cacheId ? [cacheId] : [])
   const cacheNames = { ...knownCacheNames.current, ...Object.fromEntries([...(libraryItem.data?.caches ?? []),...(cachesQuery.data ?? [])].map(cache => [cache.id,cache.name])) }
   const removed = item ? (libraryItem.data?.caches.filter(cache => !cacheIds.includes(cache.id)) ?? []) : []
+  const deactivating = !!item && item.active !== false && !active
+  const waitingCount = libraryItem.data?.pending_count ?? 0
+  const confirmDeactivation = deactivating && waitingCount > 0
   // A committed retry uses its saved plan, not a new diff from a failed metadata refresh.
   const sharingReady = !item || !!saveProgress.current.item || (libraryItem.isSuccess && cachesQuery.isSuccess)
   const saveItem = useMutation({
@@ -61,6 +65,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         description: description.trim() || null,
         quantity: isConsumable ? Number(quantityText) : null,
         ...(!item ? { is_consumable: isConsumable } : {}),
+        ...(!item || active !== (item.active !== false) ? { active } : {}),
       }
       return persistItem(saveProgress.current, {
         cacheId,
@@ -80,7 +85,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
     onSuccess: persisted => {
       detachDialog.current?.close()
       showToast(item ? 'Item saved.' : 'Item added.')
-      onSaved(persisted, !!cacheId && cacheIds.includes(cacheId))
+      onSaved(persisted, persisted.active !== false && !!cacheId && cacheIds.includes(cacheId))
     },
     onError: error => {
       const failedId = saveProgress.current.failedCacheId
@@ -101,7 +106,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   function submit(event: FormEvent) {
     event.preventDefault()
     if (submitDisabled) return
-    if (!saveProgress.current.item && removed.length) detachDialog.current?.showModal()
+    if (!saveProgress.current.item && (removed.length || confirmDeactivation)) detachDialog.current?.showModal()
     else save()
   }
 
@@ -110,7 +115,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const savedIds = item ? initialCacheIds : cacheId ? [cacheId] : []
   const selectionChanged = cacheIds.length !== savedIds.length || cacheIds.some(id => !savedIds.includes(id))
   const dirty = title !== (item?.title ?? '') || description !== (item?.description ?? '') ||
-    isConsumable !== (item?.is_consumable ?? false) || quantityText !== String(item?.quantity ?? 1) ||
+    isConsumable !== (item?.is_consumable ?? false) || active !== (item?.active !== false) || quantityText !== String(item?.quantity ?? 1) ||
     selectionChanged || !!photo.photo || photo.processing || !!photo.error || hasCommittedItem
   useEffect(() => { onStateChange?.({ dirty, committed: hasCommittedItem }) }, [dirty, hasCommittedItem, onStateChange])
   const quantity = Number(quantityText)
@@ -142,7 +147,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       className="cc-profile-secondary"
       onClick={() => {
         const stillShared = !!cacheId && (item ? initialCacheIds.includes(cacheId) && !saveSnapshot.remainingDetachIds.includes(cacheId) : true)
-        onSaved(saveSnapshot.item!, stillShared)
+        onSaved(saveSnapshot.item!, saveSnapshot.item!.active !== false && stillShared)
       }}
     >{item ? 'Keep item with current sharing' : 'Keep item without remaining shares'}</button>
   }
@@ -237,6 +242,10 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
           {cachesQuery.isSuccess && !cachesQuery.data.length && <p className="cc-list-empty">No caches yet. Your item stays private in your library.</p>}
         </div>
       </fieldset>
+      <label className="cc-item-active">
+        <span><strong>{active ? 'Active' : 'Inactive'}</strong><span id="item-active-help">{active ? 'Item is shown in all attached caches' : 'Item is hidden from all caches'}</span></span>
+        <input id="item-active" type="checkbox" role="switch" aria-label={active ? 'Active' : 'Inactive'} aria-describedby="item-active-help" checked={active} disabled={fieldsLocked} onChange={event => setActive(event.target.checked)} className="cc-switch" />
+      </label>
       <details className="cc-item-description-editor" open={!!item?.description}>
         <summary>{description ? 'Edit note' : 'Add a note (optional)'}</summary>
         <label htmlFor="item-description">Description (optional)</label>
@@ -264,21 +273,25 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       <button type="button" disabled={saveItem.isPending} onClick={onCancel} className="cc-profile-secondary">Cancel</button>
       <button type="submit" disabled={submitDisabled} className="cc-profile-primary">{saveItem.isPending ? 'Saving…' : submitLabel}</button>
     </div>
-    <dialog ref={detachDialog} className="cc-item-confirm" aria-labelledby="detach-item-heading" onCancel={event => {
+    <dialog ref={detachDialog} className={`cc-item-confirm${confirmDeactivation ? ' cc-item-deactivate' : ''}`} aria-labelledby="detach-item-heading" onCancel={event => {
       event.stopPropagation()
       if (saveItem.isPending) event.preventDefault()
+      else if (confirmDeactivation) setActive(true)
     }}>
-      <h2 id="detach-item-heading">Stop sharing in these caches?</h2>
-      <ul>{removalsToConfirm.map(cache => <li key={cache.id}>{cache.name}</li>)}</ul>
-      <ul>
-        <li>The item is removed from these caches only. Added caches are saved first.</li>
-        <li>Pending asks in these caches get declined and requesters are notified.</li>
-        <li>Your library item, photos, stock and other caches are kept.</li>
-      </ul>
+      <h2 id="detach-item-heading">{confirmDeactivation ? `Make ${title} inactive?` : 'Stop sharing in these caches?'}</h2>
+      {confirmDeactivation && <p>It disappears from {libraryItem.data?.caches.map(cache => cache.name).join(' and ') || 'all attached caches'}. {waitingCount} waiting {waitingCount === 1 ? 'request will' : 'requests will'} be declined.</p>}
+      {(!confirmDeactivation || !!removalsToConfirm.length) && <>
+        <ul>{removalsToConfirm.map(cache => <li key={cache.id}>{cache.name}</li>)}</ul>
+        <ul>
+          <li>The item is removed from these caches only. Added caches are saved first.</li>
+          <li>Pending asks in these caches get declined and requesters are notified.</li>
+          <li>Your library item, photos, stock and other caches are kept.</li>
+        </ul>
+      </>}
       {saveItem.isError && <p role="alert" className="cc-form-error">{saveError} Successful changes are kept. You can retry here.</p>}
       <div className="cc-inline-actions">
-        <button type="button" autoFocus disabled={saveItem.isPending} className="cc-profile-secondary" onClick={() => detachDialog.current?.close()}>Cancel</button>
-        <button type="button" disabled={submitDisabled} className="cc-profile-primary" onClick={save}>{saveItem.isPending ? 'Saving…' : 'Confirm stop sharing'}</button>
+        <button type="button" autoFocus disabled={saveItem.isPending} className="cc-profile-secondary" onClick={() => { if (confirmDeactivation) setActive(true); detachDialog.current?.close() }}>{confirmDeactivation ? 'Keep active' : 'Cancel'}</button>
+        <button type="button" disabled={submitDisabled} className="cc-profile-primary" onClick={save}>{saveItem.isPending ? 'Saving…' : confirmDeactivation ? 'Make inactive' : 'Confirm stop sharing'}</button>
       </div>
     </dialog>
   </form>

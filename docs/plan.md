@@ -100,7 +100,7 @@ input. [database.md](database.md) gives illustrative DDL and batch protocols.
 | Better Auth user/session/account/verification/rateLimit | Unchanged auth schema, private email, D1 sessions/challenges/rate limits; nullable app user.display_name |
 | caches | UUID, name/config, 32-byte base64url join_secret, requires_approval, created_at; operation_token for guarded multi-statement mutations |
 | memberships | (cache_id,user_id), role owner/member, status active/pending/removed/left, created_at, operation_token; exactly one active cache owner, protected from removal |
-| items | UUID, owner_id, title, description, photo_path, immutable is_consumable, quantity, available, created_at, operation_token; unavailable_note is retired/unused, retained in applied schema only |
+| items | UUID, owner_id, title, description, photo_path, immutable is_consumable, quantity, available, active (boolean default true), created_at, operation_token; unavailable_note is retired/unused, retained in applied schema only |
 | item_caches | Unique (item_id,cache_id), attached_at, operation_token; real FKs to items/caches, no duplicated stock/display fields |
 | requests | UUID, item_id, cache_id where asked, requester_id, quantity, status, decision_reason, decided_at, created_at, decision_token |
 | outbox | Existing stable id, kind/dedupe_key uniqueness, validated JSON payload, attempts, claim_token/claim_until, sent_at/failed_at, created_at |
@@ -209,6 +209,29 @@ approval's checkbox sets the flag atomically; unchecked approval does not clear
 an existing flag. The owner button immediately PATCHes only `available`. No listing
 intents. The retired `unavailable_note` column is neither read nor written by the
 application; no column drop or legacy-value erasure is included.
+
+**Active/Inactive is separate from Lent out.** The item editor switch is a draft,
+committed with Save: Active / “Item is shown in all attached caches”; Inactive /
+“Item is hidden from all caches”. Inactive owner-library rows are greyed with an
+Inactive tag; the private item page and owner-scoped photos stay usable. Attachments
+remain and new inactive attachments are allowed. Every cache-context item read,
+photo read/finalization, request create/queue and visible cache count requires
+`items.active=1`, alongside existing membership/attachment guards. Cache access is
+404 while inactive, including for the owner via a cache URL. Party-only request
+history remains unchanged.
+
+Deactivation is one owner-guarded atomic batch: the `active=1→0` first write records
+a fresh token; token-dependent outbox snapshots use the existing detach rejection
+kind/copy, then all pending asks across all caches are rejected. Fields may be
+edited in that same batch; stock can fall below the former reservation floor only
+because all those reservations are released in the same commit. Failed/zero-row
+primary writes authorize no dependent effects. Reactivation is a plain guarded
+update and restores visibility, never previous asks. No photos or attachments are
+deleted. Save with waiting asks first confirms: “Make <title> inactive?” / “It
+disappears from <cache names>. N waiting requests will be declined.”, with Keep
+active / Make inactive. Count/names come from the owner's existing library metadata,
+not a reservation or authorization grant. Other photo/attachment Save stages remain
+separate guarded calls with partial-progress recovery, not one global transaction.
 
 Owner-only stock UPDATE includes `new_quantity >= all_pending_sum(item)` and range
 checks in the guarded statement. Type is immutable. D1 serialization plus the

@@ -78,6 +78,8 @@ export function errorMessage(error: unknown) {
   if (error.code === 'item_unavailable') return 'This item is marked as lent out. Existing requests are unchanged.'
   if (error.code === 'invalid_lent_out') return 'Mark as lent out is available only when approving a reusable item.'
   if (error.code === 'invalid_available') return 'Choose whether this item is available.'
+  if (error.code === 'invalid_active') return 'Choose whether this item is active.'
+  if (error.code === 'item_state_changed') return 'The item state has changed. Refresh the item and try again.'
   if (error.code === 'insufficient_stock') return 'There is not enough available stock. The item and requests have been refreshed.'
   if (error.code === 'request_not_pending') return 'This request has already been decided. The list has been refreshed.'
   if (error.code === 'invalid_contact') return 'Enter a valid phone number, platform username or chosen email address, not a URL.'

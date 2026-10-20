@@ -9,12 +9,12 @@ import { cacheRead, itemAccess, itemRead } from './shared'
 type ItemRow = {
   id: string; owner_id: string; owner_name: string | null; owner_cat_coat: CatCoat | null; title: string; description: string | null
   photo_path: string | null; is_consumable: number; quantity: number | null; available_quantity: number | null; available: number
-  created_at: number
+  active: number; created_at: number
 }
 
 function itemInfo(row: ItemRow, cacheId: string | null) {
   const { photo_path, ...item } = row
-  return { ...item, cache_id: cacheId, is_consumable: row.is_consumable === 1, available: row.available === 1, photo_version: photo_path?.split('/').at(-1) ?? null }
+  return { ...item, cache_id: cacheId, is_consumable: row.is_consumable === 1, available: row.available === 1, active: row.active === 1, photo_version: photo_path?.split('/').at(-1) ?? null }
 }
 
 type LibraryRow = ItemRow & { caches_json: string; pending_count: number }
@@ -113,10 +113,10 @@ export async function createItem(db: D1Database, userId: string, changes: ItemCh
   const access = `(? IS NULL OR EXISTS(SELECT 1 FROM memberships m JOIN caches c ON c.id=m.cache_id
     AND c.join_secret IS NOT NULL WHERE m.cache_id=? AND m.user_id=u.id AND m.status='active'))`
   const [created,_attachment,quota] = await db.batch([
-    db.prepare(`INSERT INTO items(id,owner_id,title,description,is_consumable,quantity,available,created_at,operation_token)
-      SELECT ?,?,?,?,?,?,?,?,? FROM user u JOIN plan_limits l ON l.plan=u.plan
+    db.prepare(`INSERT INTO items(id,owner_id,title,description,is_consumable,quantity,available,active,created_at,operation_token)
+      SELECT ?,?,?,?,?,?,?,?,?,? FROM user u JOIN plan_limits l ON l.plan=u.plan
       WHERE u.id=? AND ${ownedItemCount}<l.owned_items AND ${access}`)
-      .bind(id,userId,changes.title!,changes.description ?? null,changes.is_consumable ? 1 : 0,changes.quantity ?? null,changes.available === false ? 0 : 1,now,token,userId,cacheId,cacheId),
+      .bind(id,userId,changes.title!,changes.description ?? null,changes.is_consumable ? 1 : 0,changes.quantity ?? null,changes.available === false ? 0 : 1,changes.active === false ? 0 : 1,now,token,userId,cacheId,cacheId),
     db.prepare(`INSERT INTO item_caches(item_id,cache_id,attached_at)
       SELECT id,?,? FROM items WHERE id=? AND owner_id=? AND operation_token=? AND ? IS NOT NULL`)
       .bind(cacheId,now,id,userId,token,cacheId),
@@ -129,27 +129,47 @@ export async function createItem(db: D1Database, userId: string, changes: ItemCh
     checkQuota('owned_items',row.used,row.maximum)
     throw new Error('Item quota guard failed')
   }
-  return itemDetail(db, id, userId, cacheId)
+  return itemDetail(db, id, userId, changes.active === false ? null : cacheId)
 }
 
 export async function updateItem(db: D1Database, itemId: string, userId: string, changes: ItemChanges, cacheId: string | null = null) {
-  const token = crypto.randomUUID()
-  const result = await db.prepare(`UPDATE items AS i SET title=COALESCE(?,title),
+  const token = crypto.randomUUID(), now = Date.now(), deactivating = changes.active === false
+  const update = db.prepare(`UPDATE items AS i SET title=COALESCE(?,title),
     description=CASE WHEN ? THEN ? ELSE description END,quantity=CASE WHEN ? THEN ? ELSE quantity END,
-    available=COALESCE(?,available),operation_token=?
-    WHERE i.id=? AND i.owner_id=? AND (${itemAccess}) AND (?=0 OR i.is_consumable=(? IS NOT NULL))
-    AND (?=0 OR ? IS NULL OR ?>=(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending'))`)
+    available=COALESCE(?,available),active=COALESCE(?,active),operation_token=?
+    WHERE i.id=? AND i.owner_id=? AND (${itemAccess}) AND (?=0 OR i.active=1)
+    AND (?=0 OR i.is_consumable=(? IS NOT NULL))
+    AND (?=1 OR ?=0 OR ? IS NULL OR ?>=(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending'))`)
     .bind(changes.title ?? null, changes.description !== undefined ? 1 : 0, changes.description ?? null,
       changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.available === undefined ? null : changes.available ? 1 : 0,
-      token, itemId, userId,
-      cacheId, userId, userId, cacheId, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null,
-      changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.quantity ?? null).run()
+      changes.active === undefined ? null : changes.active ? 1 : 0, token, itemId, userId,
+      cacheId, userId, userId, cacheId, deactivating ? 1 : 0, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null,
+      deactivating ? 1 : 0, changes.quantity !== undefined ? 1 : 0, changes.quantity ?? null, changes.quantity ?? null)
+  let result: D1Result, notificationIds: string[] = []
+  if (deactivating) {
+    const witness = `EXISTS(SELECT 1 FROM items i WHERE i.id=? AND i.owner_id=? AND i.operation_token=?)`
+    const [updated,_outbox,_requests,hints] = await db.batch([
+      update,
+      db.prepare(`INSERT INTO outbox(id,kind,dedupe_key,payload,created_at)
+        SELECT r.id,'request_rejected',?||':'||r.id,json_object('event','request_rejected','cache_id',c.id,'cache_name',c.name,
+          'item_id',i.id,'item_title',i.title,'request_id',r.id,'recipient_id',r.requester_id,'user_id',?,'quantity',r.quantity,'reason','item no longer shared in this cache','item_detached',json('true')),?
+        FROM requests r JOIN items i ON i.id=r.item_id JOIN caches c ON c.id=r.cache_id
+        WHERE r.item_id=? AND r.status='pending' AND ${witness}`).bind(token,userId,now,itemId,itemId,userId,token),
+      db.prepare(`UPDATE requests SET status='rejected',decision_reason='item no longer shared in this cache',decided_at=?,decision_token=?
+        WHERE item_id=? AND status='pending' AND ${witness}`).bind(now,token,itemId,itemId,userId,token),
+      db.prepare(`SELECT id FROM outbox WHERE kind='request_rejected' AND dedupe_key>=? AND dedupe_key<? AND ${witness} ORDER BY dedupe_key LIMIT 25`)
+        .bind(`${token}:`,`${token};`,itemId,userId,token),
+    ])
+    result = updated
+    notificationIds = (hints.results as {id:string}[]).map(row=>row.id)
+  } else result = await update.run()
   if (result.meta.changes === 0) {
     const item = await readItem(db, itemId, userId, cacheId, true)
     if (changes.quantity !== undefined && (item.is_consumable === 1) !== (changes.quantity !== null)) throw new HttpError(400, 'invalid_quantity')
+    if (deactivating && item.active === 0) throw new HttpError(409,'item_state_changed')
     throw new HttpError(409, 'quantity_reserved')
   }
-  return itemDetail(db, itemId, userId, cacheId)
+  return { ...await itemDetail(db, itemId, userId, deactivating ? null : cacheId), notificationIds }
 }
 
 export async function deleteItem(db: D1Database, itemId: string, userId: string, cacheId: string | null = null) {

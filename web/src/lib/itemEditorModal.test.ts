@@ -86,13 +86,14 @@ it('fits the drawer above a reduced visual viewport and finds the replaced route
 function routeFixture({editing=false,inCache=false,inApp=false,loading=false,denied=false}: {editing?:boolean;inCache?:boolean;inApp?:boolean;loading?:boolean;denied?:boolean} = {}) {
   const states:unknown[]=[];let index=0
   const navigate=vi.fn(), queries:Record<string,unknown>[]=[]
+  let itemReadFailed=false
   let dialog:Record<string,unknown>|undefined, form:Record<string,unknown>|undefined
   const background = (name:string) => () => React.createElement('main',{'data-background':name})
   const modules:Record<string,unknown>={
     react:{...React,useState:(initial:unknown) => {const slot=index++;if(!(slot in states))states[slot]=initial;return [states[slot],(next:unknown) => {states[slot]=next}]}},
     'react/jsx-runtime':{jsx,jsxs,Fragment:React.Fragment},
     'react-router':{useParams:()=>({cacheId:inCache?'cache':undefined,itemId:'item'}),useLocation:()=>({state:inApp?{itemEditor:true}:null}),useNavigate:()=>navigate,Navigate:()=>React.createElement('p',null,'denied')},
-    '@tanstack/react-query':{useQuery:(query:Record<string,unknown>)=>{queries.push(query);return {isSuccess:!loading,isPending:loading,error:null,data:(query.queryKey as string[])[0]==='cache'?{id:'cache'}:{id:'item',owner_id:denied?'other':'owner'}}}},
+    '@tanstack/react-query':{useQuery:(query:Record<string,unknown>)=>{queries.push(query);return {isSuccess:!loading,isPending:loading,error:itemReadFailed && (query.queryKey as string[])[0]!=='cache' ? new Error('hidden item') : null,data:(query.queryKey as string[])[0]==='cache'?{id:'cache'}:{id:'item',owner_id:denied?'other':'owner'}}}},
     '../auth/AuthProvider':{useAuth:()=>({me:{id:'owner',display_name:'Owner'}})},
     '../lib/api':{apiFetch:vi.fn(),errorMessage:()=>''},
     '../lib/caches':{cacheDetailQuery:(id:unknown)=>({queryKey:['cache',id]})},
@@ -106,7 +107,7 @@ function routeFixture({editing=false,inCache=false,inApp=false,loading=false,den
   const Component = load('../pages/ItemEditorPage.tsx',modules).ItemEditorPage
   function render(){index=0;return renderToStaticMarkup(React.createElement(Component,{editing}))}
   const html=render()
-  return {html,navigate,queries,render,dialog:()=>dialog!,form:()=>form!}
+  return {html,navigate,queries,render,dialog:()=>dialog!,form:()=>form!,failItemRead:()=>{itemReadFailed=true}}
 }
 
 it.each([
@@ -123,6 +124,14 @@ it.each([
   expect(linked.navigate).toHaveBeenCalledWith(-1)
 })
 
+it('keeps committed cache-editor recovery mounted when deactivation hides the cache item read', () => {
+  const editor=routeFixture({editing:true,inCache:true})
+  ;(editor.form().onStateChange as (state:unknown)=>void)({dirty:true,committed:true})
+  editor.failItemRead()
+  expect(editor.render()).toContain('data-editor-form="true"')
+  expect(editor.queries.at(-1)?.enabled).toBe(false)
+})
+
 it('preserves owner guards, keeps loading inside the dialog and replaces the editor route after save', () => {
   const denied=routeFixture({editing:true,denied:true})
   expect(denied.html).toBe('<p>denied</p>')
@@ -137,4 +146,7 @@ it('preserves owner guards, keeps loading inside the dialog and replaces the edi
   expect(editor.navigate).toHaveBeenCalledWith('/caches/cache/items/saved',{replace:true})
   ;(editor.form().onSaved as (item:unknown, shared:boolean)=>void)({id:'saved'},false)
   expect(editor.navigate).toHaveBeenCalledWith('/items/saved',{replace:true})
+  ;(editor.form().onSaved as (item:unknown, shared:boolean)=>void)({id:'inactive',active:false},true)
+  expect(editor.navigate).toHaveBeenCalledWith('/items/inactive',{replace:true})
+  expect(editor.queries.at(-1)?.enabled).toBe(false)
 })

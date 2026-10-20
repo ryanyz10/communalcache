@@ -50,7 +50,8 @@ Intended production URL is https://communalcache.com; provisioning needs approva
 
 1. **One D1 authority, no copied authorization.** Every cache-data read/write checks
    active membership with a join/EXISTS in the same SQL statement or atomic batch.
-   Cache item access also checks the attachment and active item owner. Private
+   Cache item access also checks the attachment, `i.active=1` and active owner
+   membership. Inactive items remain owner-readable in the private library. Private
    library operations check item ownership; cache admins cannot edit others' items.
    Cache queues expose only that cache's pending requesters. Non-members get 404;
    only a valid-secret removed join retains 403. No projection or cached grant.
@@ -62,15 +63,19 @@ Intended production URL is https://communalcache.com; provisioning needs approva
    Statement failure rolls back the batch; a zero-row guard is not a SQL failure.
 3. **One stock count across caches; never overbook.** Request INSERT ... SELECT
    checks active requester/owner membership, attachment, requester != owner, valid
-   type/quantity, manual available flag and quantity minus ALL-cache pending sum.
+   type/quantity, `i.active=1`, manual available flag and quantity minus ALL-cache
+   pending sum.
    Request plus outbox commit together. Pending-only token-guarded approval deducts
    once; stock edits cannot undercut pending reservations; lost races return 409.
    Lent out blocks new requests, not existing pending rows. Reusable approval's
    checkbox sets that flag in the same batch. The item-page button immediately
    saves Mark as lent out / Mark as available; no availability note.
-4. **Destruction is one guarded atomic batch.** Removal, detach and global item
-   deletion snapshot affected recipients into outbox before deleting source rows,
+4. **Destruction is one guarded atomic batch.** Removal, detach, deactivation and
+   global item deletion snapshot affected recipients into outbox before deleting source rows,
    reject affected pending requests and commit all relational changes together.
+   Deactivation's first owner-guarded `active=1→0` write records a fresh operation
+   token; every outbox/rejection statement requires it. It rejects pending across
+   all caches without detaching or deleting photos; reactivation never restores asks.
    Removal rejects the member's pending via C and detaches their items from C,
    rejecting pending via those attachments; library/photos/other caches survive.
    Removal is effective for the next statement, not eventual tombstone delivery;
@@ -87,7 +92,8 @@ Intended production URL is https://communalcache.com; provisioning needs approva
    or re-arming protocol; backlog age and terminal failures must be observable.
 7. **D1 queries authorize and aggregate directly.** Home joins active memberships;
    Your items filters owner_id; incoming/outgoing Requests filter owner/requester.
-   Every cache-context query includes current membership/attachment predicates.
+   Every cache-context item query/count includes current membership/attachment
+   predicates and `i.active=1`; private library and party-only history are exceptions.
    Party-only request history never grants cache/item/photo access or reveals
    another cache's queue, except the owner-approved count-only position: a requester
    with their own pending reusable-item request may see the count of earlier pending
@@ -115,7 +121,9 @@ Intended production URL is https://communalcache.com; provisioning needs approva
     Otherwise a new user cannot authenticate/set a name. Never use an email-derived
     or auth-core name to bypass the nullable app display-name profile.
 12. **Photos remain private and owner-scoped.** Cache reads check active caller and
-    owner memberships plus item attachment in D1 before private R2 streaming.
+    owner memberships plus item attachment and `i.active=1` in D1 before private
+    R2 streaming. Cache upload finalization rechecks it after R2 I/O too; inactive
+    items' owner-library photos remain readable/editable.
     Own-library reads authenticate the item owner directly. Upload is owner-only
     with a guarded item/ownership re-check after R2 I/O; immutable keys are
     ownerId/itemId/uploadUUID. Detach/removal alone never deletes a shared photo.

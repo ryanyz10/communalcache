@@ -230,8 +230,10 @@ it('matches the frozen parent response fixture across routes, methods and caller
         if (Object.hasOwn(row,'items') && Array.isArray(row.items)) return {...row,items:row.items.map(restoreRetiredField)}
         if (!Object.hasOwn(row,'available') || !Object.hasOwn(row,'is_consumable')) return value
         expect(row,labels[index]).not.toHaveProperty('unavailable_note')
+        expect(row.active,labels[index]).toBe(true)
         const legacy: Record<string,unknown> = {}
         for (const [key,field] of Object.entries(row)) {
+          if (key==='active') continue // The new field is the only added response key.
           legacy[key]=field
           // Only this legacy PATCH fixture supplied a non-null availability note.
           if (key==='available') legacy.unavailable_note=labels[index].endsWith(': PATCH library-item')?'With a neighbor':null

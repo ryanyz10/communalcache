@@ -74,4 +74,6 @@ it('uses accessible cache pills with segment colors and no checkbox indicators',
   expect(css).toContain('.cc-select-pill:focus-visible')
   expect(css).toContain('.cc-select-pill:disabled')
   expect(css).not.toContain('.cc-put-it-in label > span')
+  expect(css).toMatch(/\.cc-library-row\.cc-item-inactive\s*\{[^}]*opacity: \.45;[^}]*filter: grayscale\(1\)/)
+  expect(css).toContain('.cc-item-active .cc-switch')
 })

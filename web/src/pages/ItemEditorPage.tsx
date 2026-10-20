@@ -26,7 +26,7 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
       queryKey: ['item', cacheId, itemId],
       queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`),
     } : libraryItemQuery(me?.id, itemId)),
-    enabled: editing && !!me?.display_name,
+    enabled: editing && !!me?.display_name && !state.committed,
   })
   const backPath = cacheId ? `/caches/${cacheId}` : '/items'
 
@@ -34,8 +34,9 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   if (!me.display_name) return <OnboardingPage />
   if (editing && itemQuery.isSuccess && itemQuery.data.owner_id !== me.id) return <Navigate to={backPath} replace />
 
-  const readError = (cacheId ? cacheQuery.error : null) ?? (editing ? itemQuery.error : null)
-  const isLoading = (!!cacheId && cacheQuery.isPending) || (editing && itemQuery.isPending)
+  // A committed deactivation hides the cache route; keep its save continuation mounted.
+  const readError = state.committed ? null : (cacheId ? cacheQuery.error : null) ?? (editing ? itemQuery.error : null)
+  const isLoading = !state.committed && ((!!cacheId && cacheQuery.isPending) || (editing && itemQuery.isPending))
   const cancelPath = editing ? (cacheId ? `/caches/${cacheId}/items/${itemId}` : `/items/${itemId}`) : backPath
   const formKey = editing ? itemId : `new:${cacheId ?? 'library'}`
   function close() {
@@ -60,7 +61,7 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
         key={formKey}
         cacheId={cacheId ?? null}
         item={editing ? itemQuery.data : undefined}
-        onSaved={(saved, sharedInCurrentCache = true) => navigate(cacheId && sharedInCurrentCache ? `/caches/${cacheId}/items/${saved.id}` : `/items/${saved.id}`, { replace: true })}
+        onSaved={(saved, sharedInCurrentCache = true) => navigate(cacheId && sharedInCurrentCache && saved.active !== false ? `/caches/${cacheId}/items/${saved.id}` : `/items/${saved.id}`, { replace: true })}
         onCancel={dismiss}
         onBusy={setBusy}
         onStateChange={setState}

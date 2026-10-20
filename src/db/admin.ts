@@ -30,7 +30,7 @@ export async function adminOverview(db: D1Database, actor: AdminActor) {
 export async function adminCaches(db: D1Database, actor: AdminActor, after: string | null) {
   const rows = await db.prepare(`SELECT c.id,c.name,c.plan,owner.user_id AS owner_id,u.display_name AS owner_name,
     (SELECT COUNT(*) FROM memberships WHERE cache_id=c.id AND status='active') AS member_count,
-    l.cache_members AS member_limit,(SELECT COUNT(*) FROM item_caches WHERE cache_id=c.id) AS item_count
+    l.cache_members AS member_limit,(SELECT COUNT(*) FROM item_caches a JOIN items i ON i.id=a.item_id WHERE a.cache_id=c.id AND i.active=1) AS item_count
     FROM caches c LEFT JOIN memberships owner ON owner.cache_id=c.id AND owner.role='owner' AND owner.status='active'
     LEFT JOIN user u ON u.id=owner.user_id LEFT JOIN plan_limits l ON l.plan=c.plan
     WHERE c.join_secret IS NOT NULL AND (? IS NULL OR c.id>?) AND ${currentAdminSession} ORDER BY c.id LIMIT 26`)

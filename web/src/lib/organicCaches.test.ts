@@ -16,14 +16,14 @@ const item:LibraryItem={id:'tent',cache_id:id,owner_id:'me',owner_name:'Ryan',ti
 const members=[{user_id:'me',display_name:'Ryan',cat_coat:'grey',attached_item_count:1},{user_id:'dev',display_name:'Dev',cat_coat:'oat',attached_item_count:0}]
 const cache={id,name:'Maple St. Neighbors',owner_id:'me',requires_approval:true,active_member_count:6,attached_item_count:24,pending_answer_count:29,member_preview:members,members,invite_token:id+'.'+'A'.repeat(43)}
 const preview={id:'ask',cache_id:id,item_id:item.id,item_title:item.title,user_id:'dev',display_name:'Dev',cat_coat:'oat' as const,profile_photo_version:null,created_at:1,quantity:null}
-function render(home:boolean,empty=false) {
+function render(home:boolean,empty=false,inactive=false) {
   vi.stubGlobal('location',{origin:'http://localhost:8797'})
   vi.stubGlobal('sessionStorage',{getItem:()=>null})
   const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
   client.setQueryData(['me'],{id:'me',display_name:'Ryan',email:'private@example.com'})
   client.setQueryData(['caches'],[cache])
   client.setQueryData(['cache',id],cache)
-  client.setQueryData(['items',id],[item])
+  client.setQueryData(['items',id],[{...item,active:!inactive}])
   client.setQueryData(['join-requests',id],[])
   client.setQueryData(['library','me'],{pages:[{items:empty?[]:[item],next_cursor:empty?null:'next'}],pageParams:[null]})
   client.setQueryData(['home-summary'],empty?{owned_item_count:0,pending_answer_count:0,incoming:[],outgoing:[]}:{owned_item_count:87,pending_answer_count:29,incoming:[preview],outgoing:[{...preview,status:'approved'}]})
@@ -80,6 +80,13 @@ it('retains native dialogs, labelled create fields, real bot-dependent submit an
   expect(html).toMatch(/<button[^>]*type="submit"[^>]*disabled=""[^>]*>Create cache/)
   expect(html).not.toContain('Bot check passed')
 })
+it('never renders an inactive cached row in cache contents, even before a refreshed server list',()=>{
+  const html=render(false,false,true)
+  expect(html).not.toContain('class="cc-contents-row"')
+  expect(html).not.toContain('/caches/'+id+'/items/tent')
+  expect(html).toContain('Nothing in here yet')
+})
+
 it('renders folder navigation, one contents list, scoped member counts and accessible filters/search',()=>{
   const html=render(false)
   for(const text of ['aria-label="Your caches"','aria-label="Filter contents"','aria-pressed="true"','Search contents','In the box','1 thing','0 things','Cache settings']) expect(html).toContain(text)

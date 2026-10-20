@@ -23,7 +23,10 @@ export function ThingStatus({ item, pending = 0, compact = false, quantityAsStat
 }) {
   let status: string
   let tone: string
-  if (pending) {
+  if (item.active === false) {
+    status = 'Inactive'
+    tone = 'muted'
+  } else if (pending) {
     status = `${pending} ${pending === 1 ? 'ask' : 'asks'}${compact ? '' : ' waiting'}`
     tone = 'pending'
   } else if (item.available === false) {

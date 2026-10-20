@@ -6,6 +6,7 @@ export type ItemChanges = {
   is_consumable?: boolean
   quantity?: number | null
   available?: boolean
+  active?: boolean
 }
 
 export function itemChanges(body: Record<string, unknown>, creating: boolean): ItemChanges {
@@ -40,9 +41,10 @@ export function itemChanges(body: Record<string, unknown>, creating: boolean): I
     if (!creating && quantity === undefined) throw new HttpError(400, 'invalid_quantity')
     changes.quantity = quantity === undefined ? null : quantity as number | null
   }
-  if (Object.hasOwn(body, 'available')) {
-    if (typeof body.available !== 'boolean') throw new HttpError(400, 'invalid_available')
-    changes.available = body.available
+  for (const field of ['available','active'] as const) {
+    if (!Object.hasOwn(body,field)) continue
+    if (typeof body[field] !== 'boolean') throw new HttpError(400,`invalid_${field}`)
+    changes[field] = body[field]
   }
   if (!Object.keys(changes).length) throw new HttpError(400, 'invalid_json')
   return changes

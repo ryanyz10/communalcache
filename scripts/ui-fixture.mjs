@@ -23,12 +23,12 @@ let vite
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, 'http://localhost'), path = url.pathname
   if (path === '/__fixture/compare') {
-    const requested=url.searchParams.get('screen'), screen=['home','cache','item','requests','account','signin','landing','admin'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
+    const requested=url.searchParams.get('screen'), screen=['home','cache','item','library','editor','requests','account','signin','landing','admin'].includes(requested)?requested:'home', wide=url.searchParams.get('layout')==='wide'
     // Iframes have real independent viewport widths, including the desktop breakpoint.
     const requestedWidth=Number(url.searchParams.get('width'))
     const width=wide && [1024,1440,1920].includes(requestedWidth)?requestedWidth:wide?1280:390
     const height=screen==='landing'?(wide?1050:1500):(wide?1080:780), scale=wide?Math.min(960/width,600/height):0.77
-    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}${['owner','requester'].includes(url.searchParams.get('queue'))?'&queue='+url.searchParams.get('queue'):''}"></iframe></section>`).join('')
+    const frames=(wide?[url.searchParams.get('theme')==='evening'?'evening':'sunny']:['sunny','evening']).map(theme=>`<section style="width:${width*scale}px;height:${height*scale+24}px"><b>${wide?`${width}px`:'Phone'} · ${theme} · ${screen}</b><iframe title="${theme} ${screen}" style="display:block;border:0;transform-origin:top left;transform:scale(${scale});width:${width}px;height:${height}px" src="/__fixture/cozy?screen=${screen}&theme=${theme}${url.searchParams.get('tour')==='new'?'&tour=new':''}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}${['owner','requester'].includes(url.searchParams.get('queue'))?'&queue='+url.searchParams.get('queue'):''}${url.searchParams.get('activity')==='1'?'&activity=1':''}${url.searchParams.get('inactive')==='1'?'&inactive=1':''}"></iframe></section>`).join('')
     response.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'})
     response.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cozy comparison fixture</title><body style="margin:8px;background:#ddd;font:14px system-ui;display:flex;justify-content:center;gap:16px">${frames}</body></html>`);return
   }
@@ -41,13 +41,15 @@ const server = createServer(async (request, response) => {
     users.set('priya@fixture.test',{id:member,email:'priya@fixture.test',display_name:'Priya'})
     users.set('sam@fixture.test',{id:sam,email:'sam@fixture.test',display_name:'Sam'})
     for (const [id,name,cacheOwner] of [[cacheId,'Maple St',owner],['55555555-5555-4555-8555-555555555555','Garden Club',member],['66666666-6666-4666-8666-666666666666','Book Swap',sam]]) caches.set(id,{id,name,members,owner_id:cacheOwner,requires_approval:false,invite_token:`${id}.${'A'.repeat(43)}`})
-    const item={id:itemId,cache_id:cacheId,cache_ids:[cacheId],owner_id:owner,owner_name:'Ryan',title:'Pressure washer',description:'Electric, 1800 psi. Comes with two nozzles. Happy to share!',is_consumable:false,quantity:null,available:true,created_at:1,photo_version:null}
+    const item={id:itemId,cache_id:cacheId,cache_ids:url.searchParams.get('activity')==='1'?[cacheId,'55555555-5555-4555-8555-555555555555']:[cacheId],active:url.searchParams.get('inactive')!=='1',owner_id:owner,owner_name:'Ryan',title:'Pressure washer',description:'Electric, 1800 psi. Comes with two nozzles. Happy to share!',is_consumable:false,quantity:null,available:true,created_at:1,photo_version:null}
     items.set(itemId,item)
-    items.set('77777777-7777-4777-8777-777777777777',{...item,id:'77777777-7777-4777-8777-777777777777',title:'Sourdough starter',is_consumable:true,quantity:3})
+    items.set('77777777-7777-4777-8777-777777777777',{...item,id:'77777777-7777-4777-8777-777777777777',title:'Sourdough starter',is_consumable:true,quantity:3,active:true})
+    if (url.searchParams.get('activity')==='1') items.set('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',{...item,id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',title:'Camping tent',active:false})
+    if (url.searchParams.get('activity')==='1') requests.clear()
     const row={id:'88888888-8888-4888-8888-888888888888',cache_id:cacheId,cache_name:'Maple St',item_id:itemId,item_title:'Pressure washer',owner_id:owner,owner_name:'Ryan',requester_id:member,requester_name:'Priya',quantity:null,status:'approved',decision_reason:null,approval_message:'It is by my side gate.',decided_at:2,created_at:1}
     requests.set(row.id,row)
     const queueMode = url.searchParams.get('queue')
-    if (queueMode === 'owner' || queueMode === 'requester') {
+    if ((queueMode === 'owner' || queueMode === 'requester') && item.active) {
       requests.clear()
       for (const [index,requester_id,requester_name] of [[1,sam,'Sam'],[2,member,'Priya'],[3,'fixture-member-3','Lee']]) {
         const pending = {...row,id:`88888888-8888-4888-8888-${String(index).padStart(12,'0')}`,requester_id,requester_name,
@@ -58,7 +60,7 @@ const server = createServer(async (request, response) => {
     }
     contacts.set(owner,{kind:'messenger',value:'ryan.zhou',link:'https://m.me/ryan.zhou'})
     contacts.set(member,{kind:'whatsapp',value:'+14155550148',link:'https://wa.me/14155550148'})
-    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:`/caches/${cacheId}/items/${itemId}`,requests:'/requests',account:'/account',signin:'/login',landing:'/',admin:'/admin'}
+    const screen=url.searchParams.get('screen')??'home', pages={home:'/',cache:`/caches/${cacheId}`,item:item.active?`/caches/${cacheId}/items/${itemId}`:`/items/${itemId}`,library:'/items',editor:`/items/${itemId}/edit`,requests:'/requests',account:'/account',signin:'/login',landing:'/',admin:'/admin'}
     response.setHeader('Set-Cookie',`ui_fixture=${screen==='signin'||screen==='landing'?'':queueMode==='requester'?member:owner}; HttpOnly; SameSite=Lax; Path=/`)
     response.writeHead(302,{Location:`${Object.hasOwn(pages,screen)?pages[screen]:'/'}?theme=${url.searchParams.get('theme')==='evening'?'evening':'sunny'}${['checking','verified','failed'].includes(url.searchParams.get('bot'))?'&bot='+url.searchParams.get('bot'):''}`});response.end();return
   }
@@ -138,7 +140,7 @@ const server = createServer(async (request, response) => {
         json({rows:[...caches.values()].map(cache=>({id:cache.id,name:cache.name,owner_id:cache.owner_id,
           owner_name:[...users.values()].find(user=>user.id===cache.owner_id)?.display_name??null,
           plan:adminPlans.get(`caches:${cache.id}`)??'free',member_count:cache.members?.length??1,
-          member_limit:adminPlans.get(`caches:${cache.id}`)==='plus'?100:30,item_count:[...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cache.id)).length})),next_cursor:null}); return
+          member_limit:adminPlans.get(`caches:${cache.id}`)==='plus'?100:30,item_count:[...items.values()].filter(item=>item.active!==false && (item.cache_ids??[item.cache_id]).includes(cache.id)).length})),next_cursor:null}); return
       }
       if (path==='/api/admin/users') {
         json({rows:[...users.values()].map(user=>({id:user.id,display_name:user.display_name,plan:adminPlans.get(`users:${user.id}`)??'free',
@@ -249,8 +251,8 @@ const server = createServer(async (request, response) => {
     }
     if (path === '/api/me/summary') {
       if (!authenticated) { json({error:'unauthorized'},401); return }
-      const incoming=[...requests.values()].filter(row=>row.owner_id===me.id && row.status==='pending')
-      const outgoing=[...requests.values()].filter(row=>row.requester_id===me.id)
+      const incoming=[...requests.values()].filter(row=>row.owner_id===me.id && row.status==='pending' && items.get(row.item_id)?.active!==false)
+      const outgoing=[...requests.values()].filter(row=>row.requester_id===me.id && items.get(row.item_id)?.active!==false)
       const preview=(row,incoming)=>{
         const user_id=incoming?row.requester_id:row.owner_id
         return {id:row.id,cache_id:row.cache_id,item_id:row.item_id,item_title:row.item_title,
@@ -292,7 +294,7 @@ const server = createServer(async (request, response) => {
       }
       if (!itemId && request.method==='POST') {
         if (!body.title?.trim()) { json({error:'invalid_title'},400); return }
-        const item={id:randomUUID(),cache_id:null,cache_ids:[],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,created_at:Date.now(),photo_version:null}
+        const item={id:randomUUID(),cache_id:null,cache_ids:[],active:body.active!==false,owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,created_at:Date.now(),photo_version:null}
         items.set(item.id,item); json(libraryInfo(item),201); return
       }
       const item=items.get(itemId)
@@ -321,7 +323,10 @@ const server = createServer(async (request, response) => {
       if (request.method==='PATCH') {
         const reserved=[...requests.values()].filter(row=>row.item_id===item.id && row.status==='pending').reduce((sum,row)=>sum+(row.quantity??0),0)
         if (body.quantity!==undefined && body.quantity!==null && body.quantity<reserved) { json({error:'quantity_reserved'},409); return }
-        for (const field of ['title','description','quantity','available']) if (body[field]!==undefined) item[field]=body[field]
+        if (body.active===false && item.active!==false) for (const row of requests.values()) {
+          if (row.item_id===item.id && row.status==='pending') Object.assign(row,{status:'rejected',decision_reason:'item no longer shared in this cache',decided_at:Date.now()})
+        }
+        for (const field of ['title','description','quantity','available','active']) if (body[field]!==undefined) item[field]=body[field]
       }
       json(libraryInfo(item)); return
     }
@@ -332,7 +337,7 @@ const server = createServer(async (request, response) => {
           const members=cache.members??[{user_id:me.id,display_name:me.display_name}]
           const ordered=[...members].sort((a,b)=>Number(b.user_id===me.id)-Number(a.user_id===me.id))
           return {id:cache.id,name:cache.name,owner_id:cache.owner_id,requires_approval:cache.requires_approval,
-            active_member_count:members.length,attached_item_count:[...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cache.id)).length,
+            active_member_count:members.length,attached_item_count:[...items.values()].filter(item=>item.active!==false && (item.cache_ids??[item.cache_id]).includes(cache.id)).length,
             pending_answer_count:[...requests.values()].filter(row=>row.cache_id===cache.id && row.owner_id===me.id && row.status==='pending').length,
             member_preview:ordered.slice(0,3).map(member=>({...member,cat_coat:coat(member.user_id),profile_photo_version:avatar(member.user_id)}))}
         }))
@@ -378,7 +383,7 @@ const server = createServer(async (request, response) => {
       const requestRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/requests$/)
       if (requestRoute) {
         const item=items.get(requestRoute[2])
-        if (!item || !(item.cache_ids??[item.cache_id]).includes(requestRoute[1])) { json({error:'not_found'},404); return }
+        if (!item || item.active===false || !(item.cache_ids??[item.cache_id]).includes(requestRoute[1])) { json({error:'not_found'},404); return }
         const queue=[...requests.values()].filter(row=>row.item_id===item.id)
         if (request.method==='GET') { json(queue.filter(row=>row.cache_id===requestRoute[1] && (row.status==='pending' || row.owner_id===me.id || row.requester_id===me.id)).sort((a,b)=>a.created_at-b.created_at || a.id.localeCompare(b.id)).map(requestAvatars)); return }
         if (item.owner_id===me.id) { json({error:'not_found'},404); return }
@@ -393,7 +398,7 @@ const server = createServer(async (request, response) => {
       const photoRoute=path.match(/^\/api\/caches\/([^/]+)\/items\/([^/]+)\/photo$/)
       if (photoRoute) {
         const item=items.get(photoRoute[2])
-        if (!item || !(item.cache_ids??[item.cache_id]).includes(photoRoute[1])) { json({error:'not_found'},404); return }
+        if (!item || item.active===false || !(item.cache_ids??[item.cache_id]).includes(photoRoute[1])) { json({error:'not_found'},404); return }
         if (request.method==='POST') {
           photos.set(item.id,{bytes:raw,type:request.headers['content-type']})
           item.photo_version=randomUUID()
@@ -410,17 +415,17 @@ const server = createServer(async (request, response) => {
       if (itemRoute) {
         const cacheId=itemRoute[1], itemId=itemRoute[2]
         if (!caches.has(cacheId)) { json({error:'not_found'},404); return }
-        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>(item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...itemAvatar(item),cache_id:cacheId,pending_count:[...requests.values()].filter(row=>row.item_id===item.id && row.cache_id===cacheId && row.status==='pending').length}))); return }
+        if (!itemId && request.method === 'GET') { json([...items.values()].filter(item=>item.active!==false && (item.cache_ids??[item.cache_id]).includes(cacheId)).map(item=>({...itemAvatar(item),cache_id:cacheId,pending_count:[...requests.values()].filter(row=>row.item_id===item.id && row.cache_id===cacheId && row.status==='pending').length}))); return }
         if (!itemId && request.method === 'POST') {
           if (!body.title?.trim() || [...body.title.trim()].length>120) { json({error:'invalid_title'},400); return }
           if (body.is_consumable && (!Number.isInteger(body.quantity) || body.quantity<0 || body.quantity>9999)) { json({error:'invalid_quantity'},400); return }
-          const item={id:randomUUID(),cache_id:cacheId,cache_ids:[cacheId],owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,created_at:Date.now(),photo_version:null}
+          const item={id:randomUUID(),cache_id:cacheId,cache_ids:[cacheId],active:body.active!==false,owner_id:me.id,owner_name:me.display_name,title:body.title.trim(),description:body.description??null,is_consumable:body.is_consumable,quantity:body.is_consumable?body.quantity:null,available:true,created_at:Date.now(),photo_version:null}
           items.set(item.id,item)
           json(item,201)
           return
         }
         const item=items.get(itemId)
-        if (!item || !(item.cache_ids??[item.cache_id]).includes(cacheId)) { json({error:'not_found'},404); return }
+        if (!item || item.active===false || !(item.cache_ids??[item.cache_id]).includes(cacheId)) { json({error:'not_found'},404); return }
         if (request.method === 'DELETE') {
           if (item.owner_id!==me.id) { json({error:'not_found'},404); return }
           items.delete(item.id); photos.delete(item.id)
@@ -435,8 +440,12 @@ const server = createServer(async (request, response) => {
           item.title=body.title.trim()
           item.description=body.description??null
           item.quantity=item.is_consumable?body.quantity:null
+          if (body.active===false && item.active!==false) for (const row of requests.values()) {
+            if (row.item_id===item.id && row.status==='pending') Object.assign(row,{status:'rejected',decision_reason:'item no longer shared in this cache',decided_at:Date.now()})
+          }
+          if (body.active!==undefined) item.active=body.active
         }
-        json({...itemAvatar(item),cache_id:cacheId})
+        json(item.active===false?libraryInfo(item):{...itemAvatar(item),cache_id:cacheId})
         return
       }
       const match=path.match(/^\/api\/caches\/([^/]+)(\/invite\/rotate)?$/)
@@ -447,7 +456,7 @@ const server = createServer(async (request, response) => {
         if (body.name !== undefined) cache.name=body.name.trim()
         if (body.requires_approval !== undefined) cache.requires_approval=body.requires_approval
       }
-      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id),cat_coat:coat(member.user_id),attached_item_count:[...items.values()].filter(item=>item.owner_id===member.user_id && (item.cache_ids??[item.cache_id]).includes(cache.id)).length}))})
+      json({...cache,members:(cache.members??[{user_id:me.id,display_name:me.display_name}]).map(member=>({...member,profile_photo_version:avatar(member.user_id),cat_coat:coat(member.user_id),attached_item_count:[...items.values()].filter(item=>item.active!==false && item.owner_id===member.user_id && (item.cache_ids??[item.cache_id]).includes(cache.id)).length}))})
       return
     }
     json({error:'not_found'},404)

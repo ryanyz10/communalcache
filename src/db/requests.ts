@@ -45,7 +45,7 @@ export async function createRequest(db: D1Database, itemId: string, cacheId: str
       JOIN memberships caller ON caller.cache_id=c.id AND caller.user_id=? AND caller.status='active'
       JOIN memberships owner ON owner.cache_id=c.id AND owner.user_id=i.owner_id AND owner.status='active'
       JOIN user u ON u.id=caller.user_id JOIN plan_limits l ON l.plan=u.plan
-      WHERE i.id=? AND i.owner_id<>? AND i.available=1 AND ${openRequestCount}<l.open_requests
+      WHERE i.id=? AND i.owner_id<>? AND i.active=1 AND i.available=1 AND ${openRequestCount}<l.open_requests
       AND ((i.is_consumable=0 AND ? IS NULL)
         OR (i.is_consumable=1 AND ? BETWEEN 1 AND 9999 AND ?=CAST(? AS INTEGER)
           AND i.quantity-(SELECT COALESCE(SUM(quantity),0) FROM requests WHERE item_id=i.id AND status='pending')>=?))`)
