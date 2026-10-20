@@ -36,7 +36,7 @@ it('uses exact whole-library totals, not the loaded page, and keeps filtered pag
 })
 it('shows the owner cat/name tile and packing slip with a native trigger to the still-working request form',()=>{
   const html=render(createElement(ItemPage),`/caches/${cacheId}/items/${id}`,'/caches/:cacheId/items/:itemId')
-  for(const text of ['cc-item-owner-cat','cc-item-name-art','<dt>From</dt>','Maya','Lend · it comes back','Climbing crew','Brush the chalk','Ask to borrow','Ask Maya','aria-controls="item-ask-sheet"','Jun','Pending'])expect(html).toContain(text)
+  for(const text of ['cc-item-owner-cat','cc-item-name-art','<dt>From</dt>','Maya','<dt>Kind</dt><dd>Lend</dd>','Climbing crew','Brush the chalk','Ask to borrow','Ask Maya','aria-controls="item-ask-sheet"','Jun','Pending'])expect(html).toContain(text)
   expect(html).toContain('aria-haspopup="dialog"')
   expect(html).not.toContain('id="item-ask-form"')
   expect(html).not.toMatch(/Delete item|Edit item|Upload photo|private@example.com/)
@@ -48,7 +48,7 @@ it('keeps private owner editing, manual availability, sharing and distinct destr
 })
 it('keeps the new form empty, photo optional, type native, caches selectable and optional description reachable',()=>{
   const html=render(createElement(ItemEditorPage),'/items/new','/items/new')
-  for(const text of ['New item','>Save</button>','for="new-item-photo"','accept="image/*"','Lend it','Give it away','for="item-title"','Put it in','aria-pressed="false"','Description (optional)'])expect(html).toContain(text)
+  for(const text of ['New item','>Save</button>','for="new-item-photo"','accept="image/*"','Lend it','Give it away','for="item-title"','Put it in','aria-pressed="false"','Note (optional)' ])expect(html).toContain(text)
   expect(html).not.toContain('One item, one stock count')
   expect(html).not.toContain('value="Mason jars"')
   expect(html).not.toContain('private@example.com')
@@ -68,11 +68,15 @@ it('uses accessible cache pills with segment colors and no checkbox indicators',
   const css = readFileSync(new URL('../items.css', import.meta.url), 'utf8')
   const chip = css.match(/\.cc-select-pill, \.cc-select-row \{([^}]+)\}/)![1]
   expect(chip).toContain('min-height: 40px')
-  expect(chip).toContain('background: var(--cc-chip)')
+  expect(chip).toContain('background: transparent')
+  expect(chip).toContain('border: 1.5px solid var(--cc-edge)')
+  expect(chip).toContain('color: var(--cc-fg)')
   const selectedChip = css.match(/\.cc-select-pill\[aria-pressed="true"\], \.cc-select-row\[aria-pressed="true"\] \{([^}]+)\}/)![1]
-  for (const rule of ['background: var(--cc-fg)', 'color: var(--cc-bg)']) expect(selectedChip).toContain(rule)
+  for (const rule of ['background: var(--cc-accent)', 'color: #201e1d', 'border-color: var(--cc-accent)']) expect(selectedChip).toContain(rule)
   expect(css).toContain('.cc-select-pill:focus-visible')
   expect(css).toContain('.cc-select-pill:disabled')
+  expect(css).toContain('.cc-select-row:hover:not(:disabled)')
+  expect(css).not.toContain('cc-item-description-editor')
   expect(css).not.toContain('.cc-put-it-in label > span')
   expect(css).toMatch(/\.cc-library-row\.cc-item-inactive\s*\{[^}]*opacity: \.45;[^}]*filter: grayscale\(1\)/)
   expect(css).toContain('.cc-item-active .cc-switch')

@@ -154,7 +154,7 @@ export function ItemPage() {
             <Avatar userId={item.owner_id} name={item.owner_name ?? 'Member'} photoVersion={item.owner_photo_version} coat={item.owner_cat_coat} size={28} />
             {isOwner ? 'You' : item.owner_name ?? 'Member'}
           </dd></div>
-          <div><dt>Kind</dt><dd>{item.is_consumable ? `Give · ${item.available_quantity ?? item.quantity} to give right now` : 'Lend · it comes back'}</dd></div>
+          <div><dt>Kind</dt><dd>{item.is_consumable ? `Give · ${item.available_quantity ?? item.quantity}` : 'Lend'}</dd></div>
           <div className="cc-item-context"><dt>In</dt><dd>{contextLabel}</dd></div>
           {item.description && <div className="cc-item-note"><dt>Note</dt><dd>{item.description}</dd></div>}
         </dl>

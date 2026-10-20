@@ -33,7 +33,7 @@ function render(element: ReactElement, options: { route?: string; path?: string;
 
 it('renders caller library cards, names, shared stock, pending asks, private photo routes and wide grid without a cache dependency', () => {
   const markup = render(createElement(LibraryPage),{more:true})
-  for (const copy of ['Your items','+ New item','Sugar','Maple Street · Garden Club','Give · 8 left','2 asks','Not in a cache yet','Load more items']) expect(markup).toContain(copy)
+  for (const copy of ['Your items','+ New item','Sugar','Maple Street · Garden Club','Give · 8','2 asks','Not in a cache yet','Load more items']) expect(markup).toContain(copy)
   expect(markup).toContain(`/items/${item.id}`)
   expect(markup).toContain(`/api/me/items/${item.id}/photo?v=version`)
   expect(markup).toContain('cc-library-slip')
@@ -107,6 +107,9 @@ it('offers existing/new sources in one labeled native sheet, with attached item 
   expect(markup).not.toContain('id="item-title"')
   expect(markup).toContain('aria-haspopup="dialog"')
   expect(sharingHint({...item,caches:[{id:'garden',name:'Garden Club'}]},cacheId)).toBe('In Garden Club')
+  const selectable=render(createElement(AddItemSheet,{cacheId:'third',cacheName:'Tool Shed',dialog:createRef<HTMLDialogElement>()}))
+  expect(selectable).toContain('Give · 5')
+  expect(selectable).not.toContain('5 to give')
 })
 
 it('keeps partial attachment successes and retries only failures, using idempotent owner routes with no item creation', async () => {

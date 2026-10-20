@@ -88,6 +88,12 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
     if (file === 'ThingTile' && name === 'ThingStatus' && process.env.COMPONENT_PARITY_PARENT !== '1') {
       expect(html).not.toContain('cc-status-note')
       expect(html).not.toContain('With a neighbor')
+      const currentItem=props.item as {is_consumable:boolean;available:boolean;quantity:number|null}
+      if (!props.pending && currentItem.available && currentItem.is_consumable && props.quantityAsStatus) {
+        const quantity=currentItem.quantity ?? 0
+        expect(html).toContain(`>Give · ${quantity}</span>`)
+        html=html.replace(`>Give · ${quantity}</span>`,`>${quantity} to give</span>`)
+      }
       if (!(props.pending as number) && (props.item as {available:boolean}).available === false) {
         // Retire only the old availability-note span; pin every other byte.
         html = html.replace(/<\/span>$/, '<span class="cc-status-note"> · With a neighbor</span></span>')

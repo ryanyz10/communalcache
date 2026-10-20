@@ -94,7 +94,7 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
           let hint = 'Already here'
           if (!isAlreadyShared) {
             hint = sharingHint(item, cacheId)
-            if (item.is_consumable) hint += ` · ${item.available_quantity ?? item.quantity} to give`
+            if (item.is_consumable) hint += ` · Give · ${item.available_quantity ?? item.quantity}`
           }
           return <li key={item.id} data-already={isAlreadyShared}>
             <button

@@ -174,15 +174,13 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         {photo.processing && <p role="status">Preparing photo…</p>}
         {photo.error && <p role="alert" className="cc-form-error">{photo.error}</p>}
       </>}
-      {item ? <p className="cc-form-hint">
-        {isConsumable ? 'Give it away' : 'Lend it'} · Item type cannot be changed.
-      </p> : <fieldset className="cc-item-kind-tabs">
+      {!item && <fieldset className="cc-item-kind-tabs">
         <legend className="sr-only">How would you like to share it?</legend>
         <label><input type="radio" name="item-type" checked={!isConsumable} onChange={() => setIsConsumable(false)} /><span>Lend it</span></label>
         <label><input type="radio" name="item-type" checked={isConsumable} onChange={() => setIsConsumable(true)} /><span>Give it away</span></label>
       </fieldset>}
       <div className="cc-item-title-field">
-        <label htmlFor="item-title">What is it?</label>
+        <label htmlFor="item-title">What is it?{item && <> · {isConsumable ? 'Give' : 'Lend'}</>}</label>
         <input
           id="item-title"
           type="text"
@@ -246,9 +244,8 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         <span><strong>{active ? 'Active' : 'Inactive'}</strong><span id="item-active-help">{active ? 'Item is shown in all attached caches' : 'Item is hidden from all caches'}</span></span>
         <input id="item-active" type="checkbox" role="switch" aria-label={active ? 'Active' : 'Inactive'} aria-describedby="item-active-help" checked={active} disabled={fieldsLocked} onChange={event => setActive(event.target.checked)} className="cc-switch" />
       </label>
-      <details className="cc-item-description-editor" open={!!item?.description}>
-        <summary>{description ? 'Edit note' : 'Add a note (optional)'}</summary>
-        <label htmlFor="item-description">Description (optional)</label>
+      <div className="cc-item-note-field">
+        <label htmlFor="item-description">Note (optional)</label>
         <textarea
           id="item-description"
           rows={3}
@@ -257,7 +254,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
           onChange={event => setDescription([...event.target.value].slice(0, 2000).join(''))}
           className="cc-profile-input"
         />
-      </details>
+      </div>
     </fieldset>
     {saveSnapshot?.item && saveItem.isError && <div className="cc-item-save-progress" role="status">
       <p>Your item is saved{!item && cacheId ? ' and shared here' : ' in your library'}. {saveSnapshot.photoPending ? 'The photo needs retrying.' : 'Sharing needs retrying.'}</p>

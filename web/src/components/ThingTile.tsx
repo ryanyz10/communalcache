@@ -33,7 +33,7 @@ export function ThingStatus({ item, pending = 0, compact = false, quantityAsStat
     status = 'Lent out'
     tone = 'muted'
   } else if (item.is_consumable && quantityAsStatus) {
-    status = `${item.available_quantity ?? item.quantity ?? 0} to give`
+    status = `Give · ${item.available_quantity ?? item.quantity ?? 0}`
     tone = 'give'
   } else if (item.is_consumable && (item.available_quantity ?? item.quantity ?? 0) <= 0) {
     status = 'No stock'
