@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { loadConfig } from '../lib/config'
 import { loadTurnstile, mountTurnstile, turnstileTheme } from '../lib/turnstile'
-import { Shimmer, LoadingStatus } from './Skeleton'
 
 export type TurnstileStatus = 'checking' | 'verified' | 'failed'
 export type TurnstileHandle = { reset(): void; retry(): void }
-export function Turnstile({ action, onToken, onStatus, inlineFeedback = true, ref }: {
+export function Turnstile({ action, onToken, onStatus, ref }: {
   action: 'signin' | 'create_cache'
   onToken: (token: string) => void
   onStatus?: (status: TurnstileStatus) => void
-  inlineFeedback?: boolean
   ref?: Ref<TurnstileHandle>
 }) {
   const configQuery = useQuery({ queryKey: ['config'], queryFn: loadConfig })
@@ -81,7 +79,7 @@ export function Turnstile({ action, onToken, onStatus, inlineFeedback = true, re
   useEffect(() => {
     if (configQuery.isFetching) { onStatus?.('checking'); return }
     if (error || unavailable) {
-      if (!inlineFeedback && !autoRetried.current) {
+      if (!autoRetried.current) {
         autoRetried.current = true
         retryCheck(true)
         return
@@ -90,20 +88,9 @@ export function Turnstile({ action, onToken, onStatus, inlineFeedback = true, re
       return
     }
     onStatus?.(verified ? 'verified' : 'checking')
-  }, [error, unavailable, verified, configQuery.isFetching, onStatus, inlineFeedback, retryCheck])
-
-  let loading: ReactNode = null
-  if (configQuery.isPending) loading = <div><LoadingStatus label="Loading bot check…" /><Shimmer width={300} height={64} /></div>
-  else if (sitekey && !verified && !error) loading = <p role="status" className="text-sm text-slate-600">Checking your browser…</p>
+  }, [error, unavailable, verified, configQuery.isFetching, onStatus, retryCheck])
 
   return <section className="mt-3" aria-label="Bot protection">
     <div ref={container} />
-    {inlineFeedback && <>
-      {loading}
-      {(error || unavailable) && <div>
-        <p role="alert" className="text-sm text-red-700">{error || 'Bot protection is unavailable. Please retry.'}</p>
-        <button type="button" className="mt-2 text-sm underline" onClick={() => retryCheck()}>Retry bot check</button>
-      </div>}
-    </>}
   </section>
 }

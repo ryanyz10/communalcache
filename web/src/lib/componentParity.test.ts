@@ -77,9 +77,14 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
   for (const [file, name, props, path] of examples) {
     if (!exports.has(file)) exports.set(file, load(file, process.env.COMPONENT_PARITY_PARENT === '1'))
     // Contrast and tour targets are tested separately; keep other parent markup pinned.
-    const html = render(exports.get(file)![name], props, path)
+    let html = render(exports.get(file)![name], props, path)
       .replace(/ data-cat-backdrop="(?:ginger|grey|dusk|oat|ash|toffee)"/g, '')
       .replace(/ data-tour="(?:items|requests|account)"/g, '')
+    if (file === 'Turnstile' && process.env.COMPONENT_PARITY_PARENT !== '1') {
+      // Both callers now own feedback; only the old inline unavailable UI is removed.
+      expect(html).toBe('<section class="mt-3" aria-label="Bot protection"><div></div></section>')
+      html = html.replace('</section>', '<div><p role="alert" class="text-sm text-red-700">Bot protection is unavailable. Please retry.</p><button type="button" class="mt-2 text-sm underline">Retry bot check</button></div></section>')
+    }
     fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
   // Pin parent output so shallow CI checkouts do not need historical Git objects.

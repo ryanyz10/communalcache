@@ -9,7 +9,7 @@ import type { TurnstileHandle, TurnstileStatus } from '../components/Turnstile'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-function fixture(inlineFeedback = false, blocked = false) {
+function fixture(action: 'signin' | 'create_cache' = 'signin', blocked = false) {
   const states: unknown[] = [], setters: ((value: unknown) => void)[] = [], refs: { current: unknown }[] = []
   const effects: { dependencies: unknown[]; cleanup?: () => void }[] = []
   const callbacks: { dependencies: unknown[]; value: unknown }[] = []
@@ -65,7 +65,7 @@ function fixture(inlineFeedback = false, blocked = false) {
   new Function('require', 'module', 'exports', compiled)((name: string) => { if (!(name in modules)) throw new Error(name); return modules[name] }, module, module.exports)
   function render() {
     stateIndex = 0; refIndex = 0; effectIndex = 0; callbackIndex = 0; pendingEffects = []
-    const html = renderToStaticMarkup(React.createElement(module.exports.Turnstile, { action: inlineFeedback ? 'create_cache' : 'signin', onToken, onStatus, inlineFeedback, ref: handle }))
+    const html = renderToStaticMarkup(React.createElement(module.exports.Turnstile, { action, onToken, onStatus, ref: handle }))
     pendingEffects.forEach(effect => effect())
     return html
   }
@@ -77,8 +77,9 @@ function fixture(inlineFeedback = false, blocked = false) {
   }
 }
 
-it('silently remounts once, then reports failure and supports explicit retry and verification', async () => {
-  const view = fixture(); await view.flush()
+it.each(['signin', 'create_cache'] as const)('%s silently remounts once, then reports failure and supports explicit retry and verification', async action => {
+  const view = fixture(action); await view.flush()
+  expect(view.latest()).toMatchObject({ action, appearance: 'interaction-only', retry: 'never' })
   expect(view.onStatus).toHaveBeenLastCalledWith('checking')
   const stale = view.latest()
   stale['error-callback'](); await view.flush()
@@ -105,7 +106,7 @@ it('silently remounts once, then reports failure and supports explicit retry and
 })
 
 it('bounds blocked-script retries and keeps config refetch/reload recovery', async () => {
-  const view = fixture(false, true)
+  const view = fixture('signin', true)
   await view.flush()
   expect(view.load).toHaveBeenCalledTimes(2)
   expect(view.onStatus).toHaveBeenLastCalledWith('failed')
@@ -123,14 +124,4 @@ it('bounds blocked-script retries and keeps config refetch/reload recovery', asy
   config.config.refetch.mockClear()
   config.handle.current!.retry(); expect(config.config.refetch).toHaveBeenCalledOnce()
   config.unmount()
-})
-
-it('preserves inline create-cache failures without automatic retry and leaves challenge rendering interactive', async () => {
-  const view = fixture(true); await view.flush()
-  expect(view.latest()).toMatchObject({ action: 'create_cache', appearance: 'interaction-only', retry: 'never' })
-  view.latest()['error-callback'](); const html = await view.flush()
-  expect(html).toContain('Retry bot check')
-  expect(html).toContain('role="alert"')
-  expect(view.provider.render).toHaveBeenCalledOnce()
-  view.unmount()
 })

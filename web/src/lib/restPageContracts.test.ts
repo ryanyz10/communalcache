@@ -15,6 +15,7 @@ import * as magicLinks from './magicLinks'
 import * as googleSignIn from './googleSignIn'
 import { refreshProfileViews } from './profile'
 import { toastFixture } from '../test/toastFixture'
+import { FieldCheck } from '../components/FieldCheck'
 
 type Element = ReactElement<Record<string, unknown>>
 type Page = 'HomePage' | 'AccountPage' | 'JoinInviteSheet' | 'JoinRequests' | 'LoginPage' | 'MagicLinkPage' | 'JoinPage' | 'OnboardingPage'
@@ -129,7 +130,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     '../components/ProductTour': { ReplayTourButton: Null },
     '../components/Skeleton': { SkeletonRows: Null, LoadingStatus: Null, Shimmer: Null },
     '../components/skeletons/HomeSkeleton': { HomeBoxesSkeleton: Null },
-    '../components/Turnstile': { Turnstile: Null }, '../components/CodeInput': { CodeInput: Null },
+    '../components/Turnstile': { Turnstile: Null }, '../components/FieldCheck': { FieldCheck }, '../components/CodeInput': { CodeInput: Null },
     '../components/GoogleSignInButton': { GoogleSignInButton: GoogleButton },
     '../components/LegalLinks': { LegalLinks: Null }, '../components/InviteBox': { InviteBox: Null },
     '../components/NamePreview': { NamePreview: Null }, '../components/CoatPicker': { CoatPicker: Null },
@@ -194,7 +195,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     googleButton: () => elements.find(node => node.type === GoogleButton)!,
     field: (id: string) => elements.find(node => node.props.id === id)!,
     token(value = 'public-local-bot-token') { (elements.find(node => node.props.action === 'create_cache' || node.props.action === 'signin')!.props.onToken as (value: string) => void)(value); render() },
-    botStatus(value: 'checking' | 'verified' | 'failed') { (elements.find(node => node.props.action === 'signin')!.props.onStatus as (value: string) => void)(value); render() },
+    botStatus(value: 'checking' | 'verified' | 'failed') { (elements.find(node => node.props.action === 'signin' || node.props.action === 'create_cache')!.props.onStatus as (value: string) => void)(value); render() },
     code(value: string) { (elements.find(node => node.props.onChange && node.props.value === '')!.props.onChange as (value: string) => void)(value); render() },
     settled: () => lastMutation, action: () => lastAction,
   }
@@ -210,6 +211,29 @@ it('Home retains action→create/join dialog ownership, Unicode name cap, idle C
   page.click('+ New cache'); expect(page.escape('new-cache-heading')).not.toHaveBeenCalled()
   page.click('Join with an invite'); expect(page.dialog('join-invite-heading').open).toBe(true)
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('Home uses in-field verification with a toast and retry button, then resets feedback on close', () => {
+  const fetch = vi.spyOn(globalThis, 'fetch'), page = fixture('HomePage')
+  page.click('+ New cache')
+  expect(page.render()).toContain('cc-field-check-checking')
+  expect(page.render()).toContain('<span class="sr-only" role="status">Checking your browser…</span>')
+  expect(page.render()).not.toContain('<p role="status"')
+  expect(page.button('Create cache').props.disabled).toBe(true)
+  page.submit(); expect(fetch).not.toHaveBeenCalled()
+  page.botStatus('failed')
+  expect(page.render()).toContain('cc-field-check-failed')
+  expect(page.render()).toContain('role="alert"')
+  expect(page.toasts.notice).toMatchObject({ message: "Couldn't verify your browser. Tap Try again.", tone: 'error' })
+  expect(page.button('Try again').props).toMatchObject({ type: 'button', disabled: false })
+  page.click('Try again'); expect(page.bot.retry).toHaveBeenCalledOnce()
+  expect(fetch).not.toHaveBeenCalled()
+  page.botStatus('verified'); page.token(); page.change('cache-name', 'Tools')
+  expect(page.button('Create cache').props.disabled).toBe(false)
+  expect(page.render()).not.toContain('cc-field-check')
+  page.click('Cancel'); page.click('+ New cache')
+  expect(page.render()).toContain('cc-field-check-checking')
+  expect(page.button('Create cache').props.disabled).toBe(true)
 })
 
 it('Home creation retains pending Escape, 409 error/open state, retry and close→invalidate→navigate→bot reset order', async () => {
@@ -277,13 +301,13 @@ it('uses an error toast for a Google callback failure without reflecting provide
 it('Login keeps bot checking inside the accessible email field and offers retry without blocking Google', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch'), page = fixture('LoginPage')
   expect(page.render()).toContain('<label for="email" class="sr-only">Email</label>')
-  expect(page.render()).toContain('cc-email-check-checking')
+  expect(page.render()).toContain('cc-field-check-checking')
   expect(page.render()).toContain('<span class="sr-only" role="status">Checking your browser…</span>')
   expect(page.render()).not.toContain('<p role="status"')
   expect(page.button('Email me a sign-in link').props.disabled).toBe(true)
   expect(page.googleButton().props.disabled).toBe(false)
   page.botStatus('failed')
-  expect(page.render()).toContain('cc-email-check-failed')
+  expect(page.render()).toContain('cc-field-check-failed')
   expect(page.render()).toContain('role="alert"')
   expect(page.toasts.notice).toMatchObject({ message: "Couldn't verify your browser. Tap Try again.", tone: 'error' })
   expect(page.button('Try again').props).toMatchObject({ type: 'button', disabled: false })
@@ -292,7 +316,7 @@ it('Login keeps bot checking inside the accessible email field and offers retry 
   page.click('Try again'); expect(page.bot.retry).toHaveBeenCalledOnce()
   expect(fetch).not.toHaveBeenCalled()
   page.botStatus('verified'); page.token()
-  expect(page.render()).not.toContain('cc-email-check')
+  expect(page.render()).not.toContain('cc-field-check')
   expect(page.button('Email me a sign-in link').props.disabled).toBe(false)
 })
 

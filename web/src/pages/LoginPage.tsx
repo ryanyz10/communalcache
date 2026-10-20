@@ -9,6 +9,7 @@ import { CodeInput } from '../components/CodeInput'
 import { landingCopy } from '../lib/landingCopy'
 import { Turnstile, type TurnstileHandle, type TurnstileStatus } from '../components/Turnstile'
 import { LegalLinks } from '../components/LegalLinks'
+import { FieldCheck } from '../components/FieldCheck'
 import { GoogleSignInButton } from '../components/GoogleSignInButton'
 import { googleSignInError, googleSignInUrl } from '../lib/googleSignIn'
 import { useToast } from '../components/Toast'
@@ -119,22 +120,18 @@ export function LoginForm({ inviteToken, inviteHint = false }: { inviteToken?: s
       {!sentMode && <GoogleSignInButton disabled={pending} onClick={() => void continueWithGoogle()} />}
       <div className={sentMode ? 'sr-only' : 'cc-email-field'} aria-hidden={sentMode ? true : undefined}>
         <label htmlFor="email" className="sr-only">Email</label>
-        <div className="cc-email-input">
+        <div className="cc-field-input">
           <input
             ref={emailInput} id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required
             readOnly={!!sentMode} disabled={pending} tabIndex={sentMode ? -1 : undefined} value={email}
             onChange={event => setEmail(event.target.value)} className="cc-profile-input"
           />
-          {botStatus !== 'verified' && <span className={`cc-email-check cc-email-check-${botStatus}`} aria-hidden="true">
-            {botStatus === 'checking'
-              ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" opacity=".25" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
-              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 10 18H2L12 3Z" /><path d="M12 9v4m0 4h.01" /></svg>}
-          </span>}
+          <FieldCheck status={botStatus} />
         </div>
       </div>
       {sentMode === 'code' && <CodeInput value={code} onChange={setCode} />}
       <div className="cc-signin-bot">
-        <Turnstile ref={botCheck} action="signin" onToken={setBotToken} onStatus={onBotStatus} inlineFeedback={false} />
+        <Turnstile ref={botCheck} action="signin" onToken={setBotToken} onStatus={onBotStatus} />
         {botStatus === 'checking' && <span className="sr-only" role="status">Checking your browser…</span>}
         {botStatus === 'failed' && <span className="sr-only" role="alert">{botFailure}</span>}
       </div>

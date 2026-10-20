@@ -451,14 +451,14 @@
   position: relative;
 }
 
-.cc-create-name input {
-  padding-right: 80px;
+.cc-create-name .cc-field-input input {
+  padding-right: 112px;
   min-height: 50px;
 }
 
-.cc-create-name > div > span {
+#cache-name-count {
   position: absolute;
-  right: 18px;
+  right: 50px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--cc-sub);
