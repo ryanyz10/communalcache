@@ -77,7 +77,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const cache = cacheQuery.data
   const isOwner = cache.owner_id === me.id
   const attachedItemCount = cache.members.reduce((sum, member) => sum + (member.attached_item_count ?? 0), 0)
-  const cacheItems = itemsQuery.data ?? []
+  const cacheItems = (itemsQuery.data ?? []).filter(item => item.active !== false)
   const filteredItems = filterContents(cacheItems, contentsFilter, searchTerm)
   const consumableItemCount = cacheItems.filter(item => item.is_consumable).length
   const settingsPath = `/caches/${cache.id}/settings`

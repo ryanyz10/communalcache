@@ -88,7 +88,7 @@ it('commits replacement cleanup with the photo pointer and preserves current key
   expect((await intents()).results).toEqual([])
 })
 
-for (const race of ['removed','ownership_lost','item_deleted']) {
+for (const race of ['removed','ownership_lost','item_deleted','inactive']) {
   it(`rechecks guarded D1 authority after R2 put and retains rejected-key cleanup when ${race}`, async () => {
     const f = await fixture(), put = env.BUCKET.put.bind(env.BUCKET)
     vi.spyOn(env.BUCKET,'put').mockImplementation(async (key,body,options)=>{
@@ -96,6 +96,7 @@ for (const race of ['removed','ownership_lost','item_deleted']) {
       if (race==='removed') await env.DB.prepare("UPDATE memberships SET status='removed' WHERE cache_id=? AND user_id=?").bind(f.first.id,f.owner.id).run()
       if (race==='ownership_lost') await env.DB.prepare('UPDATE items SET owner_id=? WHERE id=?').bind(f.member.id,f.item.id).run()
       if (race==='item_deleted') await env.DB.prepare('DELETE FROM items WHERE id=?').bind(f.item.id).run()
+      if (race==='inactive') await env.DB.prepare('UPDATE items SET active=0 WHERE id=?').bind(f.item.id).run()
       return result
     })
     expect((await worker.fetch(upload(f.path,f.owner.cookie),env)).status).toBe(404)

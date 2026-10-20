@@ -46,7 +46,7 @@ function text(node: Element): string {
 }
 function click(node: Element) { (node.props.onClick as () => void)() }
 
-function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean; available?: boolean } = {}) {
+function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sharingLoading?: boolean; available?: boolean; active?: boolean; pendingCount?: number } = {}) {
   const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
@@ -57,7 +57,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   let sharedResult: boolean | undefined
   let elements: Element[] = [], stateIndex = 0, refIndex = 0, mutationIndex = 0
   let lastMutation: Promise<void> = Promise.resolve()
-  let libraryItem = { ...item, caches: [...item.caches] }
+  let libraryItem = { ...item, active:context.active ?? true, pending_count:context.pendingCount ?? 0, caches: [...item.caches] }
   let focus = ''
   const photo = new Blob(['resized jpeg'], { type: 'image/jpeg' })
   const resizePhoto = vi.fn(async (_file: File) => photo)
@@ -107,7 +107,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
     return element
   }
   const Null = () => null
-  const currentItem = { ...item, cache_id: context.cacheId ?? null, available: context.available ?? true }
+  const currentItem = { ...item, cache_id: context.cacheId ?? null, available: context.available ?? true, active:context.active ?? true }
   const modules: Record<string, unknown> = {
     ...toasts.modules,
     react: {
@@ -168,7 +168,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   }, module, module.exports)
   const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'availability' ? 'ItemAvailability' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'PhotoUpload']
   const props = kind === 'form' ? {
-    cacheId: context.cacheId ?? null, item: context.editing ? item : undefined,
+    cacheId: context.cacheId ?? null, item: context.editing ? currentItem : undefined,
     onStateChange: (state: typeof editorState) => { editorState = state },
     onSaved: (saved: items.Item, shared?: boolean) => { sharedResult = shared; trace.push(['saved', saved.id]) }, onCancel: () => trace.push(['cancel']),
     onBusy: (busy: boolean) => trace.push(['busy', busy]),
@@ -185,7 +185,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   function buttons() { return descendants(dialog().props.children as ReactNode).filter(node => node.type === 'button') }
   function change(id: string, value: unknown) {
     const node = elements.find(node => node.props.id === id)!
-    ;(node.props.onChange as (event: unknown) => void)({ target: id.includes('photo') ? { files: [value] } : { value } })
+    ;(node.props.onChange as (event: unknown) => void)({ target: id.includes('photo') ? { files: [value] } : id === 'item-active' ? {checked:value} : { value } })
     render()
   }
   function selectCache(id: string, checked: boolean) {
@@ -300,6 +300,65 @@ it('item overview lists only saved cache links and the edit hint, with no sharin
   expect(html).not.toMatch(/<button|aria-pressed|<dialog/)
   expect(html).toContain('to change where it&#x27;s shown')
   expect(fetch).not.toHaveBeenCalled()
+})
+
+it('Active/Inactive is a local editor draft with state-specific copy and no request until Save', async () => {
+  const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json({...item,active:false}))
+  const page=fixture('form',{editing:true})
+  expect(page.render()).toContain('Item is shown in all attached caches')
+  expect(page.editorState().dirty).toBe(false)
+  page.change('item-active',false)
+  expect(page.render()).toContain('aria-label="Inactive"')
+  expect(page.render()).toContain('Item is hidden from all caches')
+  expect(page.editorState().dirty).toBe(true)
+  expect(fetch).not.toHaveBeenCalled()
+  page.submit();await page.settled()
+  expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).toMatchObject({active:false})
+  expect(page.sharedInCurrentCache()).toBe(false)
+})
+
+it('Save confirms all-cache waiting declines before any write; Keep active restores the switch', async () => {
+  const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json({...item,active:false}))
+  const page=fixture('form',{editing:true,pendingCount:2,cacheId:cacheA.id})
+  page.change('item-active',false);page.submit();page.render()
+  expect(page.dialogModel.open).toBe(true)
+  expect(page.render()).toContain('Make Tent inactive?')
+  expect(page.render()).toContain('It disappears from Tools and Garden. 2 waiting requests will be declined.')
+  expect(page.buttons().map(text)).toEqual(['Keep active','Make inactive'])
+  expect(fetch).not.toHaveBeenCalled()
+  page.cancel();page.render()
+  expect(page.render()).toContain('aria-label="Active"')
+  page.change('item-active',false);page.submit();page.render();page.confirm();await page.settled()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  expect(page.sharedInCurrentCache()).toBe(false)
+})
+
+it('inactive editor remains editable, reactivation needs no decline confirmation and unchanged saves omit active', async () => {
+  const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json({...item,active:false}))
+  const page=fixture('form',{editing:true,active:false})
+  expect(page.render()).toContain('Item is hidden from all caches')
+  page.change('item-title','Updated');page.submit();await page.settled()
+  expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).not.toHaveProperty('active')
+  const reactivating=fixture('form',{editing:true,active:false})
+  reactivating.change('item-active',true);reactivating.submit();await reactivating.settled()
+  expect(reactivating.dialogModel.open).toBe(false)
+  expect(JSON.parse(fetch.mock.calls[1][1]?.body as string)).toMatchObject({active:true})
+})
+
+it('deactivation plus cache changes keeps partial-save recovery private and never repeats the committed PATCH', async () => {
+  let fail=true
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init) => init?.method==='PATCH'
+    ? Response.json({...item,active:false}) : fail ? Response.json({error:'not_found'},{status:404}) : new Response(null,{status:204}))
+  const page=fixture('form',{editing:true,pendingCount:2,cacheId:cacheA.id})
+  page.change('item-active',false);page.selectCache(cacheC.id,true);page.selectCache(cacheB.id,false)
+  page.submit();page.render()
+  expect(page.render()).toContain('Pending asks in these caches get declined')
+  page.confirm();await page.settled();page.render()
+  expect(page.render()).toContain('Successful changes are kept')
+  expect(page.render()).toContain('id="item-active"')
+  fail=false;page.confirm();await page.settled()
+  expect(fetch.mock.calls.filter(call=>call[1]?.method==='PATCH')).toHaveLength(1)
+  expect(page.sharedInCurrentCache()).toBe(false)
 })
 
 it('edit cache pills start from saved attachments, remain a local draft and leave on Cancel without writing', () => {

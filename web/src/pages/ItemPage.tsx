@@ -117,16 +117,17 @@ export function ItemPage() {
 
   const item = itemQuery.data
   const isOwner = item.owner_id === me.id
-  const isAvailable = item.available !== false && (!item.is_consumable || (item.available_quantity ?? 0) > 0)
+  const isAvailable = item.active !== false && item.available !== false && (!item.is_consumable || (item.available_quantity ?? 0) > 0)
   let availabilityLabel = 'No stock'
-  if (isAvailable) availabilityLabel = 'Available'
+  if (item.active === false) availabilityLabel = 'Inactive'
+  else if (isAvailable) availabilityLabel = 'Available'
   else if (item.available === false) availabilityLabel = 'Lent out'
   let contextLabel = 'Your private library'
   if (cacheId) contextLabel = cacheName
   else if (item.caches?.length) contextLabel = item.caches.map(cache => cache.name).join(' · ')
   const editPath = cacheId ? `/caches/${cacheId}/items/${itemId}/edit` : `/items/${itemId}/edit`
 
-  return <main className={`organic-item-detail${!isOwner && cacheId ? ' cc-member-item-detail' : ''}`}>
+  return <main className={`organic-item-detail${item.active === false ? ' cc-item-detail-inactive' : ''}${!isOwner && cacheId ? ' cc-member-item-detail' : ''}`}>
     <nav className="cc-item-breadcrumb" aria-label="Breadcrumb">
       <Link to={backPath}>
         {cacheId && <span aria-hidden="true" style={{ background: boxColor(cacheId) }} />}

@@ -70,6 +70,7 @@ CREATE TABLE items (
   is_consumable INTEGER NOT NULL CHECK(is_consumable IN (0,1)),
   quantity INTEGER,
   available INTEGER NOT NULL DEFAULT 1 CHECK(available IN (0,1)),
+  active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
   unavailable_note TEXT, -- Retired/unused; retained for applied-schema compatibility.
   created_at INTEGER NOT NULL, operation_token TEXT,
   CHECK(is_consumable = (quantity IS NOT NULL)),
@@ -111,6 +112,30 @@ New stock cannot fall below the all-cache pending sum. Requests deliberately do
 not FK to attachments: decided history may remain after detach/removal. Global
 item deletion snapshots recipients, then cascades request rows. Outbox must not
 FK to deleted source items/requests/memberships.
+
+Migration **0020_item_active.sql** adds only `items.active` with NOT NULL/default 1
+and a 0/1 CHECK; existing rows remain active. `itemRead` returns a boolean to owner
+library reads. `itemAccess`'s cache arm and `requestContext` require `i.active=1`;
+request creation's INSERT guard, visible cache/member counts and admin cache counts
+apply it directly. This covers cache detail/list/search inputs, item queues,
+Home current-context previews/counts and photo streaming/finalization. Owner library,
+owned totals, private photos and party-only request history remain unfiltered.
+Inactive attachment INSERTs are allowed and preserve the hidden attachment.
+
+`updateItem` deactivation combines field changes with one guarded atomic batch.
+The first owner/context-guarded `active=1→0` UPDATE records a unique operation token;
+outbox snapshots and all-cache pending rejections require that token. Rejections
+reuse `request_rejected`, the detach reason and `item_detached:true` so notifications
+lead to Requests, not the hidden item. Zero primary changes make every dependent
+write a no-op; an already-inactive transition returns 409 `item_state_changed`.
+Stock can decrease below old reservations only in this same deactivation batch,
+where all pending reservations are released. No attachment or R2 cleanup is written.
+Bounded notification IDs are queued only after commit and never returned in the
+HTTP item body; Cron rescues remaining/failed enqueues. The cache PATCH response
+for deactivation is the owner-private item; subsequent cache reads are 404.
+Reactivation and ordinary inactive field edits use a plain guarded update. An
+unchanged editor omits `active`, so editing an inactive item does not replay a
+transition or decline newly injected rows. Reactivation does not restore asks.
 
 Manual availability is only `available`, saved immediately by the owner's
 **Mark as lent out / Mark as available** button. `unavailable_note` is retired:
@@ -303,7 +328,7 @@ Stock edit is owner-only guarded UPDATE with quantity bounds AND new_quantity >=
 SUM(all pending for I), never separate read/calculation/write. Request, decision,
 stock edit and destructive batches serialize at D1 statement/batch boundaries.
 
-### Removal, detach and global deletion
+### Removal, detach, deactivation and global deletion
 
 Each operation below is **one atomic guarded batch**, not per-request awaited
 loops or paginated partial cascades. Server constructs fixed SQL statements using

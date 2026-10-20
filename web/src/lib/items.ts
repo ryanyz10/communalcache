@@ -16,6 +16,7 @@ export type Item = {
   quantity: number | null
   available_quantity?: number | null
   available?: boolean
+  active?: boolean
   created_at: number
   photo_version: string | null
 }

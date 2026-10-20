@@ -277,7 +277,11 @@ async function dispatch(request: Request, env: Env) {
       return json(await libraryPage(env.DB, profile.id, params.get('after'), params.get('filter') ?? 'all'))
     }
     if (method === 'POST') return json(await createItem(env.DB, profile.id, itemChanges(await readBody(request), true), cacheId), 201)
-    if (method === 'PATCH') return json(await updateItem(env.DB, itemId!, profile.id, itemChanges(await readBody(request), false), cacheId))
+    if (method === 'PATCH') {
+      const { notificationIds, ...item } = await updateItem(env.DB, itemId!, profile.id, itemChanges(await readBody(request), false), cacheId)
+      await enqueueNotifications(env, notificationIds)
+      return json(item)
+    }
     return json(await itemDetail(env.DB, itemId!, profile.id, cacheId))
   }
 

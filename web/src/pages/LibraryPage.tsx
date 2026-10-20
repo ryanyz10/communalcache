@@ -70,11 +70,11 @@ export function LibraryPage() {
             actionPath = `/items/${item.id}/edit`
             actionLabel = <><span className="cc-desktop-copy">Share it</span><span className="cc-phone-copy">Share</span></>
           }
-          return <li key={item.id} className="cc-library-row">
+          return <li key={item.id} className={`cc-library-row${item.active === false ? ' cc-item-inactive' : ''}`}>
             <Link className="cc-library-item-main" to={`/items/${item.id}`}>
               {!item.caches.length && !item.photo_version ? <span className="cc-unshared-tile" aria-hidden="true" /> : <ThingTile item={item} library tone="deep" />}
               <strong>{item.title}</strong>
-              <span className="cc-library-kind">{item.is_consumable ? `Give · ${item.quantity} left` : 'Lend'}</span>
+              <span className="cc-library-kind">{item.is_consumable ? `Give · ${item.quantity} left` : 'Lend'}{item.active === false && <span className="cc-inactive-tag">Inactive</span>}</span>
             </Link>
             <span className="cc-library-shared">
               {item.caches.length ? <>

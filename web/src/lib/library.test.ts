@@ -16,14 +16,15 @@ import { invalidateRequestViews } from './requests'
 const cacheId = '11111111-1111-4111-8111-111111111111'
 const item: LibraryItem = {id:'22222222-2222-4222-8222-222222222222',cache_id:null,owner_id:'owner',owner_name:'Ryan',title:'Sugar',description:'Bring a jar',is_consumable:true,quantity:8,available_quantity:5,available:false,created_at:1,photo_version:'version',caches:[{id:cacheId,name:'Maple Street'},{id:'garden',name:'Garden Club'}],pending_count:2}
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
-function render(element: ReactElement, options: { route?: string; path?: string; caller?: string; state?: 'empty' | 'loading' | 'error'; more?: boolean } = {}) {
+function render(element: ReactElement, options: { route?: string; path?: string; caller?: string; state?: 'empty' | 'loading' | 'error'; more?: boolean; inactive?: boolean } = {}) {
   const caller = options.caller ?? 'owner'
   const client = new QueryClient({defaultOptions:{queries:{retry:false,retryOnMount:false}}})
   client.setQueryData(['me'],{id:caller,display_name:'Ryan',email:'private@example.test'})
   client.setQueryData(['caches'],[{id:cacheId,name:'Maple Street'},{id:'garden',name:'Garden Club'},{id:'third',name:'Tool Shed'}])
-  client.setQueryData(['library-item','owner',item.id],item)
+  const currentItem = options.inactive ? {...item,active:false,pending_count:0} : item
+  client.setQueryData(['library-item','owner',item.id],currentItem)
   if (options.state === 'error') client.getQueryCache().build(client,{queryKey:['library',caller]}).setState({status:'error',error:new ApiError(503,'internal_error')})
-  else if (options.state !== 'loading') client.setQueryData(['library',caller],{pages:[{items:options.state === 'empty' ? [] : caller === 'owner' ? [item,{...item,id:'unshared',title:'Tent',caches:[],pending_count:0,quantity:null,is_consumable:false,available:true,photo_version:null}] : [],next_cursor:options.more?'next':null}],pageParams:[null]})
+  else if (options.state !== 'loading') client.setQueryData(['library',caller],{pages:[{items:options.state === 'empty' ? [] : caller === 'owner' ? [currentItem,{...item,id:'unshared',title:'Tent',caches:[],pending_count:0,quantity:null,is_consumable:false,available:true,photo_version:null}] : [],next_cursor:options.more?'next':null}],pageParams:[null]})
   const routes = createElement(Routes,null,createElement(Route,{path:options.route??'/',element}))
   const markup = renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,{initialEntries:[options.path??'/']},routes)})))
   client.clear()
@@ -40,6 +41,15 @@ it('renders caller library cards, names, shared stock, pending asks, private pho
   expect(markup).not.toContain('#sharing')
   expect(markup).not.toContain('/api/caches/null')
   expect(markup).not.toContain('private@example.test')
+})
+
+it('keeps inactive items greyed and tagged in the owner library while the private item controls stay usable', () => {
+  const markup=render(createElement(LibraryPage),{inactive:true})
+  expect(markup).toContain('cc-library-row cc-item-inactive')
+  expect(markup).toContain('class="cc-inactive-tag">Inactive</span>')
+  expect(markup).toContain(`/items/${item.id}`)
+  const detail=render(createElement(ItemPage),{inactive:true,route:'/items/:itemId',path:`/items/${item.id}`})
+  for (const copy of ['cc-item-detail-inactive','Inactive','Edit item','Mark as available','Upload photo']) expect(detail).toContain(copy)
 })
 
 it('separates empty, loading and error states, and does not display another account cached library', () => {

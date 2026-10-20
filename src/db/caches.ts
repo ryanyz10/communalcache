@@ -11,7 +11,7 @@ export async function listMyCaches(db: D1Database, userId: string) {
     (SELECT COUNT(*) FROM memberships WHERE cache_id=c.id AND status='active') AS active_member_count,
     (SELECT COUNT(*) FROM item_caches a JOIN items i ON i.id=a.item_id
       JOIN memberships member ON member.cache_id=a.cache_id AND member.user_id=i.owner_id AND member.status='active'
-      WHERE a.cache_id=c.id) AS attached_item_count,
+      WHERE a.cache_id=c.id AND i.active=1) AS attached_item_count,
     (SELECT COUNT(*) FROM requests r JOIN items i ON i.id=r.item_id
       WHERE r.cache_id=c.id AND i.owner_id=m.user_id AND r.status='pending' AND ${requestContext}) AS pending_answer_count,
     (SELECT json_group_array(json_object('user_id',preview.user_id,'display_name',preview.display_name,
@@ -133,7 +133,7 @@ export async function cacheDetail(db: D1Database, cacheId: string, userId: strin
     db.prepare(cacheRead).bind(userId, cacheId),
     db.prepare(`SELECT m.user_id,u.display_name,u.cat_coat,
       (SELECT COUNT(*) FROM item_caches a JOIN items i ON i.id=a.item_id
-        WHERE a.cache_id=m.cache_id AND i.owner_id=m.user_id) AS attached_item_count
+        WHERE a.cache_id=m.cache_id AND i.owner_id=m.user_id AND i.active=1) AS attached_item_count
       FROM memberships m JOIN user u ON u.id=m.user_id
       JOIN memberships caller ON caller.cache_id=m.cache_id AND caller.user_id=? AND caller.status='active'
       JOIN caches c ON c.id=m.cache_id AND c.join_secret IS NOT NULL
