@@ -186,7 +186,9 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
                 onChange={event => setSelectedCacheIds(current => event.target.checked
                   ? [...current, cache.id] : current.filter(id => id !== cache.id))}
               />
-              <span aria-hidden="true" style={{ background: boxColor(cache.id) }}>{isSelected ? '✓' : ''}</span>
+              <span aria-hidden="true" style={{ background: boxColor(cache.id) }}>
+                {isSelected && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 13 4 4L19 7" /></svg>}
+              </span>
               {cache.name}
               {cache.id === cacheId && <span className="sr-only">, shared here in the same create operation</span>}
             </label>
