@@ -80,6 +80,10 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
     let html = render(exports.get(file)![name], props, path)
       .replace(/ data-cat-backdrop="(?:ginger|grey|dusk|oat|ash|toffee)"/g, '')
       .replace(/ data-tour="(?:items|requests|account)"/g, '')
+    if (file === 'AppHeader' && path === '/items/a' && process.env.COMPONENT_PARITY_PARENT !== '1') {
+      expect(html).toContain('aria-label="Mobile navigation"')
+      html=html.replace(/<nav aria-label="Mobile navigation"[^>]*>[\s\S]*?<\/nav>/,'')
+    }
     if (file === 'Turnstile' && process.env.COMPONENT_PARITY_PARENT !== '1') {
       // Both callers now own feedback; only the old inline unavailable UI is removed.
       expect(html).toBe('<section class="mt-3" aria-label="Bot protection"><div></div></section>')

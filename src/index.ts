@@ -240,7 +240,10 @@ async function dispatch(request: Request, env: Env) {
     const params = new URL(request.url).searchParams
     const view = params.get('view')
     if (view !== null && view !== 'incoming') throw new HttpError(400, 'invalid_view')
-    return json(await (view === 'incoming' ? incomingRequestsPage : requestsPage)(env.DB, profile.id, params.get('after')))
+    if (params.has('item_id') && view !== 'incoming') throw new HttpError(400,'invalid_view')
+    return json(await (view === 'incoming'
+      ? incomingRequestsPage(env.DB, profile.id, params.get('after'), params.get('item_id'))
+      : requestsPage(env.DB, profile.id, params.get('after'))))
   }
   if (requestRoute || ownRequestRoute) {
     const requestId = requestRoute?.[2] ?? ownRequestRoute![1]

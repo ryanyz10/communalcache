@@ -40,12 +40,13 @@ export function requesterQueueLabel(request: ItemRequest, callerId: string) {
   return request.queue_position === 1 ? "You're next" : `You're ${ordinal(request.queue_position)} in line`
 }
 
-export function useRequests(enabled: boolean, view?: 'incoming') {
+export function useRequests(enabled: boolean, view?: 'incoming', itemId?: string) {
   return useInfiniteQuery({
-    queryKey: view ? ['requests', view] : ['requests'], initialPageParam: null as string | null,
+    queryKey: view ? itemId ? ['requests', view, itemId] : ['requests', view] : ['requests'], initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams()
       if (view) params.set('view', view)
+      if (itemId) params.set('item_id', itemId)
       if (pageParam) params.set('after', pageParam)
       return apiFetch<RequestsPageData>(`/api/requests${params.size ? `?${params}` : ''}`)
     },

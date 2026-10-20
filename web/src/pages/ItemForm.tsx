@@ -10,6 +10,7 @@ import { invalidateRequestViews } from '../lib/requests'
 import { LoadingStatus, Shimmer } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
+import { DeleteItem } from './DeleteItem'
 
 export type ItemEditorState = { dirty: boolean; committed: boolean }
 
@@ -268,6 +269,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         />
       </div>
     </fieldset>
+    {item && <div className="cc-item-editor-delete"><DeleteItem item={item} disabled={fieldsLocked} onBusy={onBusy} /></div>}
     {saveSnapshot?.item && saveItem.isError && <div className="cc-item-save-progress" role="status">
       <p>Your item is saved{!item && cacheId ? ' and shared here' : ' in your library'}. {saveSnapshot.photoPending ? 'The photo needs retrying.' : 'Sharing needs retrying.'}</p>
       {!!saveSnapshot.remainingCacheIds.length && <p>

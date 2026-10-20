@@ -14,6 +14,7 @@ export function AppHeader({ loading = false }: { loading?: boolean }) {
   const summaryQuery = useHomeSummary(visible && !!me?.display_name)
   if (!visible) return null
 
+  const privateItemDetail=/^\/items\/[^/]+$/.test(pathname) && pathname!=='/items/new'
   const count = summaryQuery.isError ? 0 : summaryQuery.data?.pending_answer_count ?? 0
   const identity = {
     count, userId: me?.id, name: me?.display_name ?? undefined,
@@ -31,6 +32,6 @@ export function AppHeader({ loading = false }: { loading?: boolean }) {
         </Link>
       </div>
     </header>
-    {!/^\/(?:caches\/[^/]+\/)?items\/.+/.test(pathname) && !pathname.startsWith('/requests/') && <Tabs {...identity} mobile />}
+    {(privateItemDetail || !/^\/(?:caches\/[^/]+\/)?items\/.+/.test(pathname)) && !pathname.startsWith('/requests/') && <Tabs {...identity} mobile />}
   </>
 }
