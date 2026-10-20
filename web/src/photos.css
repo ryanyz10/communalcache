@@ -1,4 +1,4 @@
-.cc-photo-picker, .cc-owner-photo .cc-photo-picker {
+.cc-photo-picker {
   position: relative;
   display: grid;
   gap: 8px;

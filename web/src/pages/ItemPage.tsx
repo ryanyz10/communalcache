@@ -7,7 +7,7 @@ import { cacheDetailQuery } from '../lib/caches'
 import { libraryItemQuery, type Item, type LibraryItem } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { OnboardingPage } from './OnboardingPage'
-import { ItemPhoto, PhotoUpload } from './ItemPhoto'
+import { ItemPhoto } from './ItemPhoto'
 import { ItemRequests } from './ItemRequests'
 import { Avatar } from '../components/Avatar'
 import { Cat } from '../components/Cat'
@@ -173,7 +173,6 @@ export function ItemPage() {
           </div>
           <ItemAvailability item={item} />
           <div id="sharing"><ShownIn item={item} /></div>
-          <PhotoUpload item={item} />
           {!cacheId && <Link to="/requests" className="cc-profile-secondary">View asks in Requests</Link>}
         </div>}
       </div>

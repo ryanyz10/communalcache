@@ -212,8 +212,8 @@ application; no column drop or legacy-value erasure is included.
 
 **Active/Inactive is separate from Lent out.** The item editor switch is a draft,
 committed with Save: Active / “Item is shown in all attached caches”; Inactive /
-“Item is hidden from all caches”. Inactive owner-library rows are greyed with an
-Inactive tag; the private item page and owner-scoped photos stay usable. Attachments
+“Item is hidden from all caches”. Inactive owner-library rows are greyed with one
+right-side Inactive status (no duplicate tag); the private item page and owner-scoped photos stay usable. Attachments
 remain and new inactive attachments are allowed. Every cache-context item read,
 photo read/finalization, request create/queue and visible cache count requires
 `items.active=1`, alongside existing membership/attachment guards. Cache access is
@@ -334,6 +334,28 @@ Unauthenticated invite holders keep the existing saved-invite sign-in flow and
 receive no preview metadata before authentication.
 
 ### Private photos
+
+Item photo changes belong to the shared create/edit form and its Save. Tap/click
+the photo or plain empty tile to choose a file; keep native image camera/library
+choices. The on-photo × discards an unsaved selection or stages saved-photo removal.
+Show only Tap the photo to replace (phone) / Click to replace (desktop), without
+upload/remove buttons or resize/helper copy below the widget. The item page only
+shows its photo/name fallback. Selection/removal is dirty local state until Save:
+metadata PATCH/POST, then upload/DELETE, then sharing. Failed photo work retains its
+blob/expected version for Retry photo; Keep current photo (edit) / Continue without
+photo (create) explicitly skips that stage without repeating committed item fields.
+This multi-call Save is not one database transaction.
+
+Owner-only `DELETE /api/me/items/{itemId}/photo` takes `{photo_version}` (the public
+UUID, never an owner/key). In one guarded D1 batch, clear the pointer only where
+owner=caller AND pointer equals the owner/item/expected-version key, recording a
+fresh token; insert one exact `scope=item` cleanup intent for that key using the
+token and real item_id. Zero primary changes insert no intent. Non-owner/missing
+item is 404; a different current photo is 409 `photo_changed`; an already-null
+owned pointer is an idempotent 204, supporting a lost successful response. Removal
+works at quota zero, retains item/attachments/requests, and never calls R2 delete
+in the handler. Existing claimed/Cron cleanup deletes bytes after commit. There is
+no cache-photo DELETE alias. Existing replacement cleanup remains unchanged.
 
 R2 has no public domain or r2.dev access. Cache photo reads use the D1 predicates
 above before streaming with private, no-store headers. Library reads authenticate
@@ -590,7 +612,7 @@ cache-local compatibility routes must not remain a second stock authority.
   Both use the full guarded cleanup batch; only cache owners may remove others,
   and owners cannot leave.
 - GET/POST /api/me/items; GET/PATCH/DELETE /api/me/items/{itemId}.
-- POST/GET /api/me/items/{itemId}/photo (owner library).
+- POST/GET/DELETE /api/me/items/{itemId}/photo (owner library; DELETE requires expected photo_version).
 - PUT/DELETE /api/me/items/{itemId}/attachments/{cacheId}.
 - GET /api/caches/{cacheId}/items; GET .../items/{itemId} and .../photo.
 - GET/POST /api/caches/{cacheId}/items/{itemId}/requests (cache-only pending queue).

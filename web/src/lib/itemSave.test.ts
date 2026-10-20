@@ -90,6 +90,43 @@ it('does not reattach unchanged edit caches or remove anything after an addition
   expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','PUT'])
   expect(state.remainingDetachIds).toEqual(['a','b'])
 })
+it('retains an exact removal intent on failure, retries DELETE without PATCH and never repeats it after later sharing failure',async()=>{
+  let deleteAttempts=0,shareAttempts=0
+  const saved={...item,photo_version:'saved-version'}
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init)=>{
+    if(init?.method==='PATCH')return Response.json(saved)
+    if(init?.method==='DELETE')return ++deleteAttempts===1?Response.json({error:'photo_changed'},{status:409}):new Response(null,{status:204})
+    return ++shareAttempts===1?Response.json({error:'not_found'},{status:404}):new Response(null,{status:204})
+  })
+  const state=progress(),edit={...input,itemId:item.id,removePhotoVersion:'saved-version',cacheIds:['a'],initialCacheIds:[]}
+  await expect(persistItem(state,edit,()=>{})).rejects.toMatchObject({status:409})
+  expect(state).toMatchObject({photoPending:true,removePhotoVersion:'saved-version',stage:'photo'})
+  await expect(persistItem(state,edit,()=>{})).rejects.toMatchObject({status:404})
+  expect(state.item?.photo_version).toBeNull()
+  await persistItem(state,edit,()=>{})
+  expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','DELETE','DELETE','PUT','PUT'])
+  expect(fetch.mock.calls[1][1]?.body).toBe('{"photo_version":"saved-version"}')
+  expect(fetch.mock.calls[2][1]?.body).toBe(fetch.mock.calls[1][1]?.body)
+})
+
+it('a replacement selection supersedes a staged removal and keeps existing replacement cleanup semantics',async()=>{
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init)=>Response.json({...item,photo_version:init?.method==='POST'?'new-version':'old-version'}))
+  const state=progress()
+  await persistItem(state,{...input,itemId:item.id,cacheIds:[],photo:new Blob(['jpeg'],{type:'image/jpeg'}),removePhotoVersion:'old-version'},()=>{})
+  expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','POST'])
+  expect(state.item?.photo_version).toBe('new-version')
+})
+
+it('can explicitly keep the current photo after failed removal and continue sharing without another photo call',async()=>{
+  const fetch=vi.spyOn(globalThis,'fetch').mockImplementation(async (_path,init)=>init?.method==='PATCH'?Response.json({...item,photo_version:'saved-version'}):init?.method==='DELETE'?Response.json({error:'photo_changed'},{status:409}):new Response(null,{status:204}))
+  const state=progress(),edit={...input,itemId:item.id,removePhotoVersion:'saved-version',cacheIds:['a'],initialCacheIds:[]}
+  await expect(persistItem(state,edit,()=>{})).rejects.toMatchObject({status:409})
+  state.photoPending=false;state.removePhotoVersion=null
+  await persistItem(state,edit,()=>{})
+  expect(fetch.mock.calls.map(call=>call[1]?.method)).toEqual(['PATCH','DELETE','PUT'])
+  expect(state.item?.photo_version).toBe('saved-version')
+})
+
 it('edits by PATCH, never creates a second item and keeps the item type out of edit input',async()=>{
   const fetch=vi.spyOn(globalThis,'fetch').mockResolvedValue(Response.json(item)),state=progress()
   await persistItem(state,{...input,itemId:item.id,cacheIds:[],body:{title:'Updated',description:null,quantity:8}},()=>{})

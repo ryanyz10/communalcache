@@ -50,6 +50,22 @@ export async function removeProfilePhoto(db: D1Database, userId: string) {
   if (!user.results.length) throw new HttpError(404,'not_found')
 }
 
+export async function removeItemPhoto(db: D1Database, itemId: string, userId: string, version: string) {
+  const token = crypto.randomUUID(), now = Date.now(), key = `${userId}/${itemId}/${version}`
+  const [removed,_cleanup,item] = await db.batch([
+    db.prepare('UPDATE items SET photo_path=NULL,operation_token=? WHERE id=? AND owner_id=? AND photo_path=?')
+      .bind(token,itemId,userId,key),
+    db.prepare(`INSERT INTO r2_cleanup(id,owner_id,item_id,kind,target,created_at,scope)
+      SELECT ?,owner_id,id,'exact',?,?,'item' FROM items WHERE id=? AND owner_id=? AND operation_token=? AND photo_path IS NULL
+      ON CONFLICT(kind,target) DO NOTHING`).bind(crypto.randomUUID(),key,now,itemId,userId,token),
+    db.prepare('SELECT photo_path FROM items WHERE id=? AND owner_id=?').bind(itemId,userId),
+  ])
+  const current = item.results[0] as {photo_path:string|null} | undefined
+  if (!current) throw new HttpError(404,'not_found')
+  // A lost successful response can be retried, but never remove a newer replacement.
+  if (removed.meta.changes === 0 && current.photo_path !== null) throw new HttpError(409,'photo_changed')
+}
+
 export async function finishItemPhoto(db: D1Database, itemId: string, userId: string, key: string, uploaded: boolean, cacheId: string | null = null) {
   const prefix = `${userId}/${itemId}/`
   if (!key.startsWith(prefix) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key.slice(prefix.length))) throw new HttpError(404, 'not_found')

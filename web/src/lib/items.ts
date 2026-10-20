@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query'
 import { apiFetch } from './api'
 import type { CatCoat } from './cats'
-import { uploadPhoto } from './photos'
+import { removeItemPhoto, uploadPhoto } from './photos'
 
 export type Item = {
   id: string
@@ -65,11 +65,11 @@ export function sharingHint(item: LibraryItem, cacheId?: string) {
 
 export type ItemSaveProgress = {
   item: Item | null; remainingCacheIds: string[]; remainingDetachIds: string[]; failedCacheId: string | null
-  photoPending: boolean; stage: 'saving' | 'photo' | 'sharing' | 'done'
+  photoPending: boolean; removePhotoVersion?: string | null; stage: 'saving' | 'photo' | 'sharing' | 'done'
 }
 
 export async function persistItem(progress: ItemSaveProgress, input: {
-  cacheId:string|null;itemId?:string;body:unknown;cacheIds:string[];initialCacheIds?:string[];photo:Blob|null
+  cacheId:string|null;itemId?:string;body:unknown;cacheIds:string[];initialCacheIds?:string[];photo:Blob|null;removePhotoVersion?:string|null
 }, changed: () => void, attachmentChanged?: (cacheId: string, shared: boolean) => void) {
   progress.failedCacheId = null
   if (!progress.item) {
@@ -81,13 +81,17 @@ export async function persistItem(progress: ItemSaveProgress, input: {
     // Keep the current route usable until every other cache change has succeeded.
     progress.remainingDetachIds = input.itemId ? initialIds.filter(id => !input.cacheIds.includes(id))
       .sort((a,b) => Number(a === input.cacheId) - Number(b === input.cacheId)) : []
-    progress.photoPending = !!input.photo
+    progress.removePhotoVersion = input.photo ? null : input.removePhotoVersion ?? null
+    progress.photoPending = !!input.photo || !!progress.removePhotoVersion
     changed()
   }
-  if (progress.photoPending && input.photo) {
+  if (progress.photoPending) {
     progress.stage='photo'; changed()
-    progress.item=await uploadPhoto(null,progress.item.id,input.photo)
-    progress.photoPending=false; changed()
+    if (progress.removePhotoVersion) {
+      await removeItemPhoto(progress.item.id,progress.removePhotoVersion)
+      progress.item={...progress.item,photo_version:null}
+    } else if (input.photo) progress.item=await uploadPhoto(null,progress.item.id,input.photo)
+    progress.photoPending=false; progress.removePhotoVersion=null; changed()
   }
   progress.stage='sharing'; changed()
   const operations = [...progress.remainingCacheIds.map(cacheId => ({cacheId,shared:true})), ...progress.remainingDetachIds.map(cacheId => ({cacheId,shared:false}))]

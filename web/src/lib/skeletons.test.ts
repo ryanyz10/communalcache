@@ -14,7 +14,7 @@ import { RequestsSkeleton, RequestDetailSkeleton } from '../components/skeletons
 import { AccountSkeleton } from '../components/skeletons/AccountSkeleton'
 import { RouteSkeleton } from '../components/skeletons/RouteSkeleton'
 import { InviteBox } from '../components/InviteBox'
-import { LoadingStatus, Shimmer, SkeletonRows } from '../components/Skeleton'
+import { LoadingStatus, LoadingLines, Shimmer, SkeletonRows } from '../components/Skeleton'
 import { hasSessionHint, setSessionHint } from './sessionHint'
 import { readFileSync } from 'node:fs'
 import { startSlowNotice, type CacheSummary } from './caches'
@@ -94,6 +94,9 @@ it('retains the pre-split markup fingerprint for every exported skeleton', () =>
       const legacy='<div class="cc-owner-availability-toggle"><span>Lent out</span>'+render(createElement(Shimmer,{width:48,height:28}))+'</div><span>Lent out note (optional)</span>'+render(createElement(Shimmer,{height:50}))+'<p class="cc-form-hint">Up to 200 characters. This blocks new requests, not existing pending requests.</p><button disabled="" class="cc-profile-secondary">Save availability</button>'
       expect(html).toContain(current)
       html=html.replace(current,legacy)
+      expect(html).not.toContain('cc-owner-photo')
+      const retiredPhoto='<section class="cc-owner-photo"><h2>Photo</h2>'+render(createElement(Shimmer,{height:48}))+render(createElement(LoadingLines,{label:'Loading photo…'}))+'</section>'
+      html=html.replace(/<\/div><\/div><\/div><\/main>$/,retiredPhoto+'</div></div></div></main>')
     }
     hash.update(name + '\0' + html + '\0')
   }

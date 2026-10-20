@@ -17,7 +17,9 @@ export function ItemEditorDialog({ children, onDismiss, busy, dirty, committed, 
     modal.showModal()
     document.documentElement.style.overflow = 'hidden'
     document.body.style.overflow = 'hidden'
-    modal.querySelector<HTMLElement>('#item-editor-heading')?.focus()
+    const heading = modal.querySelector<HTMLElement>('#item-editor-heading')
+    heading?.setAttribute('data-initial-focus','true')
+    heading?.focus()
     const viewport = window.visualViewport
     function measure() {
       modal.style.setProperty('--cc-editor-height', `${viewport?.height ?? window.innerHeight}px`)
@@ -57,6 +59,7 @@ export function ItemEditorDialog({ children, onDismiss, busy, dirty, committed, 
   }
 
   return <dialog ref={dialog} className="cc-item-editor" aria-labelledby="item-editor-heading" aria-modal="true"
+    onKeyDownCapture={() => dialog.current?.querySelector<HTMLElement>('#item-editor-heading')?.removeAttribute('data-initial-focus')}
     onCancel={event => { event.preventDefault(); dismiss() }}
     onClick={event => {
       if (event.target !== event.currentTarget) return

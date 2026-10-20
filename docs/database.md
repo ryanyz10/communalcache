@@ -201,8 +201,8 @@ approval does not clear it. No current-holder/return table or new request status
 
 ### Durable R2 cleanup
 
-R2 cannot join a D1 batch. Record cleanup in D1 alongside the photo replacement or
-item deletion; intents survive deletion and do not FK to source items.
+R2 cannot join a D1 batch. Record cleanup in D1 alongside photo replacement,
+photo removal or item deletion; intents survive deletion and do not FK to source items.
 
 ```sql
 CREATE TABLE r2_cleanup (
@@ -248,6 +248,27 @@ as the current pointer change. Claims protect both item and profile pointers;
 validators never pass user keys through item-prefix deletion. Known rejected
 uploads retain exact cleanup, including an uncertain R2 response. Profile remove
 remains allowed at quota zero. Account deletion is not added by this feature.
+
+Private item-photo removal needs no new schema. `DELETE /api/me/items/I/photo`
+requires Origin/auth/profile and a JSON `{photo_version}` UUID. The server builds
+`caller/I/version`, never accepting an owner ID or R2 key from the body. One batch:
+
+1. `UPDATE items SET photo_path=NULL,operation_token=? WHERE id=? AND owner_id=?
+   AND photo_path=?` records a fresh token only for that exact current pointer.
+2. Insert exact `r2_cleanup(scope='item', item_id=I, target=expected-key)` from the
+   item row requiring owner + token + cleared pointer. Zero first changes means
+   no intent; SQL failure rolls both statements back.
+3. Same-batch owner diagnostic: absent/non-owner 404; another current pointer 409
+   `photo_changed`; already-null owned pointer is idempotent 204. This lets a lost
+   successful response retry without erasing a newer replacement.
+
+Removal consumes no upload/plan allowance, never calls R2 directly, and preserves
+all item fields, attachments and requests. Cache photo reads then return 404.
+The editor defers upload/removal until its Save, after metadata and before sharing;
+retry retains the same Blob/expected version and skips acknowledged stages. The
+editor captures the displayed version at ×; a later metadata refetch cannot
+retarget that removal to a newer photo.
+Replacement's existing old-key cleanup and cleanup current-pointer guards remain.
 
 Owner upload checks item ownership before R2 I/O and uses a guarded finalization
 batch afterward: update photo_path only if caller still owns the item, record

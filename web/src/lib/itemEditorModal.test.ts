@@ -20,6 +20,7 @@ function dialogFixture(options: {busy?:boolean;dirty?:boolean;committed?:boolean
     dataset = {itemEditorTrigger:'new'}
     focus = vi.fn()
     setAttribute = vi.fn()
+    removeAttribute = vi.fn()
     matches = () => true
     getBoundingClientRect = () => ({left:100,right:660,top:100,bottom:700,width:560})
   }
@@ -47,13 +48,17 @@ function dialogFixture(options: {busy?:boolean;dirty?:boolean;committed?:boolean
   const cleanup = effect() as ()=>void
   const cancel = () => {const event={preventDefault:vi.fn()};(node.props.onCancel as (event:unknown)=>void)(event);return event}
   const backdrop = () => (node.props.onClick as (event:unknown)=>void)({target:modal,currentTarget:modal,clientX:0,clientY:0})
-  return {html,modal,root,body,previous,trigger,viewport,confirm,dismiss,cancel,backdrop,cleanup,style}
+  return {html,modal,root,body,previous,trigger,viewport,confirm,dismiss,cancel,backdrop,cleanup,style,heading,key:()=>{(node.props.onKeyDownCapture as ()=>void)()}}
 }
 
 it('opens a native focus-trapping dialog, locks/restores scrolling and returns focus after close', () => {
   const view = dialogFixture()
   expect(view.html).toContain('<dialog class="cc-item-editor" aria-labelledby="item-editor-heading" aria-modal="true">')
   expect(view.modal.showModal).toHaveBeenCalledOnce()
+  expect(view.heading.setAttribute).toHaveBeenCalledWith('data-initial-focus','true')
+  expect(view.heading.focus).toHaveBeenCalledOnce()
+  view.key()
+  expect(view.heading.removeAttribute).toHaveBeenCalledWith('data-initial-focus')
   expect(view.root.style.overflow).toBe('hidden');expect(view.body.style.overflow).toBe('hidden')
   expect(view.cancel().preventDefault).toHaveBeenCalledOnce();expect(view.dismiss).toHaveBeenCalledOnce()
   view.cleanup()

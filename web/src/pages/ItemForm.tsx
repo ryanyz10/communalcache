@@ -32,11 +32,18 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const [active, setActive] = useState(item?.active !== false)
   const [quantityText, setQuantityText] = useState(String(item?.quantity ?? 1))
   const photo = usePhotoSelection()
+  const [removePhotoVersion, setRemovePhotoVersion] = useState<string | null>(null)
+  const savedPhoto = item?.photo_version && !removePhotoVersion ? `/api/me/items/${item.id}/photo?v=${encodeURIComponent(item.photo_version)}` : null
+  const photoPreview = photo.preview ?? savedPhoto
+  const hasPhotoDraft = !!photo.photo || photo.processing || !!photo.error
   const photoInput = useRef<HTMLInputElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const detachDialog = useRef<HTMLDialogElement>(null)
   const knownCacheNames = useRef<Record<string,string>>({})
-  useLayoutEffect(() => { heading.current?.focus() }, [])
+  useLayoutEffect(() => {
+    heading.current?.setAttribute('data-initial-focus','true')
+    heading.current?.focus()
+  }, [])
   const [selectedCacheIds, setSelectedCacheIds] = useState<string[] | null>(null)
   const saveProgress = useRef<ItemSaveProgress>({ item: null, remainingCacheIds: [], remainingDetachIds: [], failedCacheId: null, photoPending: false, stage: 'saving' })
   const [saveSnapshot, setSaveSnapshot] = useState<ItemSaveProgress | null>(null)
@@ -73,6 +80,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         cacheIds,
         initialCacheIds: item ? initialCacheIds : undefined,
         photo: pendingPhoto,
+        removePhotoVersion,
         body: itemChanges,
       }, () => setSaveSnapshot({ ...saveProgress.current }), (id,shared) => {
         queryClient.setQueryData<LibraryItem>(['library-item', me?.id, saveProgress.current.item!.id], current => {
@@ -116,7 +124,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const selectionChanged = cacheIds.length !== savedIds.length || cacheIds.some(id => !savedIds.includes(id))
   const dirty = title !== (item?.title ?? '') || description !== (item?.description ?? '') ||
     isConsumable !== (item?.is_consumable ?? false) || active !== (item?.active !== false) || quantityText !== String(item?.quantity ?? 1) ||
-    selectionChanged || !!photo.photo || photo.processing || !!photo.error || hasCommittedItem
+    selectionChanged || hasPhotoDraft || !!removePhotoVersion || hasCommittedItem
   useEffect(() => { onStateChange?.({ dirty, committed: hasCommittedItem }) }, [dirty, hasCommittedItem, onStateChange])
   const quantity = Number(quantityText)
   const validQuantity = !isConsumable || (
@@ -137,9 +145,10 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   if (saveSnapshot?.photoPending) {
     recoveryAction = <button type="button" disabled={saveItem.isPending} className="cc-profile-secondary" onClick={() => {
       saveProgress.current.photoPending = false
+      saveProgress.current.removePhotoVersion = null
       onBusy?.(true)
       saveItem.mutate()
-    }}>Continue without photo</button>
+    }}>{item ? 'Keep current photo' : 'Continue without photo'}</button>
   } else if (saveSnapshot?.item && (saveSnapshot.remainingCacheIds.length || saveSnapshot.remainingDetachIds.length)) {
     recoveryAction = <button
       type="button"
@@ -160,20 +169,23 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
     </div>
     <div className="cc-item-editor-body">
     <fieldset disabled={fieldsLocked} className="cc-item-fields">
-      {!item && <>
-        <label className="cc-photo-picker" htmlFor="new-item-photo">
-          <PhotoPreview src={photo.preview} alt="Selected item photo preview" />
-          <strong>{photo.preview ? 'Replace selected photo' : 'Add a photo'}</strong>
-          <span>Camera or library · optional</span>
-          <input ref={photoInput} id="new-item-photo" type="file" accept="image/*" onChange={event => void photo.select(event.target.files?.[0] ?? null)} />
-        </label>
-        {(photo.photo || photo.processing || photo.error) && <button type="button" className="cc-profile-secondary" onClick={() => {
-          photo.clear()
-          if (photoInput.current) photoInput.current.value = ''
-        }}>Remove selected photo</button>}
+      <div className="cc-item-photo-field">
+        <div className="cc-item-photo-slot">
+          <label className="cc-photo-picker" htmlFor="new-item-photo">
+            <PhotoPreview src={photoPreview} alt="Selected item photo preview" />
+            <span className={photoPreview ? 'sr-only' : undefined}>{photoPreview ? 'Replace photo' : 'Add a photo'}</span>
+            <input ref={photoInput} id="new-item-photo" type="file" accept="image/*" disabled={fieldsLocked} onChange={event => void photo.select(event.target.files?.[0] ?? null)} />
+          </label>
+          {(photoPreview || hasPhotoDraft) && <button type="button" className="cc-item-photo-remove" disabled={fieldsLocked} aria-label={hasPhotoDraft ? 'Remove selected photo' : 'Remove saved photo'} onClick={() => {
+            if (hasPhotoDraft) photo.clear()
+            else setRemovePhotoVersion(item?.photo_version ?? null)
+            if (photoInput.current) photoInput.current.value = ''
+          }}>×</button>}
+        </div>
+        {photoPreview && <p className="cc-item-photo-caption"><span className="cc-phone-copy">Tap the photo to replace</span><span className="cc-desktop-copy">Click to replace</span></p>}
         {photo.processing && <p role="status">Preparing photo…</p>}
         {photo.error && <p role="alert" className="cc-form-error">{photo.error}</p>}
-      </>}
+      </div>
       {!item && <fieldset className="cc-item-kind-tabs">
         <legend className="sr-only">How would you like to share it?</legend>
         <label><input type="radio" name="item-type" checked={!isConsumable} onChange={() => setIsConsumable(false)} /><span>Lend it</span></label>
