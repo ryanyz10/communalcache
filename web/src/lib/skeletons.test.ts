@@ -14,7 +14,7 @@ import { RequestsSkeleton, RequestDetailSkeleton } from '../components/skeletons
 import { AccountSkeleton } from '../components/skeletons/AccountSkeleton'
 import { RouteSkeleton } from '../components/skeletons/RouteSkeleton'
 import { InviteBox } from '../components/InviteBox'
-import { LoadingStatus, LoadingLines, Shimmer, SkeletonRows } from '../components/Skeleton'
+import { LoadingStatus, Shimmer, SkeletonRows } from '../components/Skeleton'
 import { hasSessionHint, setSessionHint } from './sessionHint'
 import { readFileSync } from 'node:fs'
 import { startSlowNotice, type CacheSummary } from './caches'
@@ -55,7 +55,7 @@ for (const [name, element] of [
   })
 }
 
-it('retains the pre-split markup fingerprint for every exported skeleton', () => {
+it('pins reviewed skeleton markup including the redesigned private item layout', () => {
   vi.spyOn(Date.prototype, 'getHours').mockReturnValue(14)
   const retry = () => {}
   const examples: [string, ReactElement][] = [
@@ -89,18 +89,12 @@ it('retains the pre-split markup fingerprint for every exported skeleton', () =>
         .replace('</span><div class="cc-item-fields">','</span><div class="cc-item-editor-nav"><button disabled="">Cancel</button><h1>New item</h1><button disabled="">Save</button></div><div class="cc-item-fields">')
     }
     if (name === 'ItemSkeleton') {
-      expect(html).not.toContain('Lent out note')
-      const current=render(createElement(Shimmer,{width:96,height:18}))+'<button disabled="" class="cc-profile-secondary">Mark as lent out</button>'
-      const legacy='<div class="cc-owner-availability-toggle"><span>Lent out</span>'+render(createElement(Shimmer,{width:48,height:28}))+'</div><span>Lent out note (optional)</span>'+render(createElement(Shimmer,{height:50}))+'<p class="cc-form-hint">Up to 200 characters. This blocks new requests, not existing pending requests.</p><button disabled="" class="cc-profile-secondary">Save availability</button>'
-      expect(html).toContain(current)
-      html=html.replace(current,legacy)
-      expect(html).not.toContain('cc-owner-photo')
-      const retiredPhoto='<section class="cc-owner-photo"><h2>Photo</h2>'+render(createElement(Shimmer,{height:48}))+render(createElement(LoadingLines,{label:'Loading photo…'}))+'</section>'
-      html=html.replace(/<\/div><\/div><\/div><\/main>$/,retiredPhoto+'</div></div></div></main>')
+      expect(html).toContain('cc-owner-item-layout')
+      expect(html).not.toMatch(/Delete item|cc-owner-availability|cc-owner-sharing|cc-item-info-slip/)
     }
     hash.update(name + '\0' + html + '\0')
   }
-  expect(hash.digest('hex')).toBe('4b3e445bd51eded27f237ccc42a010b8e0c3f6cda84e8dad5b4550df98fb0ad8')
+  expect(hash.digest('hex')).toBe('96483723bc764441708a9b92eea0d637084966d0f525d443db7eda42da4b4926')
 })
 
 it.each([undefined, 0, 1, 30, 100])('preserves member rows and the missing-count fallback for %s', count => {

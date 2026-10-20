@@ -140,7 +140,12 @@ export async function requestsPage(db: D1Database, userId: string, after: string
   return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25 ? `${last!.created_at}.${last!.id}` : null }
 }
 
-export async function incomingRequestsPage(db: D1Database, userId: string, after: string | null) {
+export async function incomingRequestsPage(db: D1Database, userId: string, after: string | null, itemId: string | null = null) {
+  if (itemId !== null) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemId)) throw new HttpError(400,'invalid_item_id')
+    itemId=itemId.toLowerCase()
+  }
+  const itemFilter=itemId === null ? '' : 'AND r.item_id=?'
   let cursor: [number, string, number, string] | null = null
   if (after !== null) {
     const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
@@ -151,11 +156,11 @@ export async function incomingRequestsPage(db: D1Database, userId: string, after
   const rows = (await db.prepare(`WITH pending AS (
     SELECT r.id,MIN(r.created_at) OVER (PARTITION BY r.item_id) AS oldest_at,
       ROW_NUMBER() OVER (PARTITION BY r.item_id ORDER BY r.created_at,r.id) AS queue_position
-    FROM requests r JOIN items i ON i.id=r.item_id WHERE i.owner_id=? AND r.status='pending'
+    FROM requests r JOIN items i ON i.id=r.item_id WHERE i.owner_id=? AND r.status='pending' ${itemFilter}
   ) SELECT ${requestColumns},q.queue_position,q.oldest_at ${requestFrom} JOIN pending q ON q.id=r.id
     WHERE i.owner_id=? AND (? IS NULL OR (q.oldest_at,r.item_id,r.created_at,r.id)>(?,?,?,?))
     ORDER BY q.oldest_at,r.item_id,r.created_at,r.id LIMIT 26`)
-    .bind(userId,userId,cursor?.[0] ?? null,...(cursor ?? [null,null,null,null])).all<D1Request & { oldest_at: number }>()).results
+    .bind(userId,...(itemId === null ? [] : [itemId]),userId,cursor?.[0] ?? null,...(cursor ?? [null,null,null,null])).all<D1Request & { oldest_at: number }>()).results
   const page = rows.slice(0,25), last = page.at(-1)
   const requests = await requestPhotos(db,userId,page.map(({ oldest_at: _oldest, ...row }) => row))
   return { requests, unavailable_cache_ids: [], next_cursor: rows.length > 25

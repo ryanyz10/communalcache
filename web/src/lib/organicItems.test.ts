@@ -43,9 +43,10 @@ it('shows the owner cat/name tile and packing slip with a native trigger to the 
 })
 it('keeps private owner editing, manual availability, sharing and distinct destructive confirmations',()=>{
   const html=render(createElement(ItemPage),`/items/${id}`,'/items/:itemId',true)
-  for(const text of ['Edit item','Mark as lent out','Shown in','Climbing crew','Delete item','Confirm deletion','your library and every cache'])expect(html).toContain(text)
+  for(const text of ['>Edit</a>','Mark as lent out','In caches','Climbing crew','cc-owner-hero'])expect(html).toContain(text)
   expect(html).not.toContain('Ask to borrow')
   expect(html).not.toContain('Upload photo')
+  expect(html).not.toContain('Delete item')
 })
 it('keeps the new form empty, photo optional, type native, caches selectable and optional description reachable',()=>{
   const html=render(createElement(ItemEditorPage),'/items/new','/items/new')

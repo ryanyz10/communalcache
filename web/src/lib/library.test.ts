@@ -54,7 +54,7 @@ it('keeps inactive items greyed and tagged in the owner library while the privat
   expect(unshared).not.toContain('cc-inactive-tag')
   expect(markup).toContain(`/items/${item.id}`)
   const detail=render(createElement(ItemPage),{inactive:true,route:'/items/:itemId',path:`/items/${item.id}`})
-  for (const copy of ['cc-item-detail-inactive','Inactive','Edit item','Mark as available']) expect(detail).toContain(copy)
+  for (const copy of ['cc-item-detail-inactive','Inactive','>Edit</a>','Mark as available']) expect(detail).toContain(copy)
 })
 
 it('separates empty, loading and error states, and does not display another account cached library', () => {
@@ -131,7 +131,7 @@ it('keeps partial attachment successes and retries only failures, using idempote
 
 it('renders saved cache links on the overview and leaves attachment editing to the item editor', () => {
   const markup = render(createElement(ItemPage),{route:'/items/:itemId',path:`/items/${item.id}`})
-  for (const text of ['Shown in','Maple Street','Garden Club','Mark as available','Delete item','your library and every cache']) expect(markup).toContain(text)
+  for (const text of ['In caches','Maple Street','Garden Club','Mark as available']) expect(markup).toContain(text)
   const sharing = markup.match(/<ul class="cc-cache-list">([\s\S]*?)<\/ul>/)![1]
   expect(sharing).toContain(`href="/caches/${cacheId}"`)
   expect(sharing).toContain('href="/caches/garden"')
@@ -139,7 +139,8 @@ it('renders saved cache links on the overview and leaves attachment editing to t
   expect(markup).not.toContain('Confirm stop sharing')
   expect(markup).not.toContain('role="switch"')
   expect(markup).toContain(`/items/${item.id}/edit`)
-  expect(markup).toContain('View asks in Requests')
+  expect(markup).not.toContain('View asks in Requests')
+  expect(markup).not.toContain('Delete item')
   expect(markup).not.toContain('Ask to borrow')
   const other = render(createElement(ItemPage),{caller:'other',route:'/items/:itemId',path:`/items/${item.id}`})
   expect(other).not.toContain('Sugar')
