@@ -43,7 +43,7 @@ export function LibraryPage() {
         <h1>{me.display_name}'s things</h1>
         {totals && <p>{totals.total_count} {totals.total_count === 1 ? 'thing' : 'things'} · <span className="cc-desktop-copy">shared </span>in {totals.shared_cache_count} {totals.shared_cache_count === 1 ? 'cache' : 'caches'}<span className="cc-desktop-copy"> · one stock count each</span></p>}
       </div>
-      <Link to="/items/new" className="cc-library-new">+ New item</Link>
+      <Link to="/items/new" state={{ itemEditor: true }} data-item-editor-trigger="new" className="cc-library-new">+ New item</Link>
     </div>
     <section aria-label="Your items" className="cc-library-contents">
       <div className="cc-library-filters" role="group" aria-label="Filter your items">
@@ -90,7 +90,8 @@ export function LibraryPage() {
                 <span className="cc-desktop-copy"><ThingStatus item={item} pending={item.pending_count} quantityAsStatus={false} /></span>
               </>}
             </span>
-            <Link className={`cc-library-row-action${item.pending_count ? ' cc-library-review' : ''}${!item.caches.length ? ' cc-library-share' : ''}`} to={actionPath}>
+            <Link className={`cc-library-row-action${item.pending_count ? ' cc-library-review' : ''}${!item.caches.length ? ' cc-library-share' : ''}`} to={actionPath}
+              state={actionPath.endsWith('/edit') ? { itemEditor: true } : undefined} data-item-editor-trigger={actionPath.endsWith('/edit') ? item.id : undefined}>
               {actionLabel}<span className="sr-only"> {item.title}</span>
             </Link>
           </li>
@@ -98,7 +99,7 @@ export function LibraryPage() {
           {(libraryQuery.isSuccess || libraryQuery.hasNextPage) && !items.length && <li className="cc-list-empty">
             {libraryQuery.hasNextPage ? <p role="status">Showing matches from {loadedItems.length} loaded items. Load more to include the rest.</p> : <>
               <p>{totals?.total_count ? 'No items match this filter.' : 'No items yet. Add something you can lend or give away.'}</p>
-              <Link to="/items/new" className="cc-text-action">+ New item</Link>
+              <Link to="/items/new" state={{ itemEditor: true }} data-item-editor-trigger="new" className="cc-text-action">+ New item</Link>
             </>}
           </li>}
         </ul>

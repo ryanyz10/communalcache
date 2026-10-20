@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
@@ -11,16 +11,18 @@ import { LoadingStatus, Shimmer } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
 
+export type ItemEditorState = { dirty: boolean; committed: boolean }
+
 type ItemFormProps = {
   cacheId: string | null
   item?: Item
   onSaved: (item: Item) => void
   onCancel: () => void
   onBusy?: (busy: boolean) => void
-  embedded?: boolean
+  onStateChange?: (state: ItemEditorState) => void
 }
 
-export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = false }: ItemFormProps) {
+export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChange }: ItemFormProps) {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
   const { me } = useAuth()
@@ -30,6 +32,8 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
   const [quantityText, setQuantityText] = useState(String(item?.quantity ?? 1))
   const photo = usePhotoSelection()
   const photoInput = useRef<HTMLInputElement>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  useLayoutEffect(() => { heading.current?.focus() }, [])
   const [selectedCacheIds, setSelectedCacheIds] = useState<string[]>(cacheId ? [cacheId] : [])
   const saveProgress = useRef<ItemSaveProgress>({ item: null, remainingCacheIds: [], photoPending: false, stage: 'saving' })
   const [saveSnapshot, setSaveSnapshot] = useState<ItemSaveProgress | null>(null)
@@ -72,6 +76,11 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
 
   const hasCommittedItem = !!saveSnapshot?.item
   const fieldsLocked = saveItem.isPending || hasCommittedItem
+  const selectionChanged = !item && (selectedCacheIds.length !== (cacheId ? 1 : 0) || (!!cacheId && !selectedCacheIds.includes(cacheId)))
+  const dirty = title !== (item?.title ?? '') || description !== (item?.description ?? '') ||
+    isConsumable !== (item?.is_consumable ?? false) || quantityText !== String(item?.quantity ?? 1) ||
+    selectionChanged || !!photo.photo || photo.processing || !!photo.error || hasCommittedItem
+  useEffect(() => { onStateChange?.({ dirty, committed: hasCommittedItem }) }, [dirty, hasCommittedItem, onStateChange])
   const quantity = Number(quantityText)
   const validQuantity = !isConsumable || (
     quantityText !== '' && Number.isInteger(quantity) && quantity >= 0 && quantity <= 9999
@@ -79,7 +88,6 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
   const submitDisabled = saveItem.isPending || photo.processing || !!photo.error || !title.trim() || !validQuantity
   let submitLabel = 'Save'
   if (saveSnapshot?.item) submitLabel = saveSnapshot.photoPending ? 'Retry photo' : 'Retry sharing'
-  else if (embedded) submitLabel = item ? 'Save item' : 'Create and add here'
   const saveError = errorMessage(saveItem.error)
   const orderedCaches = cachesQuery.data && [...cachesQuery.data].sort((a, b) =>
     Number(selectedCacheIds.includes(b.id)) - Number(selectedCacheIds.includes(a.id)),
@@ -99,18 +107,15 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
       className="cc-profile-secondary"
       onClick={() => onSaved(saveSnapshot.item!)}
     >Keep item without remaining shares</button>
-  } else if (!saveSnapshot?.item) {
-    recoveryAction = <button type="button" disabled={saveItem.isPending} onClick={onCancel} className="cc-profile-secondary">
-      Cancel
-    </button>
   }
 
-  return <form className={`cc-item-form${embedded ? ' cc-item-form-embedded' : ''}`} onSubmit={submit}>
-    {!embedded && <div className="cc-item-editor-nav">
-      <button type="button" disabled={fieldsLocked} onClick={onCancel}>Cancel</button>
-      <h1>{item ? 'Edit item' : 'New item'}</h1>
-      <button type="submit" disabled={submitDisabled}>{saveItem.isPending ? 'Saving…' : submitLabel}</button>
-    </div>}
+  return <form className="cc-item-form" onSubmit={submit}>
+    <div className="cc-item-editor-header">
+      <button type="button" className="cc-item-editor-phone" disabled={saveItem.isPending} onClick={onCancel}>Cancel</button>
+      <h2 ref={heading} id="item-editor-heading" tabIndex={-1}>{item ? 'Edit item' : 'New item'}</h2>
+      <button type="submit" className="cc-item-editor-phone" disabled={submitDisabled}>{saveItem.isPending ? 'Saving…' : submitLabel}</button>
+    </div>
+    <div className="cc-item-editor-body">
     <fieldset disabled={fieldsLocked} className="cc-item-fields">
       {!item && <>
         <label className="cc-photo-picker" htmlFor="new-item-photo">
@@ -136,7 +141,6 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
       <div className="cc-item-title-field">
         <label htmlFor="item-title">What is it?</label>
         <input
-          autoFocus={!!item}
           id="item-title"
           type="text"
           required
@@ -213,9 +217,11 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, embedded = 
       </p>}
     </div>}
     {saveItem.isError && !transientActionFailure(saveItem.error) && <p role="alert" className="cc-form-error">{saveError}</p>}
-    {(embedded || saveSnapshot?.item) && <div className="cc-item-save-actions" data-recovery={saveItem.isError && !!recoveryAction}>
+    {saveItem.isError && recoveryAction && <div className="cc-item-recovery-actions">{recoveryAction}</div>}
+    </div>
+    <div className="cc-item-editor-desktop-actions">
+      <button type="button" disabled={saveItem.isPending} onClick={onCancel} className="cc-profile-secondary">Cancel</button>
       <button type="submit" disabled={submitDisabled} className="cc-profile-primary">{saveItem.isPending ? 'Saving…' : submitLabel}</button>
-      {recoveryAction}
-    </div>}
+    </div>
   </form>
 }

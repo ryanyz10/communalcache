@@ -46,11 +46,14 @@ function text(node: Element): string {
 }
 function click(node: Element) { (node.props.onClick as () => void)() }
 
-function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; embedded?: boolean } = {}) {
+function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean } = {}) {
   const toasts = toastFixture()
   const trace: unknown[][] = []
   const states: unknown[] = [], refs: { current: unknown }[] = []
   const mutations: { options: MutationOptions; pending: boolean; error: unknown; success: boolean; api: object }[] = []
+  const effects: {dependencies: unknown[]; cleanup?: () => void}[] = []
+  let pendingEffects: (() => void)[] = [], effectIndex = 0
+  let editorState = {dirty:false,committed:false}
   let elements: Element[] = [], stateIndex = 0, refIndex = 0, mutationIndex = 0
   let lastMutation: Promise<void> = Promise.resolve()
   let libraryItem = { ...item, caches: [...item.caches] }
@@ -107,7 +110,12 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
   const modules: Record<string, unknown> = {
     ...toasts.modules,
     react: {
-      ...React, useEffect: () => {},
+      ...React,
+      useEffect(effect: () => (() => void) | void, dependencies: unknown[]) {
+        const index = effectIndex++, previous = effects[index]
+        if (previous && dependencies.every((value, slot) => Object.is(value, previous.dependencies[slot]))) return
+        pendingEffects.push(() => { previous?.cleanup?.(); effects[index] = {dependencies,cleanup:effect() ?? undefined} })
+      },
       useState(initial: unknown) {
         const index = stateIndex++
         if (!(index in states)) states[index] = initial
@@ -159,15 +167,17 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
   }, module, module.exports)
   const component = module.exports[kind === 'delete' ? 'ItemPage' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : kind === 'add' ? 'AddItemSheet' : 'PhotoUpload']
   const props = kind === 'form' ? {
-    cacheId: context.cacheId ?? null, item: context.editing ? item : undefined, embedded: context.embedded,
+    cacheId: context.cacheId ?? null, item: context.editing ? item : undefined,
+    onStateChange: (state: typeof editorState) => { editorState = state },
     onSaved: (saved: items.Item) => trace.push(['saved', saved.id]), onCancel: () => trace.push(['cancel']),
     onBusy: (busy: boolean) => trace.push(['busy', busy]),
   } : kind === 'delete' ? {} : kind === 'add' ? { cacheId: cacheA.id, cacheName: cacheA.name, dialog: {current: dialogModel} } : { item: currentItem }
   function render() {
-    elements = []; stateIndex = 0; refIndex = 0; mutationIndex = 0
+    elements = []; stateIndex = 0; refIndex = 0; mutationIndex = 0; effectIndex = 0; pendingEffects = []
     const html = renderToStaticMarkup(createElement(Router.MemoryRouter, null, createElement(React.Fragment, null, createElement(component as React.ComponentType<Record<string, unknown>>, props), toasts.element())))
     for (const node of elements.filter(node => node.type === 'dialog')) (node.props.ref as { current: unknown }).current = dialogModel
     for (const node of elements.filter(node => node.type === 'input' && node.props.ref)) (node.props.ref as { current: unknown }).current = inputModel
+    pendingEffects.forEach(effect => effect())
     return html
   }
   function dialog() { return elements.find(node => node.type === 'dialog' && node.props['aria-labelledby'] === label)! }
@@ -207,7 +217,8 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; emb
     settled: () => lastMutation, focus: () => focus, libraryItem: () => libraryItem,
     async prepared() { for (let index = 0; index < 5; index++) await Promise.resolve(); return render() },
     preview: () => elements.find(node => String(node.props.alt).startsWith('Selected'))!,
-    saveActions: () => elements.find(node => node.props.className === 'cc-item-save-actions'),
+    recoveryActions: () => elements.find(node => node.props.className === 'cc-item-recovery-actions'),
+    editorState: () => editorState,
     cancel: () => click(buttons()[0]), confirm: () => click(buttons()[1]),
     row: (title: string) => elements.find(node => node.type === 'button' && node.props.className === 'cc-select-row' && text(node).startsWith(title))!,
     button: (label: string) => elements.find(node => node.type === 'button' && text(node) === label)!,
@@ -357,38 +368,56 @@ it('existing-item row buttons toggle locally, keep already-shared rows disabled 
   expect(fetch.mock.calls.map(call => call[0])).toEqual(['unshared','other','other'].map(id => `/api/me/items/${id}/attachments/${cacheA.id}`))
 })
 
-it.each([false, true])('marks only failed-save recovery while retaining embedded controls (embedded=%s)', async embedded => {
+it('reports field, cache and photo drafts without saving, and clears dirty state when edits are undone', async () => {
+  const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('form')
+  expect(page.editorState()).toEqual({dirty:false,committed:false})
+  page.change('item-title','Tent'); expect(page.editorState().dirty).toBe(true)
+  page.change('item-title',''); expect(page.editorState().dirty).toBe(false)
+  page.selectCache(cacheA.id,true); expect(page.editorState().dirty).toBe(true)
+  page.selectCache(cacheA.id,false); expect(page.editorState().dirty).toBe(false)
+  page.change('new-item-photo',new File(['png'],'photo.png'))
+  await page.prepared(); expect(page.editorState().dirty).toBe(true)
+  click(page.button('Remove selected photo')); page.render()
+  expect(page.editorState().dirty).toBe(false)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('cache New item closes the chooser and opens the shared editor route without creating anything', () => {
+  const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('add')
+  click(page.button('New item'))
+  expect(page.trace).toEqual([['close','add-items-heading'],['navigate',`/caches/${cacheA.id}/items/new`,{state:{itemEditor:true}}]])
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('keeps sharing recovery inside the scroll body without duplicate mobile save actions', async () => {
   let created!: (response: Response) => void, attached!: (response: Response) => void
   const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(path => new Promise(resolve => {
     if (path === '/api/me/items') created = resolve
     else attached = resolve
   }))
-  const page = fixture('form', { embedded })
+  const page = fixture('form')
+  expect(page.editorState()).toEqual({dirty:false,committed:false})
   page.change('item-title', 'Tent'); page.selectCache(cacheA.id, true)
-  expect(page.saveActions()?.props['data-recovery']).toBe(embedded ? false : undefined)
-  expect(page.render().match(/class="cc-item-editor-nav"/g) ?? []).toHaveLength(embedded ? 0 : 1)
-
+  expect(page.editorState()).toEqual({dirty:true,committed:false})
+  expect(page.recoveryActions()).toBeUndefined()
+  expect(page.render()).toContain('cc-item-editor-header')
+  expect(page.render()).toContain('cc-item-editor-desktop-actions')
   page.submit(); page.render()
-  expect(page.saveActions()?.props['data-recovery']).toBe(embedded ? false : undefined)
   created(Response.json(item))
   await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
   page.render()
-  expect(page.saveActions()!.props['data-recovery']).toBe(false)
-  expect(descendants(page.saveActions()!.props.children as ReactNode).filter(node => node.type === 'button').map(node => [text(node), node.props.disabled])).toEqual([
-    ['Saving…', true], ['Keep item without remaining shares', true],
-  ])
-
+  expect(page.editorState()).toEqual({dirty:true,committed:true})
+  expect(page.recoveryActions()).toBeUndefined()
   attached(Response.json({ error: 'internal_error' }, { status: 503 }))
   await page.settled(); page.render()
-  expect(page.saveActions()!.props['data-recovery']).toBe(true)
-  expect(descendants(page.saveActions()!.props.children as ReactNode).filter(node => node.type === 'button').map(node => [text(node), node.props.disabled])).toEqual([
-    ['Retry sharing', false], ['Keep item without remaining shares', false],
-  ])
+  expect(page.recoveryActions()).toBeDefined()
+  expect(descendants(page.recoveryActions()!.props.children as ReactNode).filter(node => node.type === 'button').map(text)).toEqual(['Keep item without remaining shares'])
+  expect(page.render()).toContain('Retry sharing')
   page.submit(); page.render()
-  expect(page.saveActions()!.props['data-recovery']).toBe(false)
+  expect(page.recoveryActions()).toBeUndefined()
   attached(new Response(null, { status: 204 }))
   await page.settled(); page.render()
-  expect(page.saveActions()!.props['data-recovery']).toBe(false)
+  expect(page.recoveryActions()).toBeUndefined()
   expect(fetch.mock.calls.filter(call => call[0] === '/api/me/items')).toHaveLength(1)
   expect(page.trace.filter(row => row[0] === 'saved')).toEqual([['saved', item.id]])
 })
@@ -409,7 +438,7 @@ it('preserves save→failed photo→photo retry→partial sharing→sharing retr
   expect(page.render()).not.toContain('photo.png')
   page.submit(); await page.settled()
   expect(page.render()).toContain('Retry photo')
-  expect(page.saveActions()!.props['data-recovery']).toBe(true)
+  expect(page.recoveryActions()).toBeDefined()
   expect(page.render()).toContain('<fieldset disabled="" class="cc-item-fields"')
   page.submit(); await page.settled(); expect(page.render()).toContain('Retry sharing')
   expect(page.render()).toContain('Garden. Already shared caches are kept.')

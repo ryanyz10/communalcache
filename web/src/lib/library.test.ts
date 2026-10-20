@@ -85,17 +85,15 @@ it('does not reuse another account or cache-context detail through denial, refet
 it('offers existing/new sources in one labeled native sheet, with attached item rows pressed and disabled and other sharing hints', () => {
   const markup = render(createElement(AddItemSheet,{cacheId,cacheName:'Maple Street',dialog:createRef<HTMLDialogElement>()}))
   expect(markup.match(/<dialog\b/g)).toHaveLength(1)
-  for (const copy of ['Add to Maple Street','Your items','New item','Already here','Not shared yet','Add 0 to Maple Street','Creates it in your library','Create and add here']) expect(markup).toContain(copy)
+  for (const copy of ['Add to Maple Street','Your items','New item','Already here','Not shared yet','Add 0 to Maple Street']) expect(markup).toContain(copy)
   expect(markup).toMatch(/<button(?=[^>]*class="cc-select-row")(?=[^>]*aria-pressed="true")(?=[^>]*disabled="")[^>]*>/)
   const choices = markup.match(/<ul class="cc-add-selection">([\s\S]*?)<\/ul>/)![1]
   expect(choices).toContain('aria-pressed="false"')
   expect(choices).not.toMatch(/<input|<svg/)
   expect(markup).toContain('aria-label="Choose item source"')
   expect(markup).toContain('aria-pressed="true"')
-  expect(markup).toContain('for="new-item-photo"')
-  expect(markup).toContain('for="item-title"')
-  expect(markup).toContain('Lend it')
-  expect(markup).toContain('Give it away')
+  expect(markup).not.toContain('id="item-title"')
+  expect(markup).toContain('aria-haspopup="dialog"')
   expect(sharingHint({...item,caches:[{id:'garden',name:'Garden Club'}]},cacheId)).toBe('In Garden Club')
 })
 

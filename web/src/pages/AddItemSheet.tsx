@@ -1,11 +1,10 @@
 import { useState, type RefObject } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { errorMessage } from '../lib/api'
 import { attachSelected, sharingHint, useLibrary } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
-import { ItemForm } from './ItemForm'
 import { SkeletonRows, LoadingStatus, Shimmer } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
@@ -20,11 +19,9 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
   const { me } = useAuth()
   const queryClient = useQueryClient()
   const libraryQuery = useLibrary(me?.display_name ? me.id : undefined)
-  const [sourceTab, setSourceTab] = useState<'existing' | 'new'>('existing')
+  const navigate = useNavigate()
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([])
   const [attachedItemIds, setAttachedItemIds] = useState<string[]>([])
-  const [isCreating, setIsCreating] = useState(false)
-  const [formVersion, setFormVersion] = useState(0)
   const { showToast } = useToast()
   const libraryItems = libraryQuery.data?.pages.flatMap(page => page.items) ?? []
   const addItems = useMutation({
@@ -39,7 +36,7 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
     onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: () => invalidateRequestViews(queryClient),
   })
-  const isBusy = addItems.isPending || isCreating
+  const isBusy = addItems.isPending
 
   return <dialog
     ref={dialog}
@@ -49,8 +46,6 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
     onClose={() => {
       setSelectedItemIds([])
       setAttachedItemIds([])
-      setSourceTab('existing')
-      setFormVersion(version => version + 1)
       addItems.reset()
     }}
   >
@@ -69,20 +64,23 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
     <div className="cc-add-source-tabs" role="group" aria-label="Choose item source">
       <button
         type="button"
-        aria-pressed={sourceTab === 'existing'}
+        aria-pressed={true}
         disabled={isBusy}
-        onClick={() => setSourceTab('existing')}
-        className={sourceTab === 'existing' ? 'cc-pill' : 'cc-outline'}
+        className="cc-pill"
       >Your items</button>
       <button
         type="button"
-        aria-pressed={sourceTab === 'new'}
+        aria-haspopup="dialog"
         disabled={isBusy}
-        onClick={() => setSourceTab('new')}
-        className={sourceTab === 'new' ? 'cc-pill' : 'cc-outline'}
+        onClick={() => {
+          if (selectedItemIds.length && !window.confirm('Leave the remaining item selection? Items already added are kept.')) return
+          dialog.current?.close()
+          navigate(`/caches/${cacheId}/items/new`, { state: { itemEditor: true } })
+        }}
+        className="cc-outline"
       >New item</button>
     </div>
-    <div hidden={sourceTab !== 'existing'} className="cc-add-existing">
+    <div className="cc-add-existing">
       <p className="mt-4 text-sm text-slate-600">Pick things you already own. Same item, one shared stock count.</p>
       {libraryQuery.isPending && <SkeletonRows label="Loading your items…" kind="plain" />}
       {libraryQuery.isError && <div className="mt-4">
@@ -133,17 +131,6 @@ export function AddItemSheet({ cacheId, cacheName, dialog }: AddItemSheetProps) 
       >
         {addItems.isPending ? 'Adding…' : `Add ${selectedItemIds.length} to ${cacheName}`}
       </button>
-    </div>
-    <div hidden={sourceTab !== 'new'} className="cc-add-new">
-      <p className="mt-4 text-sm text-slate-600">Creates it in your library and shares it here in one step.</p>
-      <ItemForm
-        key={formVersion}
-        cacheId={cacheId}
-        embedded
-        onBusy={setIsCreating}
-        onSaved={() => { dialog.current?.close(); setSourceTab('existing') }}
-        onCancel={() => dialog.current?.close()}
-      />
     </div>
   </dialog>
 }

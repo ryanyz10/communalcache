@@ -1,17 +1,25 @@
-import { Link, Navigate, useNavigate, useParams } from 'react-router'
+import { useState } from 'react'
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { cacheDetailQuery } from '../lib/caches'
 import { libraryItemQuery, type Item } from '../lib/items'
 import { OnboardingPage } from './OnboardingPage'
-import { ItemForm } from './ItemForm'
-import { ItemEditorSkeleton } from '../components/skeletons/ItemSkeletons'
+import { ItemForm, type ItemEditorState } from './ItemForm'
+import { ItemPage } from './ItemPage'
+import { LibraryPage } from './LibraryPage'
+import { CachePage } from './CachePage'
+import { ItemEditorDialog } from '../components/ItemEditorDialog'
+import { LoadingStatus } from '../components/Skeleton'
 
 export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   const { cacheId, itemId = '' } = useParams()
   const { me } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [busy, setBusy] = useState(false)
+  const [state, setState] = useState<ItemEditorState>({ dirty: false, committed: false })
   const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me?.display_name })
   const itemQuery = useQuery<Item>({
     ...(cacheId ? {
@@ -28,26 +36,35 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
 
   const readError = (cacheId ? cacheQuery.error : null) ?? (editing ? itemQuery.error : null)
   const isLoading = (!!cacheId && cacheQuery.isPending) || (editing && itemQuery.isPending)
-  if (isLoading && !readError) return <ItemEditorSkeleton editing={editing} />
+  const cancelPath = editing ? (cacheId ? `/caches/${cacheId}/items/${itemId}` : `/items/${itemId}`) : backPath
+  const formKey = editing ? itemId : `new:${cacheId ?? 'library'}`
+  function close() {
+    if (location.state?.itemEditor === true) navigate(-1)
+    else navigate(cancelPath, { replace: true })
+  }
 
-  let cancelPath = backPath
-  if (editing) cancelPath = cacheId ? `/caches/${cacheId}/items/${itemId}` : `/items/${itemId}`
-
-  return <main className="organic-item-editor">
-    {readError && <div>
-      <p role="alert" className="cc-form-error">{errorMessage(readError)}</p>
-      <button className="cc-text-action" onClick={() => {
-        if (cacheId) void cacheQuery.refetch()
-        if (editing) void itemQuery.refetch()
-      }}>Try again</button>
-      <Link to={backPath}>Cancel</Link>
-    </div>}
-    {!isLoading && !readError && <ItemForm
-      key={editing ? itemId : `new:${cacheId ?? 'library'}`}
-      cacheId={cacheId ?? null}
-      item={editing ? itemQuery.data : undefined}
-      onSaved={saved => navigate(cacheId ? `/caches/${cacheId}/items/${saved.id}` : `/items/${saved.id}`)}
-      onCancel={() => navigate(cancelPath)}
-    />}
-  </main>
+  return <>
+    {editing ? <ItemPage /> : cacheId ? <CachePage /> : <LibraryPage />}
+    <ItemEditorDialog key={formKey} onDismiss={close} busy={busy} dirty={state.dirty} committed={state.committed} returnFocus={editing ? itemId : 'new'}>
+      {dismiss => isLoading || readError ? <div className="cc-item-editor-state">
+        <h2 id="item-editor-heading" tabIndex={-1}>{editing ? 'Edit item' : 'New item'}</h2>
+        {readError ? <>
+          <p role="alert" className="cc-form-error">{errorMessage(readError)}</p>
+          <button type="button" className="cc-profile-primary" onClick={() => {
+            if (cacheId) void cacheQuery.refetch()
+            if (editing) void itemQuery.refetch()
+          }}>Try again</button>
+        </> : <LoadingStatus label="Loading item editor…" />}
+        <button type="button" className="cc-profile-secondary" onClick={dismiss}>Cancel</button>
+      </div> : <ItemForm
+        key={formKey}
+        cacheId={cacheId ?? null}
+        item={editing ? itemQuery.data : undefined}
+        onSaved={saved => navigate(cacheId ? `/caches/${cacheId}/items/${saved.id}` : `/items/${saved.id}`, { replace: true })}
+        onCancel={dismiss}
+        onBusy={setBusy}
+        onStateChange={setState}
+      />}
+    </ItemEditorDialog>
+  </>
 }
