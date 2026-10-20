@@ -157,7 +157,7 @@ export function HomePage() {
               <ThingStatus item={item} pending={item.is_consumable ? 0 : item.pending_count} compact />
             </Link>
           </li>)}
-          {libraryQuery.isSuccess && !previewItems.length && <li className="cc-list-empty"><p>No things yet.</p><div><Link to="/items/new">+ New item</Link></div></li>}
+          {libraryQuery.isSuccess && !previewItems.length && <li className="cc-list-empty"><p>No things yet.</p><div><Link to="/items/new" state={{ itemEditor: true }} data-item-editor-trigger="new">+ New item</Link></div></li>}
         </ul>}
       </section>
       <section aria-labelledby="your-asks-heading">

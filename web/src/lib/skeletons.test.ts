@@ -78,7 +78,18 @@ it('retains the pre-split markup fingerprint for every exported skeleton', () =>
     ['RouteSkeleton', createElement(RouteSkeleton, { pathname: `/caches/${id}` })],
   ]
   const hash = createHash('sha256')
-  for (const [name, element] of examples) hash.update(name + '\0' + render(element) + '\0')
+  for (const [name, element] of examples) {
+    let html = render(element)
+    if (name === 'ItemEditorSkeleton') {
+      // Startup no longer mimics a full-page editor; keep every other legacy byte pinned.
+      expect(html).toContain('class="cc-page cc-page-skeleton"')
+      expect(html).not.toContain('<button')
+      html = html.replace('class="cc-page cc-page-skeleton"','class="organic-item-editor cc-page-skeleton"')
+        .replace('<h1>New item</h1>','')
+        .replace('</span><div class="cc-item-fields">','</span><div class="cc-item-editor-nav"><button disabled="">Cancel</button><h1>New item</h1><button disabled="">Save</button></div><div class="cc-item-fields">')
+    }
+    hash.update(name + '\0' + html + '\0')
+  }
   expect(hash.digest('hex')).toBe('4b3e445bd51eded27f237ccc42a010b8e0c3f6cda84e8dad5b4550df98fb0ad8')
 })
 

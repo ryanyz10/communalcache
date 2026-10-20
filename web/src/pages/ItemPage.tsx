@@ -193,7 +193,7 @@ export function ItemPage() {
         {cacheId && <ItemRequests item={item} compact askOpen={isAskOpen} onAskClose={() => setIsAskOpen(false)} cacheName={cacheQuery.data?.name} />}
         {isOwner && <div className="cc-owner-item-controls">
           <div className="cc-inline-actions">
-            <Link to={editPath} className="cc-profile-primary">Edit item</Link>
+            <Link to={editPath} state={{ itemEditor: true }} data-item-editor-trigger={item.id} className="cc-profile-primary">Edit item</Link>
             <DeleteItem item={item} />
           </div>
           <ItemAvailability key={`${item.id}:${item.available}:${item.unavailable_note ?? ''}`} item={item} />

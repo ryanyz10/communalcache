@@ -53,13 +53,9 @@ export function ItemSkeleton({ cacheId }: { cacheId?: string }) {
 }
 
 export function ItemEditorSkeleton({ editing = false }: { editing?: boolean }) {
-  return <main className="organic-item-editor cc-page-skeleton" data-skeleton="editor" aria-busy="true">
+  return <main className="cc-page cc-page-skeleton" data-skeleton="editor" aria-busy="true">
+    <h1>{editing ? 'Edit item' : 'New item'}</h1>
     <LoadingStatus label="Loading item form…" />
-    <div className="cc-item-editor-nav">
-      <button disabled>Cancel</button>
-      <h1>{editing ? 'Edit item' : 'New item'}</h1>
-      <button disabled>Save</button>
-    </div>
     <div className="cc-item-fields">
       {!editing && <Shimmer height={150} className="cc-skeleton-field" />}
       <Shimmer height={editing ? 20 : 46} />

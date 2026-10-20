@@ -52,6 +52,8 @@ it('keeps the new form empty, photo optional, type native, caches selectable and
   expect(html).not.toContain('One item, one stock count')
   expect(html).not.toContain('value="Mason jars"')
   expect(html).not.toContain('private@example.com')
+  expect(html).toContain('<dialog class="cc-item-editor"')
+  expect(html).toContain('class="organic-library"')
 })
 it('uses accessible cache pills with segment colors and no checkbox indicators', () => {
   const unchecked = render(createElement(ItemEditorPage), '/items/new', '/items/new')

@@ -93,6 +93,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
     {!itemsMoving && <button
       type="button"
       className="cc-cache-add"
+      data-item-editor-trigger="new"
       onClick={() => addItemDialog.current?.showModal()}
     >
       + Add item
