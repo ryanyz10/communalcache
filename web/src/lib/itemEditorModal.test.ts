@@ -43,17 +43,19 @@ function dialogFixture(options: {busy?:boolean;dirty?:boolean;committed?:boolean
     react:{...React,useRef:() => ({current:modal}),useLayoutEffect:(callback:typeof effect) => {effect=callback}},
     'react/jsx-runtime':{jsx:(...args:Parameters<typeof jsx>) => {const next=jsx(...args);if(args[0]==='dialog')node=next as typeof node;return next},jsxs},
   })
+  let close!:()=>void
   const html = renderToStaticMarkup(React.createElement(components.ItemEditorDialog,{busy:!!options.busy,dirty:!!options.dirty,committed:!!options.committed,returnFocus:'new',onDismiss:dismiss,
-    children:(close:()=>void) => React.createElement('button',{onClick:close},'Cancel')}))
+    children:(dismiss:()=>void) => {close=dismiss;return React.createElement('button',{onClick:dismiss},'Cancel')}}))
   const cleanup = effect() as ()=>void
   const cancel = () => {const event={preventDefault:vi.fn()};(node.props.onCancel as (event:unknown)=>void)(event);return event}
   const backdrop = () => (node.props.onClick as (event:unknown)=>void)({target:modal,currentTarget:modal,clientX:0,clientY:0})
-  return {html,modal,root,body,previous,trigger,viewport,confirm,dismiss,cancel,backdrop,cleanup,style,heading,key:()=>{(node.props.onKeyDownCapture as ()=>void)()}}
+  return {html,modal,root,body,previous,trigger,viewport,confirm,dismiss,cancel,backdrop,cleanup,style,heading,close:()=>close(),key:()=>{(node.props.onKeyDownCapture as ()=>void)()}}
 }
 
 it('opens a native focus-trapping dialog, locks/restores scrolling and returns focus after close', () => {
   const view = dialogFixture()
   expect(view.html).toContain('<dialog class="cc-item-editor" aria-labelledby="item-editor-heading" aria-modal="true">')
+  expect(view.html).toContain('<div class="cc-item-editor-grip" aria-hidden="true"></div><button>Cancel</button>')
   expect(view.modal.showModal).toHaveBeenCalledOnce()
   expect(view.heading.setAttribute).toHaveBeenCalledWith('data-initial-focus','true')
   expect(view.heading.focus).toHaveBeenCalledOnce()
@@ -68,13 +70,23 @@ it('opens a native focus-trapping dialog, locks/restores scrolling and returns f
 
 it('confirms dirty Cancel/Escape/backdrop and explains already-committed recovery without deleting anything', () => {
   const view = dialogFixture({dirty:true,committed:true})
-  view.backdrop();expect(view.dismiss).not.toHaveBeenCalled()
+  view.backdrop();view.close();expect(view.dismiss).not.toHaveBeenCalled()
   expect(view.confirm).toHaveBeenCalledWith('Your item is already saved. Leave without finishing its remaining photo or sharing changes?')
   view.confirm.mockReturnValue(true);view.cancel();expect(view.dismiss).toHaveBeenCalledOnce()
   view.cleanup()
   const busy = dialogFixture({busy:true,dirty:true})
-  busy.backdrop();busy.cancel();expect(busy.confirm).not.toHaveBeenCalled();expect(busy.dismiss).not.toHaveBeenCalled()
+  busy.backdrop();busy.cancel();busy.close();expect(busy.confirm).not.toHaveBeenCalled();expect(busy.dismiss).not.toHaveBeenCalled()
   busy.cleanup()
+})
+
+it('keeps phone grip and desktop close/two-column top mutually responsive',()=>{
+  const css=readFileSync(new URL('../items.css',import.meta.url),'utf8')
+  expect(css).toContain('.cc-item-editor-close { display: none; }')
+  expect(css).toContain('.cc-item-editor-grip { display: none; }')
+  const desktop=css.slice(css.lastIndexOf('@media (min-width: 1024px)'))
+  expect(desktop).toMatch(/\.cc-item-editor-top\s*\{[^}]*display: grid;[^}]*grid-template-columns: 156px minmax\(0,1fr\)/)
+  expect(desktop).toMatch(/\.cc-item-editor-close\s*\{[^}]*display: grid/)
+  expect(desktop).toMatch(/\.cc-item-editor-desktop-actions\s*\{[^}]*justify-content: flex-end/)
 })
 
 it('fits the drawer above a reduced visual viewport and finds the replaced route trigger on close', () => {

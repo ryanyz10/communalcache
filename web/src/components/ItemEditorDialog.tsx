@@ -66,6 +66,9 @@ export function ItemEditorDialog({ children, onDismiss, busy, dirty, committed, 
       const bounds = event.currentTarget.getBoundingClientRect()
       if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dismiss()
     }}>
-    <div className="cc-item-editor-content">{children(dismiss)}</div>
+    <div className="cc-item-editor-content">
+      <div className="cc-item-editor-grip" aria-hidden="true" />
+      {children(dismiss)}
+    </div>
   </dialog>
 }
