@@ -34,12 +34,12 @@ it('uses exact whole-library totals, not the loaded page, and keeps filtered pag
   expect(html).not.toContain('private@example.com')
   expect(html).not.toMatch(/cc-library-hero|cc-library-asks|cc-library-chips|87 things|29 asks/)
 })
-it('shows the owner cat/name tile and packing slip with a native trigger to the still-working request form',()=>{
+it('shows the shared hero, owner avatar and member sections with the existing request trigger',()=>{
   const html=render(createElement(ItemPage),`/caches/${cacheId}/items/${id}`,'/caches/:cacheId/items/:itemId')
-  for(const text of ['cc-item-owner-cat','cc-thing-name','<dt>From</dt>','Maya','<dt>Kind</dt><dd>Lend</dd>','Climbing crew','Brush the chalk','Ask to borrow','Ask Maya','aria-controls="item-ask-sheet"','Jun','Pending'])expect(html).toContain(text)
+  for(const text of ['cc-owner-item-detail','cc-thing-name','<h2>From</h2>','Maya','cc-avatar','class="cc-owner-kind">Lend</p>','Brush the chalk','Ask to borrow','Ask Maya','aria-controls="item-ask-sheet"','Jun','Pending'])expect(html).toContain(text)
   expect(html).toContain('aria-haspopup="dialog"')
   expect(html).not.toContain('id="item-ask-form"')
-  expect(html).not.toMatch(/Delete item|Edit item|Upload photo|private@example.com/)
+  expect(html).not.toMatch(/Delete item|Edit item|Upload photo|private@example.com|cc-item-owner-cat|organic-item-detail|In caches|cc-owner-waiting/)
 })
 it('keeps private owner editing, manual availability, sharing and distinct destructive confirmations',()=>{
   const html=render(createElement(ItemPage),`/items/${id}`,'/items/:itemId',true)

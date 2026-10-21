@@ -102,6 +102,15 @@ it('pins reviewed skeleton markup including the redesigned private item layout',
   expect(hash.digest('hex')).toBe('e7a144c3cad0d6eb52497db0ec7d0db93c4732190deeaec575e73bcfdf9c5b68')
 })
 
+it.each([undefined,id])('uses one item loading layout with a context-specific Back for %s',cacheId=>{
+  const html=render(createElement(ItemSkeleton,{cacheId}))
+  expect(html).toContain('cc-owner-item-detail')
+  expect(html).toContain('cc-owner-item-layout')
+  expect(html).toContain(`href="${cacheId?`/caches/${cacheId}`:'/items'}"`)
+  expect(html).not.toMatch(/organic-item-detail|cc-item-owner-cat|cc-item-info-slip/)
+  if(cacheId)expect(html).not.toMatch(/In caches|Availability|>Edit</)
+})
+
 it.each([undefined, 0, 1, 30, 100])('preserves member rows and the missing-count fallback for %s', count => {
   const summary = count === undefined ? undefined : {
     id, name: 'Known cache', owner_id: 'owner', requires_approval: false,

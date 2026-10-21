@@ -23,6 +23,7 @@ function render(page: 'list' | 'detail' | 'add' | 'edit', options: { owner?: boo
   client.setQueryData(['cache', cacheId], { id: cacheId, name: 'Tools', owner_id: 'owner', requires_approval: false, invite_token: `${cacheId}.${'A'.repeat(43)}`, members: [{ user_id: 'owner', display_name: 'Neighbor', attached_item_count: 1 }, { user_id: 'member', display_name: 'Member', attached_item_count: 0 }] })
   client.setQueryData(['join-requests', cacheId], [])
   client.setQueryData(['item', cacheId, item.id], selected)
+  client.setQueryData(['library-item', 'owner', item.id], { ...selected, cache_id: null, caches: [{ id: cacheId, name: 'Tools' }], pending_count: 0 })
   if (options.list === 'error') client.getQueryCache().build(client, { queryKey: ['items', cacheId] }).setState({ status: 'error', error: new ApiError(503, 'internal_error') })
   else if (options.list !== 'loading') client.setQueryData(['items', cacheId], options.list === 'empty' ? [] : [selected])
   const path = page === 'list' ? '/caches/:cacheId' : page === 'add' ? '/caches/:cacheId/items/new' : '/caches/:cacheId/items/:itemId'
@@ -66,8 +67,8 @@ it('shows item details to members but edit, upload and confirmed delete controls
   const owner = render('detail')
   expect(owner).toContain('Sugar')
   expect(owner).toContain('For baking')
-  expect(owner).toContain('<dt>From</dt>')
-  expect(owner).toContain('<dt>Kind</dt><dd>Give · 0</dd>')
+  expect(owner).not.toContain('cc-item-from')
+  expect(owner).toContain('class="cc-owner-kind">Give · 0</p>')
   expect(owner).toContain(`/caches/${cacheId}/items/${item.id}/edit`)
   const member = render('detail', { owner: false })
   expect(member).not.toContain('Edit item')
@@ -75,7 +76,7 @@ it('shows item details to members but edit, upload and confirmed delete controls
   expect(member).not.toContain('Delete item')
   expect(member).not.toContain('Shown in')
   expect(owner).not.toContain('Delete item')
-  expect(owner).toContain('Shown in')
+  expect(owner).toContain('In caches')
   expect(owner).not.toContain('Upload photo')
   expect(owner).not.toContain('type="file"')
 })
@@ -130,13 +131,14 @@ it('escapes user content and explains field errors and reservation conflicts', (
 it('renders photos through same-origin authorized routes in lists and details, with owner replacement controls', () => {
   const photographed = { ...item, photo_version: 'photo-version' }
   for (const page of ['list', 'detail'] as const) {
-    const markup = render(page, { item: photographed })
+    const markup = render(page, { item: photographed, owner: false })
     expect(markup).toContain(`/api/caches/${cacheId}/items/${item.id}/photo?v=photo-version`)
     expect(markup).toContain(page==='detail'?'alt="Photo of Sugar"':'alt=""')
     expect(markup).not.toContain('blob:')
     expect(markup).not.toContain('r2.dev')
     expect(markup).not.toContain('Authorization')
   }
+  expect(render('detail', { item: photographed })).toContain(`/api/me/items/${item.id}/photo?v=photo-version`)
   expect(render('detail', { item: photographed })).not.toContain('Replace photo')
   expect(render('detail', { item: photographed, owner: false })).not.toContain('Upload photo')
 })

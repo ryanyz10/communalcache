@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 
 const base=readFileSync(new URL('../index.css',import.meta.url),'utf8')
 const items=readFileSync(new URL('../items.css',import.meta.url),'utf8')
-const roots='.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm'
+const roots='.organic-library, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm'
 const landing=readFileSync(new URL('../landing.css',import.meta.url),'utf8')
 const profile=readFileSync(new URL('../profile.css',import.meta.url),'utf8')
 
@@ -38,7 +38,7 @@ it('keeps the public phone wordmark on one line at a smaller size',()=>{
 })
 
 it('uses compact bold serif titles, bold sans actions and muted uppercase section labels',()=>{
-  for(const [selector,size] of [['cc-library-header h1',26],['cc-owner-title h1',24],['cc-item-detail-title h1',24],['cc-item-editor-header h2',18],['cc-item-confirm h2',18]] as const){
+  for(const [selector,size] of [['cc-library-header h1',26],['cc-owner-title h1',24],['cc-item-editor-header h2',18],['cc-item-confirm h2',18]] as const){
     const rule=items.match(new RegExp(`\\.${selector}\\s*\\{([^}]+)\\}`))![1]
     expect(rule).toContain(`font: 700 ${size}px/`)
     expect(rule).toContain('var(--font-heading)')
