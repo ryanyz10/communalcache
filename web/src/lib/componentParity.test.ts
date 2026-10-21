@@ -89,6 +89,12 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
       expect(html).toBe('<section class="mt-3" aria-label="Bot protection"><div></div></section>')
       html = html.replace('</section>', '<div><p role="alert" class="text-sm text-red-700">Bot protection is unavailable. Please retry.</p><button type="button" class="mt-2 text-sm underline">Retry bot check</button></div></section>')
     }
+    if (file === 'ThingTile' && name === 'ThingTile' && !(props.item as {photo_version:string|null}).photo_version && process.env.COMPONENT_PARITY_PARENT !== '1') {
+      const art='<span class="cc-thing-name" aria-hidden="true">tent</span>'
+      expect(html).toContain(art)
+      // Pin unrelated markup while allowing the shared full-title fallback.
+      html=html.replace(art,'<span>te</span>')
+    }
     if (file === 'ThingTile' && name === 'ThingStatus' && process.env.COMPONENT_PARITY_PARENT !== '1') {
       expect(html).not.toContain('cc-status-note')
       expect(html).not.toContain('With a neighbor')
