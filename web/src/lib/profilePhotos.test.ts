@@ -20,10 +20,10 @@ const cacheId = '33333333-3333-4333-8333-333333333333', itemId = '44444444-4444-
 const me = {id:owner,display_name:'Ryan Zhou',email:'own@example.test',profile_photo_version:'owner-photo'}
 const request: ItemRequest = {id:'ask',cache_id:cacheId,cache_name:'Tools',item_id:itemId,item_title:'Mixer',owner_id:owner,owner_name:'Ryan Zhou',requester_id:member,requester_name:'Priya',owner_photo_version:'owner-photo',requester_photo_version:'member-photo',quantity:null,status:'approved',decision_reason:null,decided_at:2,created_at:1}
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals()})
-function render(element: ReactElement, options: {version?: string|null;route?:string;path?:string} = {}) {
+function render(element: ReactElement, options: {version?: string|null;route?:string;path?:string;caller?:string} = {}) {
   vi.stubGlobal('location',{origin:'https://communalcache.com'})
   const client = new QueryClient({defaultOptions:{queries:{retry:false}}})
-  client.setQueryData(['me'],{...me,profile_photo_version:options.version===undefined?'owner-photo':options.version})
+  client.setQueryData(['me'],{...me,id:options.caller??owner,profile_photo_version:options.version===undefined?'owner-photo':options.version})
   client.setQueryData(['cache',cacheId],{id:cacheId,name:'Tools',owner_id:owner,requires_approval:false,invite_token:`${cacheId}.${'A'.repeat(43)}`,members:[{user_id:owner,display_name:'Ryan Zhou',profile_photo_version:'owner-photo'},{user_id:member,display_name:'Priya',profile_photo_version:'member-photo'}]})
   client.setQueryData(['join-requests',cacheId],[])
   client.setQueryData(['item',cacheId,itemId],{id:itemId,cache_id:cacheId,owner_id:owner,owner_name:'Ryan Zhou',owner_photo_version:'owner-photo',title:'Mixer',description:null,is_consumable:false,quantity:null,photo_version:null,created_at:1})
@@ -87,9 +87,9 @@ it('uses guarded photo metadata in the header, members, request parties and item
   expect(card).toContain(otherSource)
   expect(card).toContain('Priya')
   expect(card).toContain('Mixer')
-  const item = render(createElement(ItemPage),{route:'/caches/:cacheId/items/:itemId',path:`/caches/${cacheId}/items/${itemId}`})
+  const item = render(createElement(ItemPage),{caller:member,route:'/caches/:cacheId/items/:itemId',path:`/caches/${cacheId}/items/${itemId}`})
   expect(item).toContain(ownSource)
-  expect(item).toContain('<dt>From</dt>')
+  expect(item).toContain('<h2>From</h2>')
   expect(item).toContain('Ryan Zhou')
   for(const markup of [members,card,item])expect(markup).not.toContain('own@example.test')
   const denied = render(createElement(RequestCard,{request:{...request,owner_photo_version:null,requester_photo_version:null},callerId:owner}))

@@ -424,11 +424,6 @@ li.cc-list-empty, .cc-packing-slip li.cc-list-empty {
   margin-top: 4px;
 }
 
-.cc-page-skeleton .cc-skeleton-item-photo {
-  width: 100%;
-  border-radius: 32px;
-}
-
 .cc-page-skeleton .cc-skeleton-field {
   border-radius: 28px;
 }
@@ -505,15 +500,6 @@ li.cc-list-empty, .cc-packing-slip li.cc-list-empty {
 
   .cc-skeleton-filter-chips > :nth-child(3) {
     width: 80px !important;
-  }
-
-  .cc-page-skeleton .cc-skeleton-item-photo {
-    height: 440px !important;
-    border-radius: 40px;
-  }
-
-  .cc-page-skeleton .cc-organic-item-copy > .cc-shimmer:first-child {
-    height: 58px !important;
   }
 
   .cc-page-skeleton .cc-profile-label-header > .cc-shimmer {
