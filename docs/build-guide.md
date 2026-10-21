@@ -11,11 +11,26 @@ local walkthrough results, including blocked cases. It is not release approval.
 
 **Single D1 replaces PR #29's Owner DO model.** Keep its product decisions (shared
 items/stock, manual Lent out, owner-scoped private photos), not its object split,
-projections, target registration or eventual revocation. PRs 2–6 implement the D1
-routes/screens with real SQL tests. Draft PR 7 removes the historical Cache code
-and prepares destructive class deletion; it is **not approved for merge/deploy**.
-No remote migration, deployment, class deletion or staging reset has run as part
-of that draft. Keep legacy Fly/Supabase live until separately approved cutover.
+projections, target registration or eventual revocation. The D1 port and later
+item-screen changes are implemented in this checkout; see [current status](#current-implementation).
+The original port sequence and its rollout receipts remain below as history.
+Code in the checkout is not approval for remote migration, deployment, class
+deletion or staging reset. Keep legacy Fly/Supabase live until separately approved
+cutover and decommissioning.
+
+## How to work
+
+- Keep each PR scoped to one feature or cleanup, with its applicable proving checks.
+- **UX PRs include real-app screenshots in the PR body.** Capture the actual local
+  app at native phone/desktop viewports in light/dark, then upload PNGs to the
+  repository's `pr-screenshots` branch under `<PR-number>/` and embed its
+  `raw.githubusercontent.com` image links. Label fixtures and untested flows;
+  screenshots do not replace behavior, authorization or recovery tests.
+- For behavior-preserving cleanup with no visual change, include the before/after
+  comparison table and receipts in the PR body; a verified zero-diff cleanup does
+  not need a duplicate screenshot gallery.
+- No deploy, merge or external resource/provider changes follow from these checks;
+  those remain separately approval-gated.
 
 ## Before you start
 
@@ -38,12 +53,12 @@ of that draft. Keep legacy Fly/Supabase live until separately approved cutover.
 - **Real SQL tests:** @cloudflare/vitest-plugin with readD1Migrations and
   applyD1Migrations; real local D1 concurrent requests/batches. Mock provider HTTP,
   not SQL. Deprecated vitest-pool-workers is not the dependency.
-- **Rollout gate:** port each route to one authority only; disable old cache-local
-  write/compatibility paths rather than dual-write shared stock. Old removal/delete
-  routes must not operate against partially ported data. Request paths reopen in
-  PR 4 after guarded stock/membership race proofs; destructive paths remain gated
-  until PR 5's complete cascade proof. Leave inactive DO deployment configuration
-  until separately approved retirement; do not add Owner DOs.
+- **One authority per route:** never reintroduce old cache-local writes or dual-write
+  shared stock. During the historical port, request paths reopened in D1 PR 4
+  after guarded stock/membership race proofs, and destructive paths waited for
+  PR 5's cascade proof. Those temporary route gates are not the current runtime.
+  Destructive DO retirement/reset and deployment remain separately approval-gated;
+  do not add Owner DOs.
 
 ## Completion gates
 
@@ -61,7 +76,8 @@ CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false npx --no-install wrangler deploy --d
 
 Test empty and additive/upgrade D1 migrations; preserve auth/OTP and quantity/status
 checks. Tests use real D1 without object bindings/schema/alarm helpers; historical
-object-only tests retire with PR 7 and canonical equivalents remain. Smoke local health/config, SPA deep links and JSON API 404s
+object-only tests were retired with the D1 port and canonical equivalents remain.
+Smoke local health/config, SPA deep links and JSON API 404s
 under npm run dev (local bindings; never --remote). `.dev.vars` is gitignored;
 disable fallback to legacy `.env`. Docs-only checks distinguish existing-code
 regression gates from D1 target tests that have not been implemented.
@@ -75,10 +91,31 @@ the repo and remain in git history; their local build/test commands no longer ap
 
 ## Status
 
-Update the relevant row in its own PR; implementation and review are separate.
-Old cache-local features are historical references, not the current authority.
-Each feature row records its original rollout boundary; later rows reopen gates.
-PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
+Update the relevant row in its own PR; implementation, review, deployment and
+release approval are separate states.
+
+### Current implementation
+
+This summary describes the code at merged [#131](https://github.com/ryanyz10/communalcache/pull/131),
+not the deployed environment or completion of the release gates.
+
+| Area | Current code / remaining boundary |
+| --- | --- |
+| Authority | One D1 authority for caches, active memberships, canonical items/attachments, shared stock, requests and durable effects. Worker authorization stays in guarded SQL/batches under `src/db/`; Cache/Owner DOs are not runtime authorities. See [database.md](database.md). |
+| Items | Private library and cache routes share the #124-derived layout after #131. Owners get Edit, Availability, In caches and all-cache Waiting; members retain cache-scoped photos/asks, From and unavailable-only status stamps. Back keeps its route context; mobile tabs remain private-detail only. |
+| Editor / photos | The native editor owns deferred photo changes, sharing, Active/Inactive and the existing Delete confirmation. Deactivation/decisions/destruction retain guarded state/outbox/cleanup; no holder/return lifecycle. |
+| Type / art | Georgia headings and system-ui body/actions apply to app, wordmarks and public pages after [#128](https://github.com/ryanyz10/communalcache/pull/128) / [#129](https://github.com/ryanyz10/communalcache/pull/129). Caprasimo remains for sleeping-cat Zs only. [#130](https://github.com/ryanyz10/communalcache/pull/130) supplies shared fluid full-name tile art; old Figtree/pixel-theme descriptions below are historical. |
+| Validation | The [user-flow inventory](user-flows.md) records completed, partial and blocked local journeys. Read-only native comparisons prove rendering only, not every interaction, race, provider or device path. |
+| Release | Gate 10 parity, Gate 11 independent security review of the intended revision, and Gate 12 explicit environment/revision approval remain separate requirements. Remote setup, destructive retirement/reset, legacy cutover and decommissioning still need their own approvals. |
+
+### Historical implementation ledger
+
+Rows below preserve their original implementation/review/rollout descriptions and
+receipts. **“In review”, stack dependencies and temporary gates are authoring-time
+history, not today's PR or deployment status.** Superseded layout/font slices are
+explicitly marked Historical; their original observations and limitations remain.
+The Gate 10–12 requirements are still current, not retired by this ledger label.
+PR labels such as D1 2–7 are sequence numbers, **not GitHub issue/PR numbers**.
 
 | # | Feature | Status / target |
 | --- | --- | --- |
@@ -104,20 +141,20 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Readiness 2 | Free quotas and limit-reached UX | Implemented with readiness 1 for existing endpoints: atomic cache/membership/item/request/photo guards, rolling 24h and active-only member counts, races and clear limit-reached copy. Profile-photo enforcement now lands with readiness 3. |
 | Readiness 3 | Private profile photo | Implemented; in review: 0013 app-owned user_photos + explicit profile cleanup scope, self/shared-active SQL read and metadata guards, post-R2 plan recheck, Account Change photo sheet and avatars/initials across named views. No theme/dependency/resource changes. Browser upload is blocked by shared item/profile transport read errors; API/D1/UI-unit proof is separate. |
 | Readiness 4 | Contact after approval | Implemented; in review: 0014 app-owned user_contacts, validated server-built links, request-scoped approved-party/both-active SQL reveal, Account editor/preview and request buttons/nudges. Optional private approval message starts empty, max 500 code points, atomic with decision/outbox; never auth-email fallback. Inline platform glyphs need official brand assets before release. |
-| Readiness 5 | Cozy theme and app identity | Implemented; in review: round-6 sunny/evening CSS tokens via prefers-color-scheme, 2px Home boxes/cache-member houses, decorative reduced-motion cat, open-box/cat Home mark and reproducible SVG/32/180/192/512 icon set. Phone/wide fixture comparisons cover key screens in both palettes; native installed-PWA/device proof remains separate. No API, plan UI or dependency changes. |
-| Readiness 5a | Desktop cozy pass | Implemented; in review: 1200px desktop content, width-scaled pixel scenes/taller sign-in illustration, cache members sidebar, outgoing request column and two-column Account. Original phone geometry/classes retained below 1024px; native-viewport screenshot receipts in the PR body. No API/dependency changes. |
-| Readiness 5b | Cozy motion | Implemented; in review: shared 400ms stepped cache opening for horizon/cards and Enter, one two-frame integer-pixel walker with edge pauses/turns, idle blink/ear/sky motion, small card lift, 140ms route opacity fade and sheet entrance. Reduced motion skips all animation/navigation delay; hidden tabs suspend motion. No API/dependency changes; recordings stay in the PR body. |
-| Readiness 5c | Fluid responsive layout | Implemented; in review: full-bleed Home/cache sky and repeated terrain, shared clamp gutters/1920px content cap, intrinsic card grids, readable 72ch prose/forms, room-aware cache sidebar and integer 3–7px artwork above 640px. 390px phone visuals are unchanged; 449–639px keeps phone content geometry while extending only decorative background bands. Native viewport receipts stay in the PR body. No API/dependency changes. |
+| Historical · Readiness 5 | Cozy theme and app identity | Implemented; in review: round-6 sunny/evening CSS tokens via prefers-color-scheme, 2px Home boxes/cache-member houses, decorative reduced-motion cat, open-box/cat Home mark and reproducible SVG/32/180/192/512 icon set. Phone/wide fixture comparisons cover key screens in both palettes; native installed-PWA/device proof remains separate. No API, plan UI or dependency changes. |
+| Historical · Readiness 5a | Desktop cozy pass | Implemented; in review: 1200px desktop content, width-scaled pixel scenes/taller sign-in illustration, cache members sidebar, outgoing request column and two-column Account. Original phone geometry/classes retained below 1024px; native-viewport screenshot receipts in the PR body. No API/dependency changes. |
+| Historical · Readiness 5b | Cozy motion | Implemented; in review: shared 400ms stepped cache opening for horizon/cards and Enter, one two-frame integer-pixel walker with edge pauses/turns, idle blink/ear/sky motion, small card lift, 140ms route opacity fade and sheet entrance. Reduced motion skips all animation/navigation delay; hidden tabs suspend motion. No API/dependency changes; recordings stay in the PR body. |
+| Historical · Readiness 5c | Fluid responsive layout | Implemented; in review: full-bleed Home/cache sky and repeated terrain, shared clamp gutters/1920px content cap, intrinsic card grids, readable 72ch prose/forms, room-aware cache sidebar and integer 3–7px artwork above 640px. 390px phone visuals are unchanged; 449–639px keeps phone content geometry while extending only decorative background bands. Native viewport receipts stay in the PR body. No API/dependency changes. |
 | Readiness 6 | Turnstile and bot setup | Implemented; in review: one strict Worker siteverify guard for magic-link/OTP sends and cache creation, explicit action/theme widgets, one-use token reset and fail-closed errors. Owner-approved shared public sitekey with separate staging/production hostname lists; secrets remain owner-managed. Real-token staging validation pending after deploy; Bot Fight Mode remains separate. |
 | Readiness 7 | Google sign-in | Implemented; in review, stacked on Readability 9: conditional Better Auth 1.7.7 Google provider and branded sign-in/invite button; exact-Origin social POST and state/PKCE GET callback only. Explicit fresh Google verified-email gate plus verified local email for linking; no imported name/photo, no stored OAuth tokens, existing onboarding and pending invite return preserved. Mocked Google token endpoint + real-D1 and UI tests cover admission/linking/denial, callbacks/cookies/PKCE, feature hiding and errors. Public client ID/registered redirects supplied; staging secret owner-reported, production secret/live smoke remain owner-managed. Apple deferred; no remote operation or release approval. |
 | Readiness 8 | Owner admin | Implemented; in review, stacked on Google sign-in: /admin HTML and every backing API require Worker-verified RS256 Access issuer/JWKS/audience/time plus a current allowlisted D1 app session, including alternate hosts. Names/IDs-only paginated operational tables, counts/backlog and same-write session/policy-guarded user/cache plan editing. Staging public settings supplied; production allowlist empty, local/default unset. Real-D1/generated-key tests cover denials, privacy, policy/downgrade and session revocation; existing matrix/response cells stay frozen with admin-only additions. Suspension and classified delivery errors are deferred; unavailable error class is null / Not recorded. No migration, dependency, remote operation or release approval. |
 | Readiness 9 | Supporter tips link | Implemented; in review: owner-approved Buy Me a Coffee anchor on Account and quiet signed-in/landing footers, one URL constant, new-tab noopener/noreferrer. No provider script/widget/iframe, tracking params, webhooks, payment storage or unlocks; hidden when unconfigured. |
 | Readiness | Signed-out landing page | Implemented; in review: public `/` uses the cozy landing mock and shared pixel art, centralized copy/metadata and sign-in CTAs. Session resolution gates rendering; signed-in Home and invite/magic-link paths are unchanged. No new dependencies or public cache data. |
 | Fix | Invite sign-in continuity / paste-to-join | Implemented; in review: strict invite callback survives magic-link tab changes, one-hour session/local intent fallback, clear-on-join/sign-out/expiry, and Home paste sheet. Explicit Continue + Join and gated pending flow remain; general same-origin callback contract is preserved. |
-| Organic 1/6 | Foundation / cats / app shell | Implemented; in review: Claude Design labelled-box day/night roles, self-hosted OFL Caprasimo/Figtree, ID-derived organic cats and photo/cat avatars, Box/Stamp/Tabs primitives, desktop top tabs and phone bottom navigation. Replaces old pixel strips, walker, delayed cache opening and route fade; page layouts remain transitional for Organic 2–6. No Worker/API/migration/dependency changes. Native shell/design comparisons stay in the PR body. |
+| Historical · Organic 1/6 | Foundation / cats / app shell | Implemented; in review: Claude Design labelled-box day/night roles, self-hosted OFL Caprasimo/Figtree, ID-derived organic cats and photo/cat avatars, Box/Stamp/Tabs primitives, desktop top tabs and phone bottom navigation. Replaces old pixel strips, walker, delayed cache opening and route fade; page layouts remain transitional for Organic 2–6. No Worker/API/migration/dependency changes. Native shell/design comparisons stay in the PR body. |
 | Organic 2/6 | Account / getting in | Implemented; in review, depends on Organic 1: labelled-box sign-in/email/name/neutral-invite/pending/Account layouts; self-only validated nullable cat_coat with additive 0015 migration and scoped display enrichment. Six-coat choice preserves hashed traits; auth/CSRF/Turnstile/OTP/Continue/contact/photo/push/tips semantics retained. No pre-join preview API or cache/member/inviter disclosure. Native comparisons and real-D1 proof stay in the PR body. |
 | Organic 3/6 | Home / caches / live summaries | Implemented; in review, depends on Organic 2: B08–B13 labelled boxes, caller-inclusive member cats, exact D1 totals/pending-answer badges and bounded Home previews, full-list contents filters/search and per-member attached counts. Responsive new-cache preview keeps real bot gating, OFF approval default and guarded writes; settings/join decisions/invite reset/removal/leave/paste stay reachable. No counters, new grants, email disclosure or dependencies. Native comparisons and local-D1 proof stay in the PR body. |
-| Organic 4/6 | Library / item forms / sharing / photos | Implemented; in review, depends on Organic 3: B14/B15/B17/B21/B23/B24 personal label box, owner-scoped exact totals/filtered cursor pagination, packing slips, item name/photo tile and owner controls. New items retain one canonical ID across optional photo and selected-cache partial failures; cache-context creation keeps its atomic first attachment. Edit/type/stock/Lent out/sharing/detach/global-delete/private-photo safeguards remain; Ask opens the existing inline form until Organic 5. Native comparisons and real-D1/browser proof stay in the PR body. |
+| Historical · Organic 4/6 | Library / item forms / sharing / photos | Implemented; in review, depends on Organic 3: B14/B15/B17/B21/B23/B24 personal label box, owner-scoped exact totals/filtered cursor pagination, packing slips, item name/photo tile and owner controls. New items retain one canonical ID across optional photo and selected-cache partial failures; cache-context creation keeps its atomic first attachment. Edit/type/stock/Lent out/sharing/detach/global-delete/private-photo safeguards remain; Ask opens the existing inline form until Organic 5. Native comparisons and real-D1/browser proof stay in the PR body. |
 | Items | Flexible full-name tile art | Implemented; in review from master after #128: one decorative full-title span and one container-unit font/offset rule serve Home/cache thumbs, Your items grid, item heroes and approved-request name art. Explicit frame sizes/4:3 grid ratio keep size containment definite; existing tones and private-photo behavior remain. Approved history still grants no photo access. Read-only real-local phone/desktop light/dark captures stay in the PR body. No dependency, API or deployment changes. |
 | UI polish | In-memory library tabs | Implemented; in review from master: one account-scoped unfiltered library query follows 25-row API cursors before publishing the initial dataset; tab changes filter locally and do not fetch. Initial eager work stops at 20 API pages, retaining explicit 25-row Load more and honest partial/empty copy for retained over-cap/future larger libraries. Home/Add share the same dataset; normal seeded allowance up to 100 items costs up to four initial requests, not a hard legacy-data bound. Mutation invalidation, account cancellation and cache-content filtering are preserved; Worker/API/SQL are unchanged. |
 | Organic 5/6 | Requests / ask and decision sheets / approved detail | Implemented; in review, depends on Organic 4: B16/B18–B20 request packing slips, stock-bounded ask sheet, reason-required decline flow and reusable Lent out ON/empty-message approval defaults over the unchanged guarded batch. Party-only single-request GET and focused `/requests/:id` reuse request-cache/both-active contact guards; approved notification links validate UUIDs and reauthorize. Owner stock preview uses quantity minus this ask, not twice-subtracted availability. No auth-email fallback, stored counter, new dependency or release approval. Native comparisons and real-D1 proof stay in the PR body. |
@@ -153,10 +190,10 @@ PR labels below are sequence numbers, **not GitHub issue/PR numbers**.
 | Items | Active / Inactive | Implemented; in review above #117: additive 0020 active boolean; one token-guarded deactivation/field-edit batch snapshots detach-style rejection outbox and declines all-cache pending asks. Cache-context item/photo/queue/request-create/Home/count queries require active=1; owner library/private photos/history and inactive attachments remain. Editor draft + waiting-request confirmation saves with Save; inactive owner rows/detail are greyed; library shows only its right-side Inactive status. Lent out remains separate. No remote migration/deployment or release approval. |
 | Photos | Editor-only deferred item photo changes | Implemented; in review above #119: tap/click tile to add/replace, on-photo × discards selection or stages saved removal, all photo work runs after metadata on Save with retry/skip. Retire the immediate detail uploader. Private expected-version DELETE clears only the owner/current pointer and token-gates exact item-scope cleanup atomically; no R2 delete in-handler, no migration. Includes status-only inactive library rows and suppressed programmatic heading focus ring with keyboard focus retained. No remote mutation/deployment. |
 | Items | One item detail layout | Implemented; in review from master: shared hero/title/kind/Note on private and cache routes. Cache owners use the owner-authenticated library detail after cache admission, with Availability, In caches and all-cache Waiting decisions; members retain cache-scoped photos/Asks and the existing Ask rules with owner avatar/status. Route-specific Back and private-only mobile tabs remain; retired cache-detail markup/CSS and cat decoration are removed. Web-only; no API, SQL, migration, dependency or deployment change. Real local 390/1440 light/dark screenshots stay in the PR body. |
-| Items | Private owner detail layout / item queue | Implemented; in review: phone hero actions, compact info/availability/chips and real all-cache waiting rows; desktop photo/info/queue layout. Owner-filtered incoming read adds a bound item_id filter with existing pagination/index/ordinals; cache-scoped queues stay unchanged. Existing Delete confirmation moves to edit-form bottom; private mobile tabs restored. Real local 390/1440 light/dark checks include two/zero rows, approval sheet and disposable deletion navigation. No migration or deployment. |
+| Historical · Items | Private owner detail layout / item queue | Implemented; in review: phone hero actions, compact info/availability/chips and real all-cache waiting rows; desktop photo/info/queue layout. Owner-filtered incoming read adds a bound item_id filter with existing pagination/index/ordinals; cache-scoped queues stay unchanged. Existing Delete confirmation moves to edit-form bottom; private mobile tabs restored. Real local 390/1440 light/dark checks include two/zero rows, approval sheet and disposable deletion navigation. No migration or deployment. |
 | Items | Editor layout | Implemented; in review above Your items grid #125: desktop photo/name-and-note top columns with full-width sharing/Active, Note before sharing on phone, decorative phone grip and desktop Close using the existing dirty/busy Cancel guard. Waiting-decline count is bold; Delete stays at the edit-form bottom. Web-only, no API/schema/dependency/deployment change. Real local 390/1440 light/dark editor/confirmation screenshots stay in the PR body. |
-| Items | Quiet typography | Implemented; in review above editor layout #126: reusable Georgia/system-ui tokens opt only library, item detail/waiting, editor and item-confirmation roots into compact bold serif headings, system body/labels and bold sans actions. Brand fonts remain on app shell and other screens; no font downloads, dependency or API changes. Real local phone/desktop light/dark screenshots stay in the PR body. |
-| App | Quiet typography defaults / waiting-row identity | Implemented; in review from master after #127: Georgia 700/system-ui app defaults and bold sans controls across pages, states and sheets; wordmark plus landing/privacy/terms retain Caprasimo/Figtree. Remove item-only font opt-ins while preserving compact item sizes. Waiting names stay ahead of one-line ellipsized cache labels with full cache titles. Real local phone/desktop light/dark screenshots and unchanged pending-count receipts stay in the PR body. No dependency, API or deployment changes. |
+| Historical · Items | Quiet typography | Implemented; in review above editor layout #126: reusable Georgia/system-ui tokens opt only library, item detail/waiting, editor and item-confirmation roots into compact bold serif headings, system body/labels and bold sans actions. Brand fonts remain on app shell and other screens; no font downloads, dependency or API changes. Real local phone/desktop light/dark screenshots stay in the PR body. |
+| Historical · App | Quiet typography defaults / waiting-row identity | Implemented; in review from master after #127: Georgia 700/system-ui app defaults and bold sans controls across pages, states and sheets; wordmark plus landing/privacy/terms retain Caprasimo/Figtree. Remove item-only font opt-ins while preserving compact item sizes. Waiting names stay ahead of one-line ellipsized cache labels with full cache titles. Real local phone/desktop light/dark screenshots and unchanged pending-count receipts stay in the PR body. No dependency, API or deployment changes. |
 | App | Quiet wordmarks and public typography | Implemented; in review after #128: app-shell/auth/public wordmarks and landing/privacy/terms use quiet Georgia headings and system-ui body/actions. Public hero/FAQ/box sizes remain; the smaller nowrap phone wordmark is verified at 360/390px. Remove unused Figtree faces/files and dead brand aliases; retain Caprasimo solely for sleeping-cat Z artwork and its OFL notice. Real local public/Home/sign-in phone/desktop light/dark captures stay in the PR body. No dependency, API or deployment changes. |
 | Gate 11 | Independent security review | Review recorded at admin revision 0718eda; follow-ups address CC-SEC-01/02/04, bound per-user churn in CC-SEC-03 and add the CC-SEC-05 baseline. Full-CSP/browser acceptance, documented capacity/orphan residual acceptance and final intended-revision review remain release gates, not a CI-only signoff. |
 | Gate 12 | Explicit release approval | not started — owner-approved revision/environment/features after parity and security; external setup, destructive retirement/reset and legacy cutover approvals remain separate |
