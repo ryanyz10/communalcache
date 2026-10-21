@@ -1,14 +1,4 @@
-/* Item screens opt into quieter type without changing the app's brand fonts. */
-.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm {
-  --font-heading: var(--font-heading-quiet);
-  --font-body: var(--font-ui);
-  font-family: var(--font-ui);
-}
-
-/* The global brand heading weight is important; keep this override item-scoped. */
-:is(.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm) :is(h1, h2, h3) {
-  font-weight: 700 !important;
-}
+/* Item layouts keep their compact type sizes within the shared app roles. */
 .organic-library {
   width: 100%;
   max-width: 1920px;
@@ -1153,6 +1143,28 @@
   overflow-wrap: anywhere;
 }
 
+.cc-item-wait-identity {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.cc-item-wait-identity > strong {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-item-wait-cache {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cc-item-wait-person > span {
   display: block;
   color: var(--cc-accent-text);
@@ -1478,11 +1490,6 @@
   .cc-owner-availability, .cc-owner-sharing {
     padding: 22px;
   }
-}
-
-:is(.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm) :is(button, .cc-profile-primary, .cc-profile-secondary, .cc-text-action, .cc-cache-list a, .cc-owner-hero-links a, .cc-owner-edit-desktop) {
-  font-family: var(--font-ui);
-  font-weight: 700;
 }
 
 :is(.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm) :is(button:not(.cc-item-editor-close, .cc-item-photo-remove, .cc-add-close, .cc-stock-stepper button), .cc-profile-primary, .cc-profile-secondary, .cc-text-action, .cc-cache-list a, .cc-owner-hero-links a, .cc-owner-edit-desktop) {

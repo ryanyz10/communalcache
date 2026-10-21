@@ -71,10 +71,12 @@
   --cc-frame: rgba(0,0,0,.08);
   --cc-bad: #8c491a;
   --cc-bad-bg: #ffe1d0;
-  --font-heading: Caprasimo, system-ui, sans-serif;
-  --font-body: Figtree, system-ui, sans-serif;
+  --font-brand-heading: Caprasimo, system-ui, sans-serif;
+  --font-brand-body: Figtree, system-ui, sans-serif;
   --font-heading-quiet: Georgia, serif;
   --font-ui: system-ui, sans-serif;
+  --font-heading: var(--font-heading-quiet);
+  --font-body: var(--font-ui);
   --cc-type-hero: 80px;
   --cc-type-display: 72px;
   --cc-type-page: 38px;
@@ -588,8 +590,16 @@ body {
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
-  font-weight: 400 !important;
+  font-weight: 700 !important;
   letter-spacing: -.015em;
+}
+
+/* Component font shorthands must not turn app actions back into serif text. */
+:is(button, .cc-pill, .cc-outline, .cc-profile-primary, .cc-profile-secondary, .cc-text-action,
+.cc-cache-invite, .cc-cache-add, .cc-banner-review, .cc-cache-folders a, .cc-content-ask, .cc-content-review,
+.cc-join-banner a, .cc-contact-destination a, .cc-cache-list a, .cc-owner-hero-links a, .cc-owner-edit-desktop):not(.cc-landing *) {
+  font-family: var(--font-body) !important;
+  font-weight: 700 !important;
 }
 
 :focus-visible {
@@ -655,8 +665,8 @@ dialog::backdrop {
 
   .cc-pill, .cc-outline {
     @apply inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm disabled:opacity-45;
-    font-family: var(--font-heading);
-    font-weight: 400;
+    font-family: var(--font-body);
+    font-weight: 700;
   }
 
   .cc-pill {
@@ -801,7 +811,7 @@ dialog::backdrop {
   gap: 10px;
   color: var(--cc-fg);
   text-decoration: none;
-  font: 400 17px/24px var(--font-heading);
+  font: 400 17px/24px var(--font-brand-heading);
 }
 
 .cc-brand > svg {
@@ -947,7 +957,7 @@ dialog::backdrop {
 }
 
 .cc-box-label {
-  font: 400 34px/1.05 var(--font-heading);
+  font: 700 34px/1.05 var(--font-heading);
   overflow-wrap: anywhere;
 }
 
