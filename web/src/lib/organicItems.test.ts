@@ -36,7 +36,7 @@ it('uses exact whole-library totals, not the loaded page, and keeps filtered pag
 })
 it('shows the owner cat/name tile and packing slip with a native trigger to the still-working request form',()=>{
   const html=render(createElement(ItemPage),`/caches/${cacheId}/items/${id}`,'/caches/:cacheId/items/:itemId')
-  for(const text of ['cc-item-owner-cat','cc-item-name-art','<dt>From</dt>','Maya','<dt>Kind</dt><dd>Lend</dd>','Climbing crew','Brush the chalk','Ask to borrow','Ask Maya','aria-controls="item-ask-sheet"','Jun','Pending'])expect(html).toContain(text)
+  for(const text of ['cc-item-owner-cat','cc-thing-name','<dt>From</dt>','Maya','<dt>Kind</dt><dd>Lend</dd>','Climbing crew','Brush the chalk','Ask to borrow','Ask Maya','aria-controls="item-ask-sheet"','Jun','Pending'])expect(html).toContain(text)
   expect(html).toContain('aria-haspopup="dialog"')
   expect(html).not.toContain('id="item-ask-form"')
   expect(html).not.toMatch(/Delete item|Edit item|Upload photo|private@example.com/)

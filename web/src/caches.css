@@ -236,6 +236,7 @@
 }
 
 .cc-thing-tile {
+  container-type: size;
   position: relative;
   display: block;
   width: 44px;
@@ -245,11 +246,13 @@
   flex: none;
 }
 
-.cc-thing-tile > span {
+.cc-thing-name {
   position: absolute;
-  left: 5px;
-  bottom: -7px;
-  font: 400 26px/1 var(--font-heading);
+  left: 10cqmin;
+  bottom: calc(-5px - 3.5cqmin);
+  font: 400 calc(20px + 14cqmin)/1 var(--font-heading);
+  color: var(--cc-art-ink, currentColor);
+  white-space: nowrap;
 }
 
 .cc-thing-tile > img {

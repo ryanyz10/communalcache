@@ -7,7 +7,7 @@ import type { ItemRequest } from '../lib/requests'
 import { Cat } from '../components/Cat'
 import { Avatar } from '../components/Avatar'
 import { Stamp } from '../components/Stamp'
-import { thingTone } from '../components/ThingTile'
+import { ThingNameArt, thingTone } from '../components/ThingTile'
 import { RequestDetailSkeleton } from '../components/skeletons/RequestSkeletons'
 import { OnboardingPage } from './OnboardingPage'
 import { ApprovedContact } from './RequestContact'
@@ -31,15 +31,14 @@ export function RequestDetailPage() {
       const heading = me.id === request.owner_id
         ? `You said yes to ${request.requester_name ?? 'a neighbor'}`
         : `${request.owner_name ?? 'The owner'} said yes`
-      const itemNameArt = request.item_title.toLocaleLowerCase().split(/\s+/).at(-1)
       requestContent = <>
         <div className="cc-approved-item">
           <span className="cc-approved-cats" aria-hidden="true">
             <span><Cat userId={request.owner_id} coat={request.owner_cat_coat} pose="sit" /></span>
             <span><Cat userId={request.requester_id} coat={request.requester_cat_coat} pose="sit" /></span>
           </span>
-          <div className={`cc-approved-name-tile cc-thing-tile-${thingTone(request.item_id)}`}>
-            <span className="cc-approved-name-art" aria-hidden="true">{itemNameArt}</span>
+          <div className={`cc-approved-name-tile cc-thing-tile cc-thing-tile-${thingTone(request.item_id)}`}>
+            <ThingNameArt title={request.item_title} />
             <Stamp tone="ok">Approved</Stamp>
           </div>
         </div>

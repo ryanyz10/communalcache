@@ -85,7 +85,8 @@ it('uses actual contact kind/destination and other-party name without auth email
 it('focused approved history uses name art, not an item-photo grant, and keeps missing/denied contact honest',()=>{
   const options={path:`/requests/${row.id}`,route:'/requests/:requestId'}
   const html=render(createElement(RequestDetailPage),options)
-  for(const text of ['Maya said yes','cc-approved-cats','cc-approved-name-art','Only the two parties','How to reach Maya','Text Maya','Shown while','Hand it off in person'])expect(html).toContain(text)
+  for(const text of ['Maya said yes','cc-approved-cats','cc-thing-name','Only the two parties','How to reach Maya','Text Maya','Shown while','Hand it off in person'])expect(html).toContain(text)
+  expect(html).toContain('<span class="cc-thing-name" aria-hidden="true">cordless drill</span>')
   expect(html).not.toMatch(/\/api\/caches\/.*\/photo|\/api\/me\/items\/|auth-private/)
   const denied=render(createElement(RequestDetailPage),{...options,denied:true})
   expect(denied).toContain('Only the two parties')

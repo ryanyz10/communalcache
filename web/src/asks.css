@@ -579,6 +579,7 @@
 
 .cc-approved-name-tile {
   position: relative;
+  width: 100%;
   height: 150px;
   border-radius: 30px;
   background: var(--cc-tile-pale);
@@ -586,24 +587,15 @@
 }
 
 .cc-approved-name-tile.cc-thing-tile-clay {
-  --cc-approved-art: #d67f48;
+  --cc-art-ink: #d67f48;
 }
 
 .cc-approved-name-tile.cc-thing-tile-sage {
-  --cc-approved-art: #8fa073;
+  --cc-art-ink: #8fa073;
 }
 
 .cc-approved-name-tile.cc-thing-tile-sand {
-  --cc-approved-art: #a19786;
-}
-
-.cc-approved-name-art {
-  position: absolute;
-  left: 18px;
-  bottom: -22px;
-  white-space: nowrap;
-  font: 400 92px/1 var(--font-heading);
-  color: var(--cc-approved-art);
+  --cc-art-ink: #a19786;
 }
 
 .cc-approved-name-tile .cc-stamp {
@@ -777,11 +769,6 @@
   .cc-approved-name-tile {
     height: 230px;
     border-radius: 36px;
-  }
-
-  .cc-approved-name-art {
-    font-size: 148px;
-    bottom: -34px;
   }
 
   .cc-approved-cats > span {
