@@ -73,6 +73,8 @@
   --cc-bad-bg: #ffe1d0;
   --font-heading: Caprasimo, system-ui, sans-serif;
   --font-body: Figtree, system-ui, sans-serif;
+  --font-heading-quiet: Georgia, serif;
+  --font-ui: system-ui, sans-serif;
   --cc-type-hero: 80px;
   --cc-type-display: 72px;
   --cc-type-page: 38px;
