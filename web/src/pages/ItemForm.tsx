@@ -167,9 +167,11 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       <button type="button" className="cc-item-editor-phone" disabled={saveItem.isPending} onClick={onCancel}>Cancel</button>
       <h2 ref={heading} id="item-editor-heading" tabIndex={-1}>{item ? 'Edit item' : 'New item'}</h2>
       <button type="submit" className="cc-item-editor-phone" disabled={submitDisabled}>{saveItem.isPending ? 'Saving…' : submitLabel}</button>
+      <button type="button" className="cc-item-editor-close" aria-label="Close" disabled={saveItem.isPending} onClick={onCancel}>×</button>
     </div>
     <div className="cc-item-editor-body">
     <fieldset disabled={fieldsLocked} className="cc-item-fields">
+      <div className="cc-item-editor-top">
       <div className="cc-item-photo-field">
         <div className="cc-item-photo-slot">
           <label className="cc-photo-picker" htmlFor="new-item-photo">
@@ -187,6 +189,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         {photo.processing && <p role="status">Preparing photo…</p>}
         {photo.error && <p role="alert" className="cc-form-error">{photo.error}</p>}
       </div>
+      <div className="cc-item-editor-copy">
       {!item && <fieldset className="cc-item-kind-tabs">
         <legend className="sr-only">How would you like to share it?</legend>
         <label><input type="radio" name="item-type" checked={!isConsumable} onChange={() => setIsConsumable(false)} /><span>Lend it</span></label>
@@ -201,6 +204,17 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
           maxLength={240}
           value={title}
           onChange={event => setTitle([...event.target.value].slice(0, 120).join(''))}
+          className="cc-profile-input"
+        />
+      </div>
+      <div className="cc-item-note-field">
+        <label htmlFor="item-description">Note (optional)</label>
+        <textarea
+          id="item-description"
+          rows={3}
+          maxLength={4000}
+          value={description}
+          onChange={event => setDescription([...event.target.value].slice(0, 2000).join(''))}
           className="cc-profile-input"
         />
       </div>
@@ -223,6 +237,8 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         <button type="button" aria-label="Increase stock quantity" disabled={quantity >= 9999} onClick={() => setQuantityText(String(Math.min(9999, quantity + 1)))}>+</button>
         <span id="quantity-help" className="sr-only">Stock quantity 0–9999. One stock count across all caches; pending requests must stay covered.</span>
       </div>}
+      </div>
+      </div>
       <fieldset className="cc-put-it-in">
         <legend>Put it in</legend>
         {(cachesQuery.isPending || (!!item && libraryItem.isPending)) && <div className="cc-skeleton-cache-options">
@@ -257,17 +273,6 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         <span><strong>{active ? 'Active' : 'Inactive'}</strong><span id="item-active-help">{active ? 'Item is shown in all attached caches' : 'Item is hidden from all caches'}</span></span>
         <input id="item-active" type="checkbox" role="switch" aria-label={active ? 'Active' : 'Inactive'} aria-describedby="item-active-help" checked={active} disabled={fieldsLocked} onChange={event => setActive(event.target.checked)} className="cc-switch" />
       </label>
-      <div className="cc-item-note-field">
-        <label htmlFor="item-description">Note (optional)</label>
-        <textarea
-          id="item-description"
-          rows={3}
-          maxLength={4000}
-          value={description}
-          onChange={event => setDescription([...event.target.value].slice(0, 2000).join(''))}
-          className="cc-profile-input"
-        />
-      </div>
     </fieldset>
     {item && <div className="cc-item-editor-delete"><DeleteItem item={item} disabled={fieldsLocked} onBusy={onBusy} /></div>}
     {saveSnapshot?.item && saveItem.isError && <div className="cc-item-save-progress" role="status">
@@ -290,7 +295,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
       else if (confirmDeactivation) setActive(true)
     }}>
       <h2 id="detach-item-heading">{confirmDeactivation ? `Make ${title} inactive?` : 'Stop sharing in these caches?'}</h2>
-      {confirmDeactivation && <p>It disappears from {libraryItem.data?.caches.map(cache => cache.name).join(' and ') || 'all attached caches'}. {waitingCount} waiting {waitingCount === 1 ? 'request will' : 'requests will'} be declined.</p>}
+      {confirmDeactivation && <p>It disappears from {libraryItem.data?.caches.map(cache => cache.name).join(' and ') || 'all attached caches'}. <strong>{waitingCount} waiting {waitingCount === 1 ? 'request will' : 'requests will'} be declined.</strong></p>}
       {(!confirmDeactivation || !!removalsToConfirm.length) && <>
         <ul>{removalsToConfirm.map(cache => <li key={cache.id}>{cache.name}</li>)}</ul>
         <ul>
