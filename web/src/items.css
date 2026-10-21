@@ -1,4 +1,14 @@
-/* B14/B15/B17/B21/B23/B24: personal box, packing slips and item forms. */
+/* Item screens opt into quieter type without changing the app's brand fonts. */
+.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm {
+  --font-heading: var(--font-heading-quiet);
+  --font-body: var(--font-ui);
+  font-family: var(--font-ui);
+}
+
+/* The global brand heading weight is important; keep this override item-scoped. */
+:is(.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm) :is(h1, h2, h3) {
+  font-weight: 700 !important;
+}
 .organic-library {
   width: 100%;
   max-width: 1920px;
@@ -16,7 +26,7 @@
 .cc-library-header h1 {
   min-width: 0;
   margin: 0;
-  font: 400 30px/1.15 var(--font-heading);
+  font: 700 26px/1.15 var(--font-heading);
 }
 
 .cc-library-new {
@@ -105,7 +115,7 @@
 }
 
 .cc-library-caption strong {
-  font: 600 14px/1.35 var(--font-body);
+  font: 700 13px/1.35 var(--font-body);
   overflow-wrap: anywhere;
 }
 
@@ -121,7 +131,7 @@
 
 @media (min-width: 1024px) {
   .organic-library { padding: 40px 40px 56px; }
-  .cc-library-header h1 { font-size: 36px; }
+  .cc-library-header h1 { font-size: 26px; }
   .cc-library-grid { grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); }
 }
 
@@ -178,7 +188,7 @@
   min-width: 0;
   margin: 0;
   text-align: center;
-  font: 400 18px/1.2 var(--font-heading);
+  font: 700 18px/1.2 var(--font-heading);
 }
 
 #item-editor-heading[data-initial-focus] {
@@ -772,7 +782,7 @@
 .cc-item-detail-title h1 {
   min-width: 0;
   margin: 0;
-  font: 400 34px/1.05 var(--font-heading);
+  font: 700 24px/1.15 var(--font-heading);
   overflow-wrap: anywhere;
 }
 
@@ -982,7 +992,7 @@
 }
 
 .cc-item-confirm h2 {
-  font: 400 26px/1.15 var(--font-heading);
+  font: 700 18px/1.15 var(--font-heading);
 }
 
 .cc-item-confirm ul {
@@ -1050,7 +1060,7 @@
   min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
-  font: 400 30px/1.1 var(--font-heading);
+  font: 700 24px/1.15 var(--font-heading);
 }
 
 .cc-owner-edit-desktop {
@@ -1187,7 +1197,7 @@
   .cc-owner-hero .cc-item-photo-frame { height: 420px; border-radius: 24px; }
   .cc-owner-hero-links { display: none; }
   .cc-owner-info { min-width: 0; padding: 0; }
-  .cc-owner-title h1 { font-size: 36px; }
+  .cc-owner-title h1 { font-size: 26px; }
   .cc-owner-edit-desktop { display: inline-flex; border: 1px solid var(--cc-edge); background: transparent; }
   .cc-owner-waiting { margin: 0; }
 }
@@ -1241,7 +1251,7 @@
 
   .cc-item-editor-header h2 {
     text-align: left;
-    font-size: 28px;
+    font-size: 18px;
   }
 
   .cc-item-editor-phone {
@@ -1369,8 +1379,8 @@
   }
 
   .cc-item-detail-title h1 {
-    font-size: 58px;
-    line-height: 1;
+    font-size: 26px;
+    line-height: 1.15;
   }
 
   .cc-item-detail-title .cc-stamp {
@@ -1468,4 +1478,21 @@
   .cc-owner-availability, .cc-owner-sharing {
     padding: 22px;
   }
+}
+
+:is(.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm) :is(button, .cc-profile-primary, .cc-profile-secondary, .cc-text-action, .cc-cache-list a, .cc-owner-hero-links a, .cc-owner-edit-desktop) {
+  font-family: var(--font-ui);
+  font-weight: 700;
+}
+
+:is(.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-item-editor, .cc-item-confirm) :is(button:not(.cc-item-editor-close, .cc-item-photo-remove, .cc-add-close, .cc-stock-stepper button), .cc-profile-primary, .cc-profile-secondary, .cc-text-action, .cc-cache-list a, .cc-owner-hero-links a, .cc-owner-edit-desktop) {
+  font-size: 13px;
+}
+
+.cc-item-title-field > label, .cc-item-note-field > label, .cc-put-it-in > legend,
+.cc-owner-info h2, .cc-owner-waiting > h2, .cc-owner-item-controls h2, .cc-item-info-slip dt {
+  color: var(--cc-sub);
+  font: 700 10.5px/1.4 var(--font-ui);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
