@@ -7,25 +7,34 @@ const roots='.organic-library, .organic-item-detail, .cc-owner-item-detail, .cc-
 const landing=readFileSync(new URL('../landing.css',import.meta.url),'utf8')
 const profile=readFileSync(new URL('../profile.css',import.meta.url),'utf8')
 
-it('defaults to system quiet roles while retaining brand assets without new downloads',()=>{
+it('defaults to quiet roles without unused brand aliases or Figtree downloads',()=>{
   expect(base).toContain('--font-heading-quiet: Georgia, serif;')
   expect(base).toContain('--font-ui: system-ui, sans-serif;')
-  expect(base).toContain('--font-brand-heading: Caprasimo, system-ui, sans-serif;')
-  expect(base).toContain('--font-brand-body: Figtree, system-ui, sans-serif;')
+  expect(base).not.toMatch(/--font-brand-|Figtree/)
   expect(base).toContain('--font-heading: var(--font-heading-quiet);')
   expect(base).toContain('--font-body: var(--font-ui);')
-  expect(base.match(/@font-face/g)).toHaveLength(4)
+  expect(base.match(/@font-face/g)).toHaveLength(2)
   expect(items).not.toMatch(/@font-face|url\(/)
 })
 
-it('preserves wordmark and landing/legal brand type and removes redundant item opt-ins',()=>{
-  expect(base).toMatch(/\.cc-brand\s*\{[^}]*font: 400 17px\/24px var\(--font-brand-heading\)/)
-  expect(profile).toMatch(/\.cc-auth-brand-link\s*\{[^}]*font: 400 20px var\(--font-brand-heading\)/)
-  expect(landing).toMatch(/\.cc-landing\s*\{[^}]*--font-heading: var\(--font-brand-heading\);[^}]*--font-body: var\(--font-brand-body\);[^}]*font-family: var\(--font-body\)/)
-  expect(landing).toContain('font-weight: 400 !important;')
+it('uses quiet wordmarks and the same public/app heading, body and action roles',()=>{
+  expect(base).toMatch(/\.cc-brand\s*\{[^}]*font: 700 17px\/24px var\(--font-heading-quiet\)/)
+  expect(profile).toMatch(/\.cc-auth-brand-link\s*\{[^}]*font: 700 20px var\(--font-heading-quiet\)/)
+  expect(landing).toMatch(/\.cc-landing-brand\s*\{[^}]*font: 700 20px var\(--font-heading-quiet\)/)
+  expect(landing).toMatch(/\.cc-landing-footer > span\s*\{[^}]*font: 700 17px var\(--font-heading-quiet\)/)
+  expect(landing).not.toMatch(/--font-heading:|--font-body:|font-weight: 400 !important;/)
+  expect(landing).toContain('font: 700 clamp(44px,7.5vw,92px)/.98 var(--font-heading)')
+  expect(landing).toContain('font: 700 clamp(19px,2vw,23px)/1.2 var(--font-body)')
+  expect(landing).toContain('font: 700 16px/1 var(--font-body)')
   expect(items).not.toMatch(/--font-heading:|--font-body:|font-weight: 700 !important/)
   expect(base).toContain('h1, h2, h3, h4, h5, h6 {\n  font-family: var(--font-heading);\n  font-weight: 700 !important;')
-  expect(base).toContain('):not(.cc-landing *) {\n  font-family: var(--font-body) !important;\n  font-weight: 700 !important;')
+  expect(base).not.toContain(':not(.cc-landing *)')
+  expect(base).toContain(') {\n  font-family: var(--font-body) !important;\n  font-weight: 700 !important;')
+})
+
+it('keeps the public phone wordmark on one line at a smaller size',()=>{
+  expect(landing).toMatch(/\.cc-landing-brand\s*\{[^}]*white-space: nowrap/)
+  expect(landing).toContain('@media (max-width: 639px) {\n  .cc-landing-brand { font-size: 16px; }')
 })
 
 it('uses compact bold serif titles, bold sans actions and muted uppercase section labels',()=>{
