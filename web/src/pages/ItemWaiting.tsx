@@ -23,7 +23,7 @@ export function ItemWaiting({ item, pendingCount = 0 }: {item:Item;pendingCount?
     {!!requests.length && <ul className="cc-item-wait-list">{requests.map(request => <li key={request.id} className="cc-item-wait-row">
       <Avatar userId={request.requester_id} name={request.requester_name ?? 'Member'} coat={request.requester_cat_coat} photoVersion={request.requester_photo_version} size={32} />
       <div className="cc-item-wait-person">
-        <p><strong>{request.requester_name ?? 'Member'}</strong> · {request.cache_name}</p>
+        <p className="cc-item-wait-identity"><strong>{request.requester_name ?? 'Member'}</strong><span className="cc-item-wait-cache" title={request.cache_name}>· {request.cache_name}</span></p>
         <span>{request.queue_position===1 ? 'Next up' : request.queue_position ? ordinal(request.queue_position) : 'Waiting'}{request.quantity !== null ? ` · ${request.quantity} requested` : ''}</span>
       </div>
       <RequestDecision request={request} />

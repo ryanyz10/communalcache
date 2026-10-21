@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -42,6 +43,16 @@ it('private owner detail has hero actions, simple information and all-cache wait
   expect(html).toContain('approval-message-one')
   expect(html).toContain('aria-label="Mobile navigation"')
   for(const retired of ['cc-item-info-slip','cc-owner-availability','cc-owner-sharing','AVAILABLE','Delete item','View asks in Requests',"to change where it"])expect(html).not.toContain(retired)
+})
+
+it('keeps requester name before a separately ellipsized cache with its full title',()=>{
+  const cacheName='A very long neighborhood cache name that must remain accessible'
+  const html=render('waiting',{rows:[{...first,cache_name:cacheName}]})
+  expect(html).toContain(`<p class="cc-item-wait-identity"><strong>Sam</strong><span class="cc-item-wait-cache" title="${cacheName}">· ${cacheName}</span></p>`)
+  const css=readFileSync(new URL('../items.css',import.meta.url),'utf8')
+  expect(css).toMatch(/\.cc-item-wait-identity\s*\{[^}]*display: flex;[^}]*min-width: 0;[^}]*white-space: nowrap/)
+  expect(css).toMatch(/\.cc-item-wait-identity > strong\s*\{[^}]*flex: none;[^}]*max-width: 100%;[^}]*overflow: hidden;[^}]*text-overflow: ellipsis/)
+  expect(css).toMatch(/\.cc-item-wait-cache\s*\{[^}]*min-width: 0;[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap/)
 })
 
 it('hides an empty waiting section and retains inactive detail tag with usable Edit/availability controls',()=>{
