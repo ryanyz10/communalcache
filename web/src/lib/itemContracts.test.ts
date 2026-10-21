@@ -325,7 +325,7 @@ it('Save confirms all-cache waiting declines before any write; Keep active resto
   page.change('item-active',false);page.submit();page.render()
   expect(page.dialogModel.open).toBe(true)
   expect(page.render()).toContain('Make Tent inactive?')
-  expect(page.render()).toContain('It disappears from Tools and Garden. 2 waiting requests will be declined.')
+  expect(page.render()).toContain('It disappears from Tools and Garden. <strong>2 waiting requests will be declined.</strong>')
   expect(page.buttons().map(text)).toEqual(['Keep active','Make inactive'])
   expect(fetch).not.toHaveBeenCalled()
   page.cancel();page.render()
@@ -377,6 +377,34 @@ it('edit cache pills start from saved attachments, remain a local draft and leav
   expect(fixture('form',{editing:true}).button('Tools').props['aria-pressed']).toBe(true)
 })
 
+it.each([false,true])('groups photo beside name/note before full-width sharing and Active (editing=%s)', editing => {
+  const page=fixture('form',{editing,photoVersion:editing?'saved-version':undefined}), html=page.render()
+  const top=html.slice(html.indexOf('class="cc-item-editor-top"'),html.indexOf('<fieldset class="cc-put-it-in"'))
+  for(const field of ['cc-item-photo-field','cc-item-editor-copy','cc-item-title-field','cc-item-note-field'])expect(top).toContain(field)
+  expect(top.indexOf('cc-item-photo-field')).toBeLessThan(top.indexOf('cc-item-editor-copy'))
+  expect(top.indexOf('cc-item-title-field')).toBeLessThan(top.indexOf('cc-item-note-field'))
+  expect(top).not.toContain('cc-item-active')
+  expect(html.indexOf('cc-put-it-in')).toBeLessThan(html.indexOf('cc-item-active'))
+  expect(html).toContain('aria-label="Close"')
+})
+
+it('bolds the singular waiting-decline sentence before any write',()=>{
+  const fetch=vi.spyOn(globalThis,'fetch'),page=fixture('form',{editing:true,pendingCount:1})
+  page.change('item-active',false);page.submit()
+  expect(page.render()).toContain('<strong>1 waiting request will be declined.</strong>')
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('desktop Close uses the exact same Cancel handler without saving a dirty draft', () => {
+  const fetch=vi.spyOn(globalThis,'fetch'), page=fixture('form',{editing:true})
+  page.change('item-title','Changed')
+  expect(page.button('Close').props.onClick).toBe(page.button('Cancel').props.onClick)
+  click(page.button('Close'))
+  expect(page.trace.at(-1)).toEqual(['cancel'])
+  expect(page.editorState().dirty).toBe(true)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
 it('edit waits for attachment metadata before Save and cannot silently clear unknown caches', () => {
   const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('form',{editing:true,sharingLoading:true})
   expect(page.button('Save').props.disabled).toBe(true)
@@ -392,6 +420,7 @@ it('edit additions wait for Save, follow the item PATCH and disable controls whi
   page.submit();await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));page.render()
   expect(page.button('Club').props.disabled).toBe(true)
   expect(page.button('Cancel').props.disabled).toBe(true)
+  expect(page.button('Close').props.disabled).toBe(true)
   respond(new Response(null,{status:204}));await page.settled();page.render()
   expect(fetch.mock.calls.map(call => call[1]?.method)).toEqual(['PATCH','PUT'])
   expect(page.libraryItem().caches.map(cache => cache.id)).toEqual([cacheA.id,cacheB.id,cacheC.id])
