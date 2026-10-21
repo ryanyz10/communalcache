@@ -22,6 +22,7 @@ it('uses the same decorative art in item heroes without changing private image U
   const fallback=render(createElement(ItemPhoto,{item}))
   expect(fallback).toContain('cc-item-photo-frame cc-thing-tile cc-thing-tile-')
   expect(fallback).toContain('<span class="cc-thing-name" aria-hidden="true">guitar with spare strings</span>')
+  expect(fallback).not.toContain('cc-item-photo-hint')
   for(const cache_id of [null,'cache']){
     const photo=render(createElement(ItemPhoto,{item:{...item,cache_id,photo_version:'a/b?c'}}))
     expect(photo).toContain(`${cache_id?'/api/caches/cache/items':'/api/me/items'}/tile/photo?v=a%2Fb%3Fc`)
