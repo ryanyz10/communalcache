@@ -48,7 +48,7 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
   const item = { id: 'item', cache_id: 'cache', title: '4-person tent', is_consumable: false, quantity: null, available: true, photo_version: null }
   const examples: [string, string, Record<string, unknown>, string?][] = [
     ['AuthScreen', 'AuthScreen', { children: 'Content' }], ['AuthScreen', 'AuthScreen', { children: 'Content', illustration: 'Art', className: 'route' }],
-    ...['AuthBrand', 'SignInBox', 'BrandMark', 'MailIcon'].map(name => ['AuthScreen', name, {}] as [string, string, Record<string, unknown>]),
+    ...['AuthBrand', 'SignInBox', 'BrandMark'].map(name => ['AuthScreen', name, {}] as [string, string, Record<string, unknown>]),
     ['Avatar', 'Avatar', { userId: me.id, name: me.display_name }], ['Avatar', 'Avatar', { userId: me.id, name: me.display_name, photoVersion: 'photo', size: 64 }],
     ['CoatPicker', 'CoatPicker', { userId: me.id, value: 'grey', onChange: () => {}, names: true }],
     ['CodeInput', 'CodeInput', { value: '', onChange: () => {} }], ['CodeInput', 'CodeInput', { value: '123456', onChange: () => {} }],
@@ -111,7 +111,7 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
     }
     fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
-  // Pin parent output so shallow CI checkouts do not need historical Git objects.
-  expect(fingerprint.digest('hex')).toBe('d1f5384429667e5e44fdc878246ee7bcf4a2d81c1bcfc824c2ada2bd7528e7a2')
+  // Pin retained parent cases so shallow CI checkouts do not need historical Git objects.
+  expect(fingerprint.digest('hex')).toBe('5e7e2a1c107a4d8e82fa5e3e86d6379f105ec74efacef2ffe509852b294543c4')
   expect(examples.length).toBeGreaterThan(200)
 })

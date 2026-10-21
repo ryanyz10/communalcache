@@ -14,7 +14,6 @@ export function ItemPhoto({ item }: { item: Item }) {
       onError={() => setPhotoFailed(true)}
     /> : <>
       <ThingNameArt title={item.title} />
-      {!photoFailed && <span className="cc-item-photo-hint">no photo yet · tile shows the name</span>}
       {photoFailed && <div className="cc-item-photo-error">
         <p role="status">Photo unavailable.</p>
         <button type="button" onClick={() => setPhotoFailed(false)}>Try photo again</button>

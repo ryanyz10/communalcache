@@ -224,17 +224,6 @@
   background: var(--cc-card);
 }
 
-.cc-empty-slip {
-  padding: 16px 20px;
-  color: var(--cc-sub);
-  font-size: 14px;
-}
-
-.cc-empty-slip a {
-  color: var(--cc-accent-text);
-  font-weight: 600;
-}
-
 .cc-thing-tile {
   container-type: size;
   position: relative;
