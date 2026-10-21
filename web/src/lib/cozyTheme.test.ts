@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -72,17 +72,20 @@ it('uses the derived coat for legacy avatars while leaving profile-photo backgro
   expect(photo).not.toContain('cc-avatar-cat')
 })
 
-it('self-hosts the exact OFL font assets without remote font CSS or runtime asset origins', () => {
+it('keeps only the self-hosted OFL font still used by sleeping-cat artwork', () => {
   expect(css).not.toMatch(/https?:\/\//)
   expect(css).toContain('font-family: Caprasimo')
-  expect(css).toContain('font-family: Figtree')
-  expect(css).toContain('font-weight: 300 900')
+  expect(css).not.toContain('Figtree')
+  expect(css.match(/@font-face/g)).toHaveLength(2)
+  const cat=readFileSync(new URL('src/components/Cat.tsx',web),'utf8')
+  expect(cat).toContain('14px Caprasimo')
+  expect(cat).toContain('10px Caprasimo')
   const hashes = {
     'caprasimo-latin.woff2':'8be0594f223844d398b066640ab4303555978a8a72c6558ff769251007bd431a',
     'caprasimo-latin-ext.woff2':'8cbef7cdad7bfe1fd7dc1958f3eca65b6e4e58c34b2f5a366d3e659d6d3efad1',
-    'figtree-latin.woff2':'8330490a01c60c196eae00b823de8102275aaa5862e7b76a7af21b8745338928',
-    'figtree-latin-ext.woff2':'f153aa07c1b16fbb12391c2512860c97819a0a9fd014f338b2b3f12496479d13',
   }
+  expect(readdirSync(new URL('public/fonts/',web)).filter(file=>file.endsWith('.woff2')).sort()).toEqual(Object.keys(hashes).sort())
+  expect(readFileSync(new URL('index.html',web),'utf8')).not.toMatch(/figtree|rel="preload"/i)
   for(const [file,hash] of Object.entries(hashes)) {
     const bytes=readFileSync(new URL(`public/fonts/${file}`,web))
     expect(bytes.toString('ascii',0,4)).toBe('wOF2')
@@ -92,7 +95,7 @@ it('self-hosts the exact OFL font assets without remote font CSS or runtime asse
   const licence=readFileSync(new URL('public/fonts/OFL.txt',web),'utf8')
   expect(licence).toContain('SIL OPEN FONT LICENSE Version 1.1')
   expect(licence).toContain('Caprasimo Project Authors')
-  expect(licence).toContain('Figtree Project Authors')
+  expect(licence).not.toContain('Figtree')
 })
 
 it('retains reproducible installed-app assets while updating the system chrome colors', async () => {

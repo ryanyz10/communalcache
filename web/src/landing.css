@@ -1,15 +1,8 @@
 .cc-landing {
-  --font-heading: var(--font-brand-heading);
-  --font-body: var(--font-brand-body);
-  font-family: var(--font-body);
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow-x: clip;
-}
-
-.cc-landing :is(h1, h2, h3, h4, h5, h6) {
-  font-weight: 400 !important;
 }
 
 .cc-landing main {
@@ -39,11 +32,16 @@
   gap: 10px;
   text-decoration: none;
   color: var(--cc-fg);
-  font: 400 20px var(--font-heading);
+  font: 700 20px var(--font-heading-quiet);
+  white-space: nowrap;
 }
 
 .cc-landing-brand svg {
   flex: none;
+}
+
+@media (max-width: 639px) {
+  .cc-landing-brand { font-size: 16px; }
 }
 
 .cc-landing-primary, .cc-landing-secondary {
@@ -54,7 +52,7 @@
   border-radius: 999px;
   text-decoration: none;
   text-align: center;
-  font: 400 16px/1 var(--font-heading);
+  font: 700 16px/1 var(--font-body);
 }
 
 .cc-landing-primary {
@@ -110,7 +108,7 @@
 .cc-landing-hero h1 {
   margin: 0;
   max-width: 880px;
-  font: 400 clamp(44px,7.5vw,92px)/.98 var(--font-heading);
+  font: 700 clamp(44px,7.5vw,92px)/.98 var(--font-heading);
   letter-spacing: normal;
   text-wrap: balance;
 }
@@ -159,7 +157,7 @@
 }
 
 .cc-landing-box-face > span {
-  font: 400 22px var(--font-heading);
+  font: 700 22px var(--font-heading);
 }
 
 .cc-landing-roof {
@@ -359,7 +357,7 @@
 
 .cc-landing h2 {
   margin: 0;
-  font: 400 clamp(32px,4vw,44px)/1.05 var(--font-heading);
+  font: 700 clamp(32px,4vw,44px)/1.05 var(--font-heading);
   letter-spacing: normal;
 }
 
@@ -403,7 +401,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font: 400 26px var(--font-heading);
+  font: 700 26px var(--font-heading);
   color: #643312;
   transform: rotate(-6deg);
 }
@@ -485,7 +483,7 @@
 
 .cc-landing-step h3 {
   margin: 0;
-  font: 400 24px/1.15 var(--font-heading);
+  font: 700 24px/1.15 var(--font-heading);
   letter-spacing: normal;
 }
 
@@ -672,7 +670,7 @@
   border-radius: 28px;
   text-align: left;
   cursor: pointer;
-  font: 400 clamp(19px,2vw,23px)/1.2 var(--font-heading);
+  font: 700 clamp(19px,2vw,23px)/1.2 var(--font-body);
 }
 
 .cc-landing-faq-box:first-child button {
@@ -789,7 +787,7 @@
 }
 
 .cc-landing-footer > span {
-  font: 400 17px var(--font-heading);
+  font: 700 17px var(--font-heading-quiet);
 }
 
 .cc-landing-footer p {
@@ -843,7 +841,7 @@
 
 .cc-legal h1 {
   margin: 24px 0 8px;
-  font: 400 clamp(40px,6vw,60px)/1.1 var(--font-heading);
+  font: 700 clamp(40px,6vw,60px)/1.1 var(--font-heading);
 }
 
 .cc-legal .cc-legal-date {
