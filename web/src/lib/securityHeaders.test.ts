@@ -19,7 +19,7 @@ it('serves baseline headers on real assets without forcing all assets through th
   try {
     for (const origin of ['https://communalcache.com', 'https://communalcache-staging.ryanyz10-be6.workers.dev', 'http://localhost:8787']) {
       const expected = module.exports.securityHeaders(new Response(null), origin, '/favicon.svg')
-      for (const path of ['/favicon.svg', '/sw.js', '/fonts/figtree-latin.woff2']) {
+      for (const path of ['/favicon.svg', '/sw.js', '/fonts/caprasimo-latin.woff2']) {
         const response = await runtime.dispatchFetch(origin + path)
         expect(response.status).toBe(200)
         expect(Buffer.from(await response.arrayBuffer()).equals(readFileSync(publicDirectory + path.slice(1)))).toBe(true)
