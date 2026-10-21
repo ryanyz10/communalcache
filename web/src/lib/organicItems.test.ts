@@ -30,9 +30,9 @@ function render(element:ReactElement,path:string,route:string,owner=false) {
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals()})
 it('uses exact whole-library totals, not the loaded page, and keeps filtered pagination reachable',()=>{
   const html=render(createElement(LibraryPage),'/items','/items')
-  for(const text of ['87 things','in 3 caches','29 asks','To lend','To give','Not shared yet','Load more items','cc-library-slip','cc-library-row','cc-library-chips'])expect(html).toContain(text)
+  for(const text of ['Your items','All 87','Lend 60','Give 27','Not shared 5','Load more items','cc-library-grid','cc-library-tile'])expect(html).toContain(text)
   expect(html).not.toContain('private@example.com')
-  expect(html).not.toContain('1 thing ·')
+  expect(html).not.toMatch(/cc-library-hero|cc-library-asks|cc-library-chips|87 things|29 asks/)
 })
 it('shows the owner cat/name tile and packing slip with a native trigger to the still-working request form',()=>{
   const html=render(createElement(ItemPage),`/caches/${cacheId}/items/${id}`,'/caches/:cacheId/items/:itemId')
@@ -80,6 +80,6 @@ it('uses accessible cache pills with segment colors and no checkbox indicators',
   expect(css).toContain('.cc-select-row:hover:not(:disabled)')
   expect(css).not.toContain('cc-item-description-editor')
   expect(css).not.toContain('.cc-put-it-in label > span')
-  expect(css).toMatch(/\.cc-library-row\.cc-item-inactive\s*\{[^}]*opacity: \.45;[^}]*filter: grayscale\(1\)/)
+  expect(css).toMatch(/\.cc-library-tile\.cc-item-inactive \.cc-thing-tile\s*\{[^}]*opacity: \.45;[^}]*filter: grayscale\(1\)/)
   expect(css).toContain('.cc-item-active .cc-switch')
 })

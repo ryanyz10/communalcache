@@ -64,12 +64,11 @@ it('keeps Home cache/item/ask empty states and their actions inside their lists'
   expect(html).toContain('See all asks')
 })
 
-it('puts the library empty state inside the same packing slip as its column headings', () => {
+it('keeps the library empty state inside the tile grid with its create action', () => {
   const html = render(createElement(LibraryPage))
-  const slip = html.slice(html.indexOf('cc-packing-slip cc-library-slip'))
-  emptyList(slip, 'No items yet. Add something you can lend or give away.')
-  expect(slip).toMatch(/cc-library-columns[\s\S]*?<ul><li class="cc-list-empty">/)
-  expect(slip).toContain('href="/items/new"')
+  emptyList(html, 'No items yet. Add something you can lend or give away.','cc-library-grid')
+  expect(html).not.toContain('cc-library-columns')
+  expect(html).toContain('href="/items/new"')
 })
 
 it.each([false, true])('keeps incomplete library guidance in-row even after retained-data errors (error=%s)', libraryError => {
