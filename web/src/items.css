@@ -92,12 +92,6 @@
   border-radius: 0;
 }
 
-.cc-library-grid .cc-thing-tile > span {
-  left: 12px;
-  bottom: -12px;
-  font: 400 64px/1 var(--font-heading);
-}
-
 .cc-library-caption {
   display: grid;
   gap: 5px;
@@ -705,6 +699,7 @@
 
 .cc-item-photo-frame {
   position: relative;
+  width: 100%;
   height: 200px;
   border-radius: 32px;
   background: var(--cc-tile-pale);
@@ -727,15 +722,6 @@
 
 .cc-item-photo-frame.cc-thing-tile-sand {
   --cc-art-ink: #a19786;
-}
-
-.cc-item-name-art {
-  position: absolute;
-  left: 18px;
-  bottom: -26px;
-  color: var(--cc-art-ink);
-  font: 400 104px/1 var(--font-heading);
-  white-space: nowrap;
 }
 
 .cc-item-photo-hint {
@@ -1364,12 +1350,6 @@
 
   .cc-item-photo-error {
     color: #f5ead8;
-  }
-
-  .cc-item-name-art {
-    left: 30px;
-    bottom: -44px;
-    font-size: 190px;
   }
 
   .cc-item-photo-hint {

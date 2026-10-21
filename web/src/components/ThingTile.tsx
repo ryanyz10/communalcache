@@ -6,12 +6,16 @@ export function thingTone(id: string) {
   return (['clay', 'sage', 'sand'] as const)[catHash(id) % 3]
 }
 
+export function ThingNameArt({ title }: { title: string }) {
+  return <span className="cc-thing-name" aria-hidden="true">{title.toLocaleLowerCase().replace(/^\d+[-\s]\S+\s+/, '')}</span>
+}
+
 export function ThingTile({ item, library = false, tone = 'pale' }: { item: Item; library?: boolean; tone?: 'pale' | 'deep' }) {
   const [failed, setFailed] = useState(false)
   return <span className={`cc-thing-tile cc-thing-tile-${thingTone(item.id)} cc-thing-tile-${tone}`} aria-hidden="true">
     {item.photo_version && !failed
       ? <img alt="" src={`${library ? `/api/me/items/${item.id}` : `/api/caches/${item.cache_id}/items/${item.id}`}/photo?v=${encodeURIComponent(item.photo_version)}`} onError={() => setFailed(true)} />
-      : <span>{item.title.toLocaleLowerCase().replace(/^\d+[-\s]\S+\s+/, '').slice(0, 2)}</span>}
+      : <ThingNameArt title={item.title} />}
   </span>
 }
 
