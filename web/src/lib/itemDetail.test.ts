@@ -11,6 +11,7 @@ import { ItemWaiting } from '../pages/ItemWaiting'
 import { AppHeader } from '../components/AppHeader'
 import { useRequests, type ItemRequest } from './requests'
 import type { LibraryItem } from './items'
+import { ApiError } from './api'
 
 const id='11111111-1111-4111-8111-111111111111',cache='22222222-2222-4222-8222-222222222222'
 const item:LibraryItem={id,cache_id:null,owner_id:'owner',owner_name:'Owner',title:'Stand mixer',description:'Comes with the dough hook',is_consumable:false,quantity:null,available:true,active:true,created_at:1,photo_version:null,caches:[{id:cache,name:'Maple St'},{id:'garden',name:'Garden Club'}],pending_count:2}
@@ -18,19 +19,24 @@ const first:ItemRequest={id:'one',item_id:id,item_title:item.title,cache_id:cach
 const rows=[first,{...first,id:'two',cache_id:'garden',cache_name:'Garden Club',requester_id:'priya',requester_name:'Priya',created_at:2,queue_position:2}]
 afterEach(()=>vi.restoreAllMocks())
 
-function render(mode:'detail'|'edit'|'create'|'waiting', options:{rows?:ItemRequest[];caller?:string;more?:boolean;inactive?:boolean;error?:boolean}={}) {
+function render(mode:'detail'|'edit'|'create'|'waiting', options:{rows?:ItemRequest[];caller?:string;more?:boolean;inactive?:boolean;error?:boolean;inCache?:boolean;lent?:boolean;stock?:number;photo?:boolean;cacheDenied?:boolean;libraryMissing?:boolean}={}) {
   const caller=options.caller ?? 'owner',requests=options.rows ?? rows
   const client=new QueryClient({defaultOptions:{queries:{retry:false,retryOnMount:false,staleTime:Infinity}}})
   client.setQueryData(['me'],{id:caller,display_name:'Owner',email:'private@example.test'})
-  const current={...item,active:!options.inactive,pending_count:requests.length}
-  if(caller==='owner')client.setQueryData(['library-item','owner',id],current)
+  const current={...item,active:!options.inactive,available:!options.lent,pending_count:requests.length,is_consumable:options.stock!==undefined,quantity:options.stock??null,available_quantity:options.stock,photo_version:options.photo?'photo':null}
+  if(caller==='owner' && !options.libraryMissing)client.setQueryData(['library-item','owner',id],current)
+  client.setQueryData(['cache',cache],{id:cache,name:'Maple St'})
+  if(options.cacheDenied)client.getQueryCache().build(client,{queryKey:['item',cache,id]}).setState({status:'error',error:new ApiError(404,'not_found')})
+  else client.setQueryData(['item',cache,id],{...current,cache_id:cache,caches:undefined,pending_count:undefined})
+  client.setQueryData(['item-requests',cache,id],[first])
   client.setQueryData(['caches'],[{id:cache,name:'Maple St'},{id:'garden',name:'Garden Club'}])
   const key=['requests','incoming',id]
   if(options.error)client.getQueryCache().build(client,{queryKey:key}).setState({status:'error',error:new Error('offline')})
   else client.setQueryData(key,{pages:[{requests,unavailable_cache_ids:[],next_cursor:options.more?'next':null}],pageParams:[null]})
-  const path=mode==='create'?'/items/new':`/items/${id}${mode==='edit'?'/edit':''}`
+  const prefix=options.inCache?`/caches/${cache}`:''
+  const path=mode==='create'?'/items/new':`${prefix}/items/${id}${mode==='edit'?'/edit':''}`
   const element=mode==='waiting'?createElement(ItemWaiting,{item:current,pendingCount:current.pending_count}):mode==='detail'?createElement(ItemPage):createElement(ItemEditorPage,{editing:mode==='edit'})
-  const route=mode==='create'?'/items/new':mode==='edit'?'/items/:itemId/edit':'/items/:itemId'
+  const route=mode==='create'?'/items/new':`${options.inCache?'/caches/:cacheId':''}/items/:itemId${mode==='edit'?'/edit':''}`
   const markup=renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,{initialEntries:[path]},createElement(AppHeader),createElement(Routes,null,createElement(Route,{path:route,element})))})))
   client.clear()
   return markup
@@ -43,6 +49,68 @@ it('private owner detail has hero actions, simple information and all-cache wait
   expect(html).toContain('approval-message-one')
   expect(html).toContain('aria-label="Mobile navigation"')
   for(const retired of ['cc-item-info-slip','cc-owner-availability','cc-owner-sharing','AVAILABLE','Delete item','View asks in Requests',"to change where it"])expect(html).not.toContain(retired)
+})
+
+it.each([false,true])('uses the same owner sections and route-specific Back for cache context %s',inCache=>{
+  const html=render('detail',{inCache,photo:true})
+  expect(html).toContain('class="cc-owner-item-detail"')
+  expect(html).toContain(`<a href="${inCache?`/caches/${cache}`:'/items'}" data-discover="true">‹ Back</a>`)
+  for(const copy of ['cc-owner-hero','cc-owner-info','cc-owner-kind','Note','Availability','In caches','Garden Club','Waiting · 2','Approve request from Sam','Decline request from Priya'])expect(html).toContain(copy)
+  expect(html).toContain(`/api/me/items/${id}/photo?v=photo`)
+  expect(html.match(/role="status">Available/g)).toHaveLength(1)
+  expect(html.includes('aria-label="Mobile navigation"')).toBe(!inCache)
+  expect(html).not.toMatch(/organic-item-detail|cc-item-owner-cat|cc-item-info-slip|cc-item-from|cc-detail-ask|>From</)
+})
+
+it('uses that layout for a member without mounting private sharing, library photos or waiting decisions',()=>{
+  const html=render('detail',{caller:'sam',inCache:true,photo:true})
+  for(const copy of ['cc-owner-item-detail','cc-owner-hero','cc-owner-info','cc-owner-kind','Note','cc-item-from','cc-avatar','Owner','Ask to borrow','Ask Owner to borrow it','cc-member-asks','Sam','Pending','aria-controls="item-ask-sheet"'])expect(html).toContain(copy)
+  expect(html).toContain(`href="/caches/${cache}"`)
+  expect(html).toContain(`/api/caches/${cache}/items/${id}/photo?v=photo`)
+  expect(html).not.toMatch(/organic-item-detail|cc-item-owner-cat|>Edit<\/a>|In caches|Garden Club|Priya|cc-owner-waiting|Approve request|Decline request|Mark as lent out|\/api\/me\/items|Mobile navigation/)
+  expect(html).toContain('aria-expanded="false" aria-haspopup="dialog"')
+  expect(html).not.toContain('id="item-ask-sheet"')
+})
+
+it.each([
+  [{},'Lend',null,false,'Ask to borrow'],
+  [{lent:true},'Lend','Lent out',true,'Ask to borrow'],
+  [{stock:3},'Give · 3',null,false,'Ask for some'],
+  [{stock:0},'Give · 0','None left',true,'Ask for some'],
+  [{stock:3,lent:true},'Give · 3','Lent out',true,'Ask for some'],
+])('stamps a member view only when unavailable and keeps ask rules for %j',(options,kind,stamp,disabled,copy)=>{
+  const html=render('detail',{...options,caller:'sam',inCache:true})
+  expect(html).toContain(`<p class="cc-owner-kind">${kind}</p>`)
+  if(stamp)expect(html).toContain(`>${stamp}</span>`)
+  else expect(html).not.toMatch(/>(Available|Lent out|None left)<\/span>/)
+  expect(html).toContain(copy)
+  const trigger=html.match(/<button[^>]*aria-controls="item-ask-sheet"[^>]*>/)![0]
+  expect(trigger.includes('disabled=""')).toBe(disabled)
+})
+
+it('does not bypass a cache denial with cached owner-library data and waits for owner detail after admission',()=>{
+  const denied=render('detail',{inCache:true,cacheDenied:true})
+  expect(denied).toContain('not available, or you are no longer a member')
+  expect(denied).toContain(`href="/caches/${cache}"`)
+  expect(denied).not.toMatch(/Stand mixer|Garden Club|Approve request/)
+  const loading=render('detail',{inCache:true,libraryMissing:true})
+  expect(loading).toContain('data-skeleton="item"')
+  expect(loading).not.toMatch(/Stand mixer|In caches|Approve request/)
+})
+
+it('enables the owner-library read only after the cache read confirms ownership',()=>{
+  for(const caller of ['owner','member'])for(const cacheState of ['pending','success','error']){
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
+    client.setQueryData(['me'],{id:caller,display_name:'Neighbor'})
+    const key=['item',cache,id]
+    if(cacheState==='success')client.setQueryData(key,{...item,cache_id:cache})
+    if(cacheState==='error')client.getQueryCache().build(client,{queryKey:key}).setState({status:'error',error:new Error('Not found')})
+    renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children:createElement(MemoryRouter,{initialEntries:[`/caches/${cache}/items/${id}`]},createElement(Routes,null,createElement(Route,{path:'/caches/:cacheId/items/:itemId',element:createElement(ItemPage)})))})))
+    const library=client.getQueryCache().find({queryKey:['library-item',caller,id],exact:true})!
+    expect(library.options).toMatchObject({enabled:caller==='owner' && cacheState==='success'})
+    expect(client.getQueryCache().find({queryKey:key,exact:true})!.options).toMatchObject({enabled:true})
+    client.clear()
+  }
 })
 
 it('keeps requester name before a separately ellipsized cache with its full title',()=>{
