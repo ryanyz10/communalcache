@@ -88,13 +88,18 @@ it('pins reviewed skeleton markup including the redesigned private item layout',
         .replace('<h1>New item</h1>','')
         .replace('</span><div class="cc-item-fields">','</span><div class="cc-item-editor-nav"><button disabled="">Cancel</button><h1>New item</h1><button disabled="">Save</button></div><div class="cc-item-fields">')
     }
+    if (name === 'LibrarySkeleton') {
+      expect(html).toContain('cc-library-grid')
+      expect(html).toContain('<h1>Your items</h1>')
+      expect(html).not.toMatch(/cc-library-hero|cc-library-cat|cc-library-asks|cc-library-row/)
+    }
     if (name === 'ItemSkeleton') {
       expect(html).toContain('cc-owner-item-layout')
       expect(html).not.toMatch(/Delete item|cc-owner-availability|cc-owner-sharing|cc-item-info-slip/)
     }
     hash.update(name + '\0' + html + '\0')
   }
-  expect(hash.digest('hex')).toBe('96483723bc764441708a9b92eea0d637084966d0f525d443db7eda42da4b4926')
+  expect(hash.digest('hex')).toBe('e7a144c3cad0d6eb52497db0ec7d0db93c4732190deeaec575e73bcfdf9c5b68')
 })
 
 it.each([undefined, 0, 1, 30, 100])('preserves member rows and the missing-count fallback for %s', count => {
