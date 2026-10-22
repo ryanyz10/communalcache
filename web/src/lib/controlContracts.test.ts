@@ -4,7 +4,6 @@ import * as React from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { ApiError, apiFetch, errorMessage } from './api'
 import * as contacts from './contacts'
@@ -25,7 +24,6 @@ type MutationOptions = {
   onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
-const parent = '2dfffd47f1bd59d39eb3fd52d8ad859898194cba'
 const me = { id: 'owner', display_name: 'Neighbor', email: 'private-auth@example.test', cat_coat: 'grey', profile_photo_version: 'old-photo' }
 const contact: contacts.Contact = { kind: 'email', value: 'chosen@example.test', link: 'mailto:chosen@example.test' }
 const requestKeys = ['item-requests', 'requests', 'item', 'items', 'library', 'library-item', 'home-summary', 'caches', 'cache', 'request-detail', 'request-contact']
@@ -134,9 +132,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
   const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
   modules['../lib/usePhotoSelection'] = hook.exports
-  const source = process.env.CONTROL_CONTRACT_PARENT === '1'
-    ? execFileSync('git', ['show', `${parent}:web/src/pages/${page}.tsx`], { encoding: 'utf8' })
-    : readFileSync(new URL(`../pages/${page}.tsx`, import.meta.url), 'utf8')
+  const source = readFileSync(new URL(`../pages/${page}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} as Record<string, React.ComponentType<Record<string, unknown>>> }
   new Function('require', 'module', 'exports', compiled)((name: string) => { if (!(name in modules)) throw new Error(`Unexpected control dependency ${name}`); return modules[name] }, module, module.exports)

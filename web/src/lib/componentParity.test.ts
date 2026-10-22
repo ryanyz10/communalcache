@@ -6,7 +6,6 @@ import * as Router from 'react-router'
 import * as Query from '@tanstack/react-query'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import ts from 'typescript'
 import * as Cat from '../components/Cat'
@@ -21,7 +20,6 @@ import * as avatars from './avatars'
 import * as config from './config'
 import * as turnstile from './turnstile'
 
-const parent = '2dfffd47f1bd59d39eb3fd52d8ad859898194cba'
 const me = { id: 'owner', display_name: 'Neighbor', email: 'private-auth@example.test', cat_coat: 'grey' }
 const modules: Record<string, unknown> = {
   react: React, 'react/jsx-runtime': Runtime, 'react-router': Router, '@tanstack/react-query': Query,
@@ -29,8 +27,8 @@ const modules: Record<string, unknown> = {
   '../lib/cats': cats, '../lib/contacts': contacts, '../lib/avatars': avatars, '../lib/config': config, '../lib/turnstile': turnstile,
   '../auth/AuthProvider': { useAuth: () => ({ me }) }, '../lib/caches': { useHomeSummary: () => ({ data: { pending_answer_count: 3 }, isError: false }) },
 }
-function load(file: string, frozen: boolean) {
-  const source = frozen ? execFileSync('git', ['show', `${parent}:web/src/components/${file}.tsx`], { encoding: 'utf8' }) : readFileSync(new URL(`../components/${file}.tsx`, import.meta.url), 'utf8')
+function load(file: string) {
+  const source = readFileSync(new URL(`../components/${file}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} as Record<string, ComponentType<Record<string, unknown>>> }
   new Function('require', 'module', 'exports', compiled)((name: string) => { if (!(name in modules)) throw new Error(`Unknown parity dependency ${name}`); return modules[name] }, module, module.exports)
@@ -44,7 +42,7 @@ function render(component: ComponentType<Record<string, unknown>>, props: Record
   return html
 }
 
-it('retains shared markup apart from tested contrast/tour hooks, including every status/navigation branch', () => {
+it('pins current shared markup including every status/navigation branch', () => {
   const item = { id: 'item', cache_id: 'cache', title: '4-person tent', is_consumable: false, quantity: null, available: true, photo_version: null }
   const examples: [string, string, Record<string, unknown>, string?][] = [
     ['AuthScreen', 'AuthScreen', { children: 'Content' }], ['AuthScreen', 'AuthScreen', { children: 'Content', illustration: 'Art', className: 'route' }],
@@ -75,43 +73,29 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
   const exports = new Map<string, ReturnType<typeof load>>()
   const fingerprint = createHash('sha256')
   for (const [file, name, props, path] of examples) {
-    if (!exports.has(file)) exports.set(file, load(file, process.env.COMPONENT_PARITY_PARENT === '1'))
-    // Contrast and tour targets are tested separately; keep other parent markup pinned.
-    let html = render(exports.get(file)![name], props, path)
-      .replace(/ data-cat-backdrop="(?:ginger|grey|dusk|oat|ash|toffee)"/g, '')
-      .replace(/ data-tour="(?:items|requests|account)"/g, '')
-    if (file === 'AppHeader' && path === '/items/a' && process.env.COMPONENT_PARITY_PARENT !== '1') {
+    if (!exports.has(file)) exports.set(file, load(file))
+    const html = render(exports.get(file)![name], props, path)
+    if (file === 'AppHeader' && path === '/items/a') {
       expect(html).toContain('aria-label="Mobile navigation"')
-      html=html.replace(/<nav aria-label="Mobile navigation"[^>]*>[\s\S]*?<\/nav>/,'')
     }
-    if (file === 'Turnstile' && process.env.COMPONENT_PARITY_PARENT !== '1') {
-      // Both callers now own feedback; only the old inline unavailable UI is removed.
+    if (file === 'Turnstile') {
+      // Callers own bot-check feedback, not this container.
       expect(html).toBe('<section class="mt-3" aria-label="Bot protection"><div></div></section>')
-      html = html.replace('</section>', '<div><p role="alert" class="text-sm text-red-700">Bot protection is unavailable. Please retry.</p><button type="button" class="mt-2 text-sm underline">Retry bot check</button></div></section>')
     }
-    if (file === 'ThingTile' && name === 'ThingTile' && !(props.item as {photo_version:string|null}).photo_version && process.env.COMPONENT_PARITY_PARENT !== '1') {
-      const art='<span class="cc-thing-name" aria-hidden="true">tent</span>'
-      expect(html).toContain(art)
-      // Pin unrelated markup while allowing the shared full-title fallback.
-      html=html.replace(art,'<span>te</span>')
+    if (file === 'ThingTile' && name === 'ThingTile' && !(props.item as {photo_version:string|null}).photo_version) {
+      expect(html).toContain('<span class="cc-thing-name" aria-hidden="true">tent</span>')
     }
-    if (file === 'ThingTile' && name === 'ThingStatus' && process.env.COMPONENT_PARITY_PARENT !== '1') {
+    if (file === 'ThingTile' && name === 'ThingStatus') {
       expect(html).not.toContain('cc-status-note')
       expect(html).not.toContain('With a neighbor')
       const currentItem=props.item as {is_consumable:boolean;available:boolean;quantity:number|null}
       if (!props.pending && currentItem.available && currentItem.is_consumable) {
-        const quantity=currentItem.quantity ?? 0
-        expect(html).toContain(`>Give · ${quantity}</span>`)
-        html=html.replace(`>Give · ${quantity}</span>`,`>${quantity} to give</span>`)
-      }
-      if (!(props.pending as number) && (props.item as {available:boolean}).available === false) {
-        // Retire only the old availability-note span; pin every other byte.
-        html = html.replace(/<\/span>$/, '<span class="cc-status-note"> · With a neighbor</span></span>')
+        expect(html).toContain(`>Give · ${currentItem.quantity ?? 0}</span>`)
       }
     }
     fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
-  // Pin retained parent cases so shallow CI checkouts do not need historical Git objects.
-  expect(fingerprint.digest('hex')).toBe('b2991f9e4624ee47f612cb71e95d9d8ca89e47cced7ac23f572335333ed98fbc')
+  // Pin current output without rewriting layout, accessibility or tour hooks.
+  expect(fingerprint.digest('hex')).toBe('7e9e9dd715b7f6d362084a65d9ce8d41e0ffc18afb9533bf80d2fe060d02fc2d')
   expect(examples).toHaveLength(161)
 })

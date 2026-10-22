@@ -5,7 +5,6 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 import * as Router from 'react-router'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { apiFetch, errorMessage } from './api'
 import * as items from './items'
@@ -22,7 +21,6 @@ type MutationOptions = {
   onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
-const parent = '82692d32909d4d63b4f3256c3e667c03e258707e'
 const cacheA = { id: '11111111-1111-4111-8111-111111111111', name: 'Tools' }
 const cacheB = { id: '22222222-2222-4222-8222-222222222222', name: 'Garden' }
 const cacheC = { id: '44444444-4444-4444-8444-444444444444', name: 'Club' }
@@ -154,11 +152,8 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
   const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
   modules['../lib/usePhotoSelection'] = hook.exports
-  const oldFile = kind === 'delete' || kind === 'availability' ? 'ItemPages' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet'
-  const newFile = kind === 'delete' ? 'DeleteItem' : kind === 'availability' ? 'ItemPage' : oldFile
-  const source = process.env.ITEM_CONTRACT_PARENT === '1'
-    ? execFileSync('git', ['show', `${parent}:web/src/pages/${oldFile}.tsx`], { encoding: 'utf8' })
-    : readFileSync(new URL(`../pages/${newFile}.tsx`, import.meta.url), 'utf8')
+  const file = kind === 'delete' ? 'DeleteItem' : kind === 'availability' ? 'ItemPage' : kind === 'sharing' ? 'ShownIn' : kind === 'form' ? 'ItemForm' : 'AddItemSheet'
+  const source = readFileSync(new URL(`../pages/${file}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText

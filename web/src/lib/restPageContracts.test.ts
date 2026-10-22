@@ -5,7 +5,6 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 import * as Router from 'react-router'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { ApiError, apiFetch, errorMessage } from './api'
 import * as caches from './caches'
@@ -25,7 +24,6 @@ type MutationOptions = {
   onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
-const parent = '511cfb1f216a71cbb335dd66fdb4f24fcbbb0d5f'
 const cacheId = '11111111-1111-4111-8111-111111111111'
 const token = `${cacheId}.${'A'.repeat(43)}`
 const me = { id: 'owner', display_name: 'Owner', email: 'private-auth@example.test', cat_coat: 'grey' }
@@ -147,9 +145,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
   for (const name of ['sessionStorage', 'localStorage']) vi.stubGlobal(name, {
     getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key),
   })
-  const source = process.env.REST_CONTRACT_PARENT === '1'
-    ? execFileSync('git', ['show', `${parent}:web/src/pages/${page}.tsx`], { encoding: 'utf8' })
-    : readFileSync(new URL(`../pages/${page}.tsx`, import.meta.url), 'utf8')
+  const source = readFileSync(new URL(`../pages/${page}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} as Record<string, React.ComponentType<Record<string, unknown>>> }
   new Function('require', 'module', 'exports', compiled)((name: string) => { if (!(name in modules)) throw new Error(`Unexpected ${page} dependency ${name}`); return modules[name] }, module, module.exports)
