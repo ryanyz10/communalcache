@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
+import { AppRoutes } from '../App'
 import { CachePage } from '../pages/CachePage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { ApiError } from './api'
@@ -112,7 +113,9 @@ function setup(page: 'cache' | 'settings', options: {
   const entry = `/caches/${cacheId}${page === 'settings' ? '/settings' : ''}`
   const element = page === 'settings' ? createElement(CacheSettingsPage) : createElement(CachePage, { itemsMoving: options.itemsMoving })
   const render = () => renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, {
-    children: createElement(MemoryRouter, { initialEntries: [entry] }, createElement(Routes, null, createElement(Route, { path, element }))),
+    children: createElement(MemoryRouter, { initialEntries: [entry] },
+      caller === 'unnamed' || caller === 'signed-out' ? createElement(AppRoutes)
+        : createElement(Routes, null, createElement(Route, { path, element }))),
   })))
   return { client, render, html: render() }
 }
@@ -191,9 +194,13 @@ it.each(['owner', 'member', 'unnamed', 'signed-out'] as const)('preserves cache 
   const { client } = setup('cache', { caller })
   const named = caller === 'owner' || caller === 'member'
   for (const key of [['cache', cacheId], ['caches'], ['items', cacheId]]) {
-    expect(client.getQueryCache().find({ queryKey: key, exact: true })!.options).toMatchObject({ enabled: named, retry: false })
+    const query = client.getQueryCache().find({ queryKey: key, exact: true })!
+    if (named) expect(query.options).toMatchObject({ enabled: true, retry: false })
+    else expect(query.options.queryFn).toBeUndefined() // The route gate never mounted the page.
   }
-  expect(client.getQueryCache().find({ queryKey: ['join-requests', cacheId], exact: true })!.options).toMatchObject({ enabled: caller === 'owner' })
+  const joins = client.getQueryCache().find({ queryKey: ['join-requests', cacheId], exact: true })!
+  if (named) expect(joins.options).toMatchObject({ enabled: caller === 'owner' })
+  else expect(joins.options.queryFn).toBeUndefined()
 })
 
 it.each(['cache', 'settings'] as const)('makes zero disabled reads for unnamed/signed-out %s contexts', async page => {
@@ -202,6 +209,7 @@ it.each(['cache', 'settings'] as const)('makes zero disabled reads for unnamed/s
     const { client, html } = setup(page, { caller, cacheState: 'pending', itemsState: 'pending', cachesState: 'pending', joinsState: 'pending' })
     expect(html).not.toContain('Tools')
     const queries = client.getQueryCache().getAll().filter(query => query.queryKey[0] !== 'me' && query.queryKey[0] !== 'library')
+    expect(queries).toHaveLength(0)
     const stops = queries.map(query => new QueryObserver(client, { ...query.options, queryKey: query.queryKey }).subscribe(() => {}))
     await Promise.resolve()
     expect(queries.every(query => query.state.fetchStatus === 'idle')).toBe(true)

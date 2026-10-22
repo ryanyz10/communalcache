@@ -133,6 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }}>{children}</AuthContext.Provider>
 }
 
+export function useProfile(): Me & { display_name: string } {
+  const { me } = useAuth()
+  if (!me?.display_name) throw new Error('useProfile needs RequireProfile')
+  return { ...me, display_name: me.display_name }
+}
+
 export function useAuth(): AuthState {
   const context = useContext(AuthContext)
   if (!context) throw new Error('useAuth requires AuthProvider')

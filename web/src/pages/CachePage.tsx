@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, Navigate, useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '../auth/AuthProvider'
+import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import {
   cacheDetailQuery, cacheItemsQuery, filterContents,
@@ -9,7 +9,6 @@ import {
 } from '../lib/caches'
 import type { JoinRequest } from '../lib/joining'
 import { shareInvite } from '../lib/invites'
-import { OnboardingPage } from './OnboardingPage'
 import { AddItemSheet } from './AddItemSheet'
 import { Avatar } from '../components/Avatar'
 import { boxColor } from '../components/Box'
@@ -23,26 +22,26 @@ import {
 
 export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const { cacheId = '' } = useParams()
-  const { me } = useAuth()
+  const me = useProfile()
   const { showToast } = useToast()
   const [contentsFilter, setContentsFilter] = useState<ContentsFilter>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const addItemDialog = useRef<HTMLDialogElement>(null)
-  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me?.display_name })
+  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me.display_name })
   const cachesQuery = useQuery({
     queryKey: ['caches'],
     queryFn: () => apiFetch<CacheSummary[]>('/api/caches'),
-    enabled: !!me?.display_name,
+    enabled: !!me.display_name,
   })
   const itemsQuery = useQuery({
     ...cacheItemsQuery(cacheId),
-    enabled: !!me?.display_name && !itemsMoving,
+    enabled: !!me.display_name && !itemsMoving,
   })
   const joinRequestsQuery = useQuery({
     queryKey: ['join-requests', cacheId],
     queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`),
-    enabled: !!me?.display_name && cacheQuery.data?.owner_id === me.id,
+    enabled: !!me.display_name && cacheQuery.data?.owner_id === me.id,
   })
   const [startedWithSkeleton] = useState(cacheQuery.isPending || itemsQuery.isPending)
   const [showPlaceholder, setShowPlaceholder] = useState(startedWithSkeleton)
@@ -55,8 +54,6 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
     return () => clearTimeout(timer)
   }, [isLoadingCacheData, showPlaceholder])
 
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
   if (cacheQuery.isPending) return <CacheSkeleton
     cacheId={cacheId}
     summary={cachesQuery.data?.find(cache => cache.id === cacheId)}

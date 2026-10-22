@@ -1,19 +1,16 @@
 import { useState } from 'react'
-import { Link, Navigate } from 'react-router'
-import { useAuth } from '../auth/AuthProvider'
+import { Link } from 'react-router'
+import { useProfile } from '../auth/AuthProvider'
 import { errorMessage } from '../lib/api'
 import { filterLibraryItems, useLibrary, type LibraryFilter } from '../lib/items'
-import { OnboardingPage } from './OnboardingPage'
 import { ThingTile } from '../components/ThingTile'
 import { LibrarySkeleton } from '../components/skeletons/LibrarySkeleton'
 import { LoadingStatus, Shimmer } from '../components/Skeleton'
 
 export function LibraryPage() {
-  const { me } = useAuth()
+  const me = useProfile()
   const [filter, setFilter] = useState<LibraryFilter>('all')
-  const libraryQuery = useLibrary(me?.display_name ? me.id : undefined)
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
+  const libraryQuery = useLibrary(me.id)
   if (libraryQuery.isPending) return <LibrarySkeleton filter={filter} />
 
   const loadedItems = libraryQuery.data?.pages.flatMap(page => page.items) ?? []

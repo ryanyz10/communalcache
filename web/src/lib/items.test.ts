@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
+import { AppRoutes } from '../App'
 import { ItemEditorPage } from '../pages/ItemEditorPage'
 import { ItemPage } from '../pages/ItemPage'
 import { CachePage } from '../pages/CachePage'
@@ -199,10 +200,14 @@ it.each(['detail', 'edit', 'sharing'] as const)('makes zero item/cache requests 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     client.setQueryData(['me'], me)
     const element = page === 'detail' ? createElement(ItemPage) : page === 'edit' ? createElement(ItemEditorPage, { editing: true }) : createElement(ShownIn, { item })
-    const children = createElement(MemoryRouter, { initialEntries: [`/caches/${cacheId}/items/${item.id}`] }, createElement(Routes, null, createElement(Route, { path: '/caches/:cacheId/items/:itemId', element })))
+    const entry = `/caches/${cacheId}/items/${item.id}${page === 'edit' ? '/edit' : ''}`
+    const children = createElement(MemoryRouter, { initialEntries: [entry] }, page === 'sharing'
+      ? createElement(Routes, null, createElement(Route, { path: '/caches/:cacheId/items/:itemId', element }))
+      : createElement(AppRoutes))
     renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children })))
     const queries = client.getQueryCache().getAll().filter(query => query.queryKey[0] !== 'me')
-    expect(queries.length).toBeGreaterThan(0)
+    if (page === 'sharing') expect(queries.length).toBeGreaterThan(0)
+    else expect(queries).toHaveLength(0)
     for (const query of queries) expect(query.options).toMatchObject({ enabled: false })
     const stops = queries.map(query => new QueryObserver(client, { ...query.options, queryKey: query.queryKey }).subscribe(() => {}))
     await Promise.resolve()

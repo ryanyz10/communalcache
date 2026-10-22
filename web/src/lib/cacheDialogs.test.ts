@@ -127,7 +127,7 @@ function fixture(flow: Flow) {
     'react/jsx-runtime': { jsx: record(jsx), jsxs: record(jsxs), Fragment: React.Fragment },
     'react-router': { ...Router, useParams: () => ({ cacheId }), useNavigate: () => (path: string) => trace.push(['navigate', path]) },
     '@tanstack/react-query': { useQuery: () => ({ data: cache, isPending: false, isError: false }), useQueryClient: () => queryClient, useMutation },
-    '../auth/AuthProvider': { useAuth: () => ({ me: { id: flow === 'leave' ? memberId : ownerId, display_name: 'Neighbor' } }) },
+    '../auth/AuthProvider': { useAuth: () => ({ me: { id: flow === 'leave' ? memberId : ownerId, display_name: 'Neighbor' } }), useProfile: () => ({ id: flow === 'leave' ? memberId : ownerId, display_name: 'Neighbor' }) },
     '../lib/api': { apiFetch, errorMessage },
     '../lib/caches': { cacheDetailQuery },
     '../lib/requests': { invalidateRequestViews },

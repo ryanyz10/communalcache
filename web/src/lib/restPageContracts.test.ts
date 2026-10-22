@@ -115,7 +115,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
         return query
       },
     },
-    '../auth/AuthProvider': { useAuth: () => auth }, '../lib/api': { ApiError, apiFetch, errorMessage },
+    '../auth/AuthProvider': { useAuth: () => auth, useProfile: () => auth.me }, '../lib/api': { ApiError, apiFetch, errorMessage },
     '../lib/caches': { ...caches, useHomeSummary: () => ({ data: undefined, isError: false }) },
     '../lib/items': { useLibrary: () => ({ data: { pages: [{ items: [] }] }, isSuccess: true }) },
     '../lib/pendingJoin': pendingJoin, '../lib/magicLinks': magicLinks, '../lib/googleSignIn': googleSignIn, '../lib/joining': joining, '../lib/profile': { refreshProfileViews },

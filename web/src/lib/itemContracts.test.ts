@@ -134,7 +134,7 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
         error: null, isPending: queryKey[0] === 'library-item' && !!context.sharingLoading, isError: false, isSuccess: queryKey[0] !== 'library-item' || !context.sharingLoading,
       }),
     },
-    '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }) },
+    '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }), useProfile: () => ({ id: 'owner', display_name: 'Owner' }) },
     '../lib/api': { apiFetch, errorMessage }, '../lib/items': { ...items, useLibrary: () => ({ data: { pages: [{ items: [item, {...item,id:'unshared',title:'Ladder',caches:[]}, {...item,id:'other',title:'Tarp',caches:[]}] }] }, isSuccess:true }) }, '../lib/caches': { cacheDetailQuery },
     '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadPhoto }, '../lib/requests': { invalidateRequestViews },
     './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null },
