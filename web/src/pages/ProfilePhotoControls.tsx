@@ -8,7 +8,7 @@ import { usePhotoSelection } from '../lib/usePhotoSelection'
 import { PhotoPreview } from '../components/PhotoPreview'
 import { refreshProfileViews } from '../lib/profile'
 import { catTraits, COATS } from '../lib/cats'
-import { CoatControls } from './CoatControls'
+import { CoatControls } from '../components/CoatControls'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
 

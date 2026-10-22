@@ -6,7 +6,7 @@ import { useHomeSummary } from '../lib/caches'
 import { useOwnContact } from '../lib/contacts'
 import { RequestsSkeleton } from '../components/skeletons/RequestSkeletons'
 import { Shimmer, LoadingStatus } from '../components/Skeleton'
-import { RequestCard } from './RequestCard'
+import { RequestCard } from '../components/RequestCard'
 
 export function RequestsPage() {
   const me = useProfile()

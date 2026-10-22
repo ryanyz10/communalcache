@@ -137,7 +137,7 @@ function fixture(page: Page, options: { inviteToken?: string; invalidLink?: bool
     './OnboardingPage': { OnboardingPage: Null }, './LandingPage': { LandingPage: Null },
     './JoinInviteSheet': { JoinInviteSheet: Null }, './LoginPage': { LoginForm: Null },
     './PushControls': { PushControls: Null }, './ProfilePhotoControls': { ProfilePhotoControls: Null },
-    './CoatControls': { CoatControls: Null }, './ContactControls': { ContactControls: Null }, './PeekControls': { PeekControls: Null },
+    '../components/CoatControls': { CoatControls: Null }, './ContactControls': { ContactControls: Null }, '../components/PeekControls': { PeekControls: Null },
   }
   vi.stubGlobal('location', { origin: 'https://communalcache.com', pathname: '/auth/link', search: '', hash: options.invalidLink ? '' : `#token=${'A'.repeat(32)}` })
   vi.stubGlobal('history', { state: null, replaceState: (...args: unknown[]) => trace.push(['history', ...args]) })

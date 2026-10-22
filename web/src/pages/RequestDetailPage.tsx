@@ -9,8 +9,8 @@ import { Avatar } from '../components/Avatar'
 import { Stamp } from '../components/Stamp'
 import { ThingNameArt, thingTone } from '../components/ThingTile'
 import { RequestDetailSkeleton } from '../components/skeletons/RequestSkeletons'
-import { ApprovedContact } from './RequestContact'
-import { RequestCard } from './RequestCard'
+import { ApprovedContact } from '../components/RequestContact'
+import { RequestCard } from '../components/RequestCard'
 
 export function RequestDetailPage() {
   const { requestId = '' } = useParams()

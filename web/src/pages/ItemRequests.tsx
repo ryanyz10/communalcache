@@ -7,7 +7,7 @@ import { Stamp } from '../components/Stamp'
 import { Avatar } from '../components/Avatar'
 import { SkeletonRows } from '../components/Skeleton'
 import { AskSheet } from './AskSheet'
-import { RequestCard } from './RequestCard'
+import { RequestCard } from '../components/RequestCard'
 
 export function ItemRequests({ item, askOpen, onAskClose, cacheName }: {
   item: Item

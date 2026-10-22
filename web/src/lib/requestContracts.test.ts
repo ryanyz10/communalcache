@@ -122,7 +122,7 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
     '../components/Cat': { Cat: Null }, '../components/Skeleton': { LoadingLines: ({ label }: { label: string }) => createElement('p', null, label) },
   }
   const file = kind === 'ask' ? 'AskSheet' : kind === 'decision' ? 'RequestDecision' : 'RequestContact'
-  const source = readFileSync(new URL(`../pages/${file}.tsx`, import.meta.url), 'utf8')
+  const source = readFileSync(new URL(`../${kind === 'ask' ? 'pages' : 'components'}/${file}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText

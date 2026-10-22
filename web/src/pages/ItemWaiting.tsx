@@ -4,7 +4,7 @@ import type { Item } from '../lib/items'
 import { ordinal, useRequests } from '../lib/requests'
 import { Avatar } from '../components/Avatar'
 import { LoadingStatus } from '../components/Skeleton'
-import { RequestDecision } from './RequestDecision'
+import { RequestDecision } from '../components/RequestDecision'
 
 export function ItemWaiting({ item, pendingCount = 0 }: {item:Item;pendingCount?:number}) {
   const { me } = useAuth()
