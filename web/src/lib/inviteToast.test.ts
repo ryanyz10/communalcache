@@ -30,7 +30,7 @@ function page(name: 'CachePage' | 'CacheSettingsPage') {
       useQueryClient: () => ({ invalidateQueries: vi.fn() }),
       useMutation: () => ({ isPending: false, isError: false, isSuccess: false, reset: vi.fn(), mutate: vi.fn() }),
     },
-    '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }) },
+    '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }), useProfile: () => ({ id: 'owner', display_name: 'Owner' }) },
     '../lib/feedback': { transientActionFailure },
     '../lib/api': { apiFetch, errorMessage }, '../lib/caches': caches, '../lib/invites': { shareInvite }, '../lib/requests': {},
     './OnboardingPage': { OnboardingPage: Null }, './AddItemSheet': { AddItemSheet: Null }, './JoinRequests': { JoinRequests: Null },

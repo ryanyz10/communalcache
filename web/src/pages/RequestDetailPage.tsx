@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { Link, Navigate, useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '../auth/AuthProvider'
+import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import type { ItemRequest } from '../lib/requests'
 import { Cat } from '../components/Cat'
@@ -9,20 +9,17 @@ import { Avatar } from '../components/Avatar'
 import { Stamp } from '../components/Stamp'
 import { ThingNameArt, thingTone } from '../components/ThingTile'
 import { RequestDetailSkeleton } from '../components/skeletons/RequestSkeletons'
-import { OnboardingPage } from './OnboardingPage'
 import { ApprovedContact } from './RequestContact'
 import { RequestCard } from './RequestCard'
 
 export function RequestDetailPage() {
   const { requestId = '' } = useParams()
-  const { me } = useAuth()
+  const me = useProfile()
   const requestQuery = useQuery({
-    queryKey: ['request-detail', me?.id, requestId],
+    queryKey: ['request-detail', me.id, requestId],
     queryFn: () => apiFetch<ItemRequest>(`/api/me/requests/${requestId}`),
-    enabled: !!me?.display_name,
+    enabled: !!me.display_name,
   })
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
 
   let requestContent: ReactNode
   if (requestQuery.isSuccess) {

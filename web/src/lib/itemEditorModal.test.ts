@@ -111,7 +111,7 @@ function routeFixture({editing=false,inCache=false,inApp=false,loading=false,den
     'react/jsx-runtime':{jsx,jsxs,Fragment:React.Fragment},
     'react-router':{useParams:()=>({cacheId:inCache?'cache':undefined,itemId:'item'}),useLocation:()=>({state:inApp?{itemEditor:true}:null}),useNavigate:()=>navigate,Navigate:()=>React.createElement('p',null,'denied')},
     '@tanstack/react-query':{useQuery:(query:Record<string,unknown>)=>{queries.push(query);return {isSuccess:!loading,isPending:loading,error:itemReadFailed && (query.queryKey as string[])[0]!=='cache' ? new Error('hidden item') : null,data:(query.queryKey as string[])[0]==='cache'?{id:'cache'}:{id:'item',owner_id:denied?'other':'owner'}}}},
-    '../auth/AuthProvider':{useAuth:()=>({me:{id:'owner',display_name:'Owner'}})},
+    '../auth/AuthProvider':{useAuth:()=>({me:{id:'owner',display_name:'Owner'}}),useProfile:()=>({id:'owner',display_name:'Owner'})},
     '../lib/api':{apiFetch:vi.fn(),errorMessage:()=>''},
     '../lib/caches':{cacheDetailQuery:(id:unknown)=>({queryKey:['cache',id]})},
     '../lib/items':{libraryItemQuery:(_user:unknown,id:unknown)=>({queryKey:['library-item','owner',id]})},

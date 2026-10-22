@@ -2,8 +2,9 @@ import { afterEach, it, expect, vi } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '../auth/AuthProvider'
+import { AppRoutes } from '../App'
 import { CachePage } from '../pages/CachePage'
 import { CacheSettingsPage } from '../pages/CacheSettingsPage'
 import { HomePage } from '../pages/HomePage'
@@ -135,15 +136,12 @@ it('keeps settings cache reads disabled for unnamed and signed-out callers',asyn
   for(const me of [null,{id:'owner',display_name:null}]) {
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}})
     client.setQueryData(['me'],me)
-    const children=createElement(MemoryRouter,{initialEntries:[`/caches/${id}/settings`]},createElement(Routes,null,createElement(Route,{path:'/caches/:cacheId/settings',element:createElement(CacheSettingsPage)})))
+    const children=createElement(MemoryRouter,{initialEntries:[`/caches/${id}/settings`]},createElement(AppRoutes))
     renderToStaticMarkup(createElement(QueryClientProvider,{client},createElement(AuthProvider,{children})))
-    const query=client.getQueryCache().find({queryKey:['cache',id],exact:true})!
-    expect(query.options).toMatchObject({enabled:false,retry:false})
-    const stop=new QueryObserver(client,{...query.options,queryKey:query.queryKey}).subscribe(()=>{})
+    expect(client.getQueryCache().getAll().filter(query=>query.queryKey[0]!=='me')).toHaveLength(0)
     await Promise.resolve()
-    expect(query.state.fetchStatus).toBe('idle')
     expect(fetch).not.toHaveBeenCalled()
-    stop();client.clear()
+    client.clear()
   }
 })
 

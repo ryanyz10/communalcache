@@ -1,22 +1,19 @@
-import { Link, Navigate } from 'react-router'
-import { useAuth } from '../auth/AuthProvider'
+import { Link } from 'react-router'
+import { useProfile } from '../auth/AuthProvider'
 import { errorMessage } from '../lib/api'
 import { useRequests, type ItemRequest } from '../lib/requests'
 import { useHomeSummary } from '../lib/caches'
 import { useOwnContact } from '../lib/contacts'
 import { RequestsSkeleton } from '../components/skeletons/RequestSkeletons'
 import { Shimmer, LoadingStatus } from '../components/Skeleton'
-import { OnboardingPage } from './OnboardingPage'
 import { RequestCard } from './RequestCard'
 
 export function RequestsPage() {
-  const { me } = useAuth()
-  const requestsQuery = useRequests(!!me?.display_name)
-  const incomingQuery = useRequests(!!me?.display_name, 'incoming')
-  const summaryQuery = useHomeSummary(!!me?.display_name)
-  const ownContactQuery = useOwnContact(me?.id ?? '')
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
+  const me = useProfile()
+  const requestsQuery = useRequests(!!me.display_name)
+  const incomingQuery = useRequests(!!me.display_name, 'incoming')
+  const summaryQuery = useHomeSummary(!!me.display_name)
+  const ownContactQuery = useOwnContact(me.id)
 
   const requests = requestsQuery.data?.pages.flatMap(page => page.requests) ?? []
   const unavailableCaches = requestsQuery.data?.pages.flatMap(page => page.unavailable_cache_ids) ?? []
@@ -40,7 +37,7 @@ export function RequestsPage() {
         {groupRequests.map(request => <RequestCard
           key={request.id}
           request={request}
-          callerId={me!.id}
+          callerId={me.id}
           compactAnswered={heading === 'Answered for your things'}
         />)}
         {!groupRequests.length && (requestsQuery.isPending

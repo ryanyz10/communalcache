@@ -1,11 +1,9 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../auth/AuthProvider'
+import { useAuth, useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { refreshProfileViews } from '../lib/profile'
 import { Stamp } from '../components/Stamp'
-import { OnboardingPage } from './OnboardingPage'
 import { PushControls } from './PushControls'
 import { ProfilePhotoControls } from './ProfilePhotoControls'
 import { CoatControls } from './CoatControls'
@@ -17,11 +15,12 @@ import { transientActionFailure } from '../lib/feedback'
 import { ReplayTourButton } from '../components/ProductTour'
 
 export function AccountPage() {
-  const { me, signOut } = useAuth()
+  const { signOut } = useAuth()
+  const me = useProfile()
   const client = useQueryClient()
   const { showToast } = useToast()
   const [editingName, setEditingName] = useState(false)
-  const [name, setName] = useState(me?.display_name ?? '')
+  const [name, setName] = useState(me.display_name)
   const [signingOut, setSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState('')
   const editNameButton = useRef<HTMLButtonElement>(null)
@@ -35,8 +34,6 @@ export function AccountPage() {
     },
     onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
 
   function submitName(event: FormEvent) {
     event.preventDefault()
@@ -67,7 +64,7 @@ export function AccountPage() {
             <div className="cc-profile-field">
               <div><strong>Display name</strong><p>{me.display_name}</p></div>
               <button ref={editNameButton} type="button" className="cc-text-action" onClick={() => {
-                setName(me.display_name!)
+                setName(me.display_name)
                 saveName.reset()
                 setEditingName(true)
               }} aria-expanded={editingName}>Edit<span className="sr-only"> display name</span></button>

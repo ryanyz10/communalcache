@@ -1,11 +1,10 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../auth/AuthProvider'
+import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { cacheDetailQuery, type CacheDetail, type CacheInfo } from '../lib/caches'
 import { invalidateRequestViews } from '../lib/requests'
-import { OnboardingPage } from './OnboardingPage'
 import { JoinRequests } from './JoinRequests'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { Avatar } from '../components/Avatar'
@@ -268,11 +267,11 @@ function LeaveCache({ cache }: { cache: CacheDetail }) {
 
 export function CacheSettingsPage() {
   const { cacheId = '' } = useParams()
-  const { me } = useAuth()
+  const me = useProfile()
   const queryClient = useQueryClient()
   const rotateDialog = useRef<HTMLDialogElement>(null)
   const { showToast } = useToast()
-  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me?.display_name })
+  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me.display_name })
   const rotateInvite = useMutation({
     mutationFn: () => apiFetch<CacheInfo>(`/api/caches/${cacheId}/invite/rotate`, { body: {} }),
     onSuccess: async () => {
@@ -283,8 +282,6 @@ export function CacheSettingsPage() {
     onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })
 
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
   if (cacheQuery.isPending) return <CacheSettingsSkeleton cacheId={cacheId} />
   if (cacheQuery.isError) return <main className="cc-page">
     <Link to={`/caches/${cacheId}`} className="text-sm underline">‹ Back to cache</Link>
