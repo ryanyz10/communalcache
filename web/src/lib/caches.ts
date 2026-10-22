@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
 import type { CatCoat } from './cats'
 import type { Item } from './items'
@@ -19,11 +19,29 @@ export type HomeSummary = {
   incoming: (AskPreview & { quantity: number | null })[]
   outgoing: (AskPreview & { status: 'pending' | 'approved' | 'rejected' })[]
 }
+export const cacheKeys = {
+  list: () => ['caches'],
+  detailPrefix: () => ['cache'],
+  detail: (cacheId: string | undefined) => ['cache', cacheId],
+  contentsPrefix: () => ['items'],
+  contents: (cacheId: string) => ['items', cacheId],
+  summary: () => ['home-summary'],
+}
+
 // Home prefetch and cache-context pages share the same cache entries.
-export const cacheDetailQuery = (cacheId: string | undefined) => ({ queryKey: ['cache', cacheId], queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`) })
-export const cacheItemsQuery = (cacheId: string) => ({ queryKey: ['items', cacheId], queryFn: () => apiFetch<(Item & { pending_count: number })[]>(`/api/caches/${cacheId}/items`) })
+export const cacheListQuery = () => ({ queryKey: cacheKeys.list(), queryFn: () => apiFetch<CacheSummary[]>('/api/caches') })
+export const cacheDetailQuery = (cacheId: string | undefined) => ({ queryKey: cacheKeys.detail(cacheId), queryFn: () => apiFetch<CacheDetail>(`/api/caches/${cacheId}`) })
+export const cacheItemsQuery = (cacheId: string) => ({ queryKey: cacheKeys.contents(cacheId), queryFn: () => apiFetch<(Item & { pending_count: number })[]>(`/api/caches/${cacheId}/items`) })
+export const homeSummaryQuery = () => ({ queryKey: cacheKeys.summary(), queryFn: () => apiFetch<HomeSummary>('/api/me/summary') })
 export function useHomeSummary(enabled: boolean) {
-  return useQuery({ queryKey: ['home-summary'], queryFn: () => apiFetch<HomeSummary>('/api/me/summary'), enabled })
+  return useQuery({ ...homeSummaryQuery(), enabled })
+}
+
+export function invalidateCacheViews(client: QueryClient, cacheId: string) {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: cacheKeys.detail(cacheId) }),
+    client.invalidateQueries({ queryKey: cacheKeys.list() }),
+  ])
 }
 export function askedWhen(createdAt: number, now = Date.now()) {
   const days = Math.floor((now-createdAt)/86_400_000)

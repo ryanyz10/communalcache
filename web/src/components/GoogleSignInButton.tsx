@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { loadConfig } from '../lib/config'
+import { configQuery } from '../lib/config'
 
 export function GoogleSignInButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  const config = useQuery({ queryKey: ['config'], queryFn: loadConfig })
+  const config = useQuery(configQuery())
   if (!config.data?.google_sign_in) return null
   return <>
     <button type="button" className="cc-google-signin" disabled={disabled} onClick={onClick}>

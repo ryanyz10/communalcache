@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError, errorMessage } from '../lib/api'
-import { loadConfig } from '../lib/config'
+import { configQuery as appConfigQuery } from '../lib/config'
 import { disablePush, enablePush, pushSupport, subscriptionForAccount } from '../lib/push'
 import { LoadingLines } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
@@ -13,7 +13,7 @@ export function PushControls({ userId }: { userId: string }) {
   const support = pushSupport()
   const install = useInstallState()
   const standalone = support.standalone || install.standalone
-  const configQuery = useQuery({ queryKey: ['config'], queryFn: loadConfig })
+  const configQuery = useQuery(appConfigQuery())
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
   const [hasSubscription, setHasSubscription] = useState(false)
   const [pending, setPending] = useState(false)

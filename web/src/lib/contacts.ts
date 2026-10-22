@@ -20,6 +20,17 @@ export function contactDisplayValue(contact:Contact) {
   return contact.value
 }
 
+export const contactKeys = {
+  ownPrefix: () => ['own-contact'],
+  own: (userId: string) => ['own-contact', userId],
+  preview: (userId: string | undefined, kind: ContactKind, value: string) => ['contact-preview', userId, kind, value],
+  requestPrefix: () => ['request-contact'],
+  request: (callerId: string, requestId: string) => ['request-contact', callerId, requestId],
+}
+export const ownContactQuery = (userId: string) => ({ queryKey: contactKeys.own(userId), queryFn: () => apiFetch<{ contact: Contact | null }>('/api/me/contact') })
+export const contactPreviewQuery = (userId: string | undefined, kind: ContactKind, value: string) => ({ queryKey: contactKeys.preview(userId, kind, value), queryFn: () => apiFetch<{ contact: Contact }>('/api/me/contact/preview', { body: { kind, value } }) })
+export const requestContactQuery = (callerId: string, requestId: string) => ({ queryKey: contactKeys.request(callerId, requestId), queryFn: () => apiFetch<{ contact: Contact | null }>(`/api/me/requests/${requestId}/contact`) })
+
 export function useOwnContact(userId: string) {
-  return useQuery({ queryKey: ['own-contact',userId], queryFn: () => apiFetch<{contact:Contact|null}>('/api/me/contact'), enabled: !!userId })
+  return useQuery({ ...ownContactQuery(userId), enabled: !!userId })
 }

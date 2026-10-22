@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { apiFetch, errorMessage } from './api'
 import * as items from './items'
-import { cacheDetailQuery } from './caches'
+import { cacheDetailQuery, cacheListQuery } from './caches'
 import { PHOTO_READ_ERROR, uploadPhoto } from './photos'
-import { invalidateRequestViews } from './requests'
+import { invalidateRequestViews, requestKeys } from './requests'
 import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
@@ -135,8 +135,8 @@ function fixture(kind: Kind, context: { cacheId?: string; editing?: boolean; sha
       }),
     },
     '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }), useProfile: () => ({ id: 'owner', display_name: 'Owner' }) },
-    '../lib/api': { apiFetch, errorMessage }, '../lib/items': { ...items, useLibrary: () => ({ data: { pages: [{ items: [item, {...item,id:'unshared',title:'Ladder',caches:[]}, {...item,id:'other',title:'Tarp',caches:[]}] }] }, isSuccess:true }) }, '../lib/caches': { cacheDetailQuery },
-    '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadPhoto }, '../lib/requests': { invalidateRequestViews },
+    '../lib/api': { apiFetch, errorMessage }, '../lib/items': { ...items, useLibrary: () => ({ data: { pages: [{ items: [item, {...item,id:'unshared',title:'Ladder',caches:[]}, {...item,id:'other',title:'Tarp',caches:[]}] }] }, isSuccess:true }) }, '../lib/caches': { cacheDetailQuery, cacheListQuery },
+    '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadPhoto }, '../lib/requests': { invalidateRequestViews, requestKeys },
     './OnboardingPage': { OnboardingPage: Null }, './ItemPhoto': { ItemPhoto: Null },
     './RequestsPage': { ItemRequests: Null }, './ItemRequests': { ItemRequests: Null }, './ItemForm': { ItemForm: Null }, './ShownIn': { ShownIn: Null },
     './ItemWaiting': { ItemWaiting: Null }, './DeleteItem': { DeleteItem: Null },

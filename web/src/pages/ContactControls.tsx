@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { ContactLink, PlatformIcon } from '../components/ContactLink'
 import { apiFetch, errorMessage } from '../lib/api'
-import { platforms, useOwnContact, type Contact, type ContactKind } from '../lib/contacts'
+import { platforms, useOwnContact, contactKeys, contactPreviewQuery, type ContactKind } from '../lib/contacts'
 import { Shimmer, LoadingStatus, LoadingLines } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
@@ -23,16 +23,15 @@ export function ContactControls() {
     return () => clearTimeout(timer)
   }, [value])
   const previewQuery = useQuery({
-    queryKey: ['contact-preview', me?.id, kind, previewValue],
-    queryFn: () => apiFetch<{ contact: Contact }>('/api/me/contact/preview', { body: { kind, value: previewValue } }),
+    ...contactPreviewQuery(me?.id, kind, previewValue),
     enabled: editing && !!previewValue.trim(), retry: false, gcTime: 0,
   })
   const changeContact = useMutation({
     mutationFn: (remove: boolean) => apiFetch('/api/me/contact', remove ? { method: 'DELETE' } : { method: 'PUT', body: { kind, value } }),
     onSuccess: async (_data, remove) => {
       await Promise.all([
-        client.invalidateQueries({ queryKey: ['own-contact'] }),
-        client.invalidateQueries({ queryKey: ['request-contact'] }),
+        client.invalidateQueries({ queryKey: contactKeys.ownPrefix() }),
+        client.invalidateQueries({ queryKey: contactKeys.requestPrefix() }),
       ])
       contactDialog.current?.close()
       showToast(remove ? 'Contact removed.' : 'Contact saved.')

@@ -1,6 +1,9 @@
-import { useInfiniteQuery, type QueryClient } from '@tanstack/react-query'
+import { infiniteQueryOptions, useInfiniteQuery, type QueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
 import type { CatCoat } from './cats'
+import { cacheKeys } from './caches'
+import { itemKeys } from './items'
+import { contactKeys } from './contacts'
 
 export type ItemRequest = {
   id: string; cache_id: string; cache_name: string; item_id: string; item_title: string
@@ -40,9 +43,19 @@ export function requesterQueueLabel(request: ItemRequest, callerId: string) {
   return request.queue_position === 1 ? "You're next" : `You're ${ordinal(request.queue_position)} in line`
 }
 
-export function useRequests(enabled: boolean, view?: 'incoming', itemId?: string) {
-  return useInfiniteQuery({
-    queryKey: view ? itemId ? ['requests', view, itemId] : ['requests', view] : ['requests'], initialPageParam: null as string | null,
+export const requestKeys = {
+  list: (view?: 'incoming', itemId?: string) => view ? itemId ? ['requests', view, itemId] : ['requests', view] : ['requests'],
+  itemPrefix: () => ['item-requests'],
+  item: (cacheId: string | null, itemId: string) => ['item-requests', cacheId, itemId],
+  detailPrefix: () => ['request-detail'],
+  detail: (userId: string, requestId: string) => ['request-detail', userId, requestId],
+}
+export const itemRequestsQuery = (cacheId: string | null, itemId: string) => ({ queryKey: requestKeys.item(cacheId, itemId), queryFn: () => apiFetch<ItemRequest[]>(`/api/caches/${cacheId}/items/${itemId}/requests`) })
+export const requestDetailQuery = (userId: string, requestId: string) => ({ queryKey: requestKeys.detail(userId, requestId), queryFn: () => apiFetch<ItemRequest>(`/api/me/requests/${requestId}`) })
+
+export function requestsQuery(view?: 'incoming', itemId?: string) {
+  return infiniteQueryOptions({
+    queryKey: requestKeys.list(view, itemId), initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams()
       if (view) params.set('view', view)
@@ -50,22 +63,26 @@ export function useRequests(enabled: boolean, view?: 'incoming', itemId?: string
       if (pageParam) params.set('after', pageParam)
       return apiFetch<RequestsPageData>(`/api/requests${params.size ? `?${params}` : ''}`)
     },
-    getNextPageParam: page => page.next_cursor ?? undefined, enabled,
+    getNextPageParam: page => page.next_cursor ?? undefined,
   })
+}
+
+export function useRequests(enabled: boolean, view?: 'incoming', itemId?: string) {
+  return useInfiniteQuery({ ...requestsQuery(view, itemId), enabled })
 }
 
 export function invalidateRequestViews(client: QueryClient) {
   return Promise.all([
-    client.invalidateQueries({ queryKey: ['item-requests'] }),
-    client.invalidateQueries({ queryKey: ['requests'] }),
-    client.invalidateQueries({ queryKey: ['item'] }),
-    client.invalidateQueries({ queryKey: ['items'] }),
-    client.invalidateQueries({ queryKey: ['library'] }),
-    client.invalidateQueries({ queryKey: ['library-item'] }),
-    client.invalidateQueries({ queryKey: ['home-summary'] }),
-    client.invalidateQueries({ queryKey: ['caches'] }),
-    client.invalidateQueries({ queryKey: ['cache'] }),
-    client.invalidateQueries({ queryKey: ['request-detail'] }),
-    client.invalidateQueries({ queryKey: ['request-contact'] }),
+    client.invalidateQueries({ queryKey: requestKeys.itemPrefix() }),
+    client.invalidateQueries({ queryKey: requestKeys.list() }),
+    client.invalidateQueries({ queryKey: itemKeys.detailPrefix() }),
+    client.invalidateQueries({ queryKey: cacheKeys.contentsPrefix() }),
+    client.invalidateQueries({ queryKey: itemKeys.libraryPrefix() }),
+    client.invalidateQueries({ queryKey: itemKeys.libraryItemPrefix() }),
+    client.invalidateQueries({ queryKey: cacheKeys.summary() }),
+    client.invalidateQueries({ queryKey: cacheKeys.list() }),
+    client.invalidateQueries({ queryKey: cacheKeys.detailPrefix() }),
+    client.invalidateQueries({ queryKey: requestKeys.detailPrefix() }),
+    client.invalidateQueries({ queryKey: contactKeys.requestPrefix() }),
   ])
 }

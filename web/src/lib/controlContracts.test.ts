@@ -11,6 +11,7 @@ import * as cats from './cats'
 import * as push from './push'
 import * as peek from './peek'
 import * as install from './install'
+import { configQuery } from './config'
 import { PHOTO_READ_ERROR, uploadProfilePhoto } from './photos'
 import { refreshProfileViews } from './profile'
 import { toastFixture } from '../test/toastFixture'
@@ -120,7 +121,7 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
     '../auth/AuthProvider': { useAuth: () => ({ me: { ...me, profile_photo_version: options.noPhoto ? null : me.profile_photo_version } }) },
     '../lib/api': { ApiError, apiFetch, errorMessage }, '../lib/photos': { PHOTO_READ_ERROR, resizePhoto, uploadProfilePhoto },
     '../lib/profile': { refreshProfileViews }, '../lib/cats': cats, '../lib/push': push, '../lib/peek': peek,
-    '../lib/config': { loadConfig: vi.fn() }, '../lib/contacts': { ...contacts, useOwnContact: () => ownContact },
+    '../lib/config': { configQuery }, '../lib/contacts': { ...contacts, useOwnContact: () => ownContact },
     '../components/Avatar': { Avatar: Null }, '../components/CoatPicker': { CoatPicker: Null },
     '../components/InstallHint': { IOSInstallInstructions: Null }, '../lib/install': install,
     '../components/PhotoPreview': { PhotoPreview: Null },

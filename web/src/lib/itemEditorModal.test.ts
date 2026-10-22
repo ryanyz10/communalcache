@@ -4,6 +4,7 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
+import { cacheItemQuery, libraryItemQuery } from './items'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 function load(path: string, modules: Record<string, unknown>) {
@@ -114,7 +115,7 @@ function routeFixture({editing=false,inCache=false,inApp=false,loading=false,den
     '../auth/AuthProvider':{useAuth:()=>({me:{id:'owner',display_name:'Owner'}}),useProfile:()=>({id:'owner',display_name:'Owner'})},
     '../lib/api':{apiFetch:vi.fn(),errorMessage:()=>''},
     '../lib/caches':{cacheDetailQuery:(id:unknown)=>({queryKey:['cache',id]})},
-    '../lib/items':{libraryItemQuery:(_user:unknown,id:unknown)=>({queryKey:['library-item','owner',id]})},
+    '../lib/items':{ cacheItemQuery, libraryItemQuery },
     './OnboardingPage':{OnboardingPage:()=>null},
     './ItemPage':{ItemPage:background('item')},'./LibraryPage':{LibraryPage:background('library')},'./CachePage':{CachePage:background('cache')},
     './ItemForm':{ItemForm:(props:Record<string,unknown>)=>{form=props;return React.createElement('form',{'data-editor-form':true})}},

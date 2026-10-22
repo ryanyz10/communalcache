@@ -6,6 +6,9 @@ export type AppConfig = {
   google_sign_in?: boolean
 }
 
+export const configKey = () => ['config']
+export const configQuery = () => ({ queryKey: configKey(), queryFn: loadConfig })
+
 let cached: AppConfig | null = null
 
 export async function loadConfig(): Promise<AppConfig> {

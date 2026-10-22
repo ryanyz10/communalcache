@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useProfile } from '../auth/AuthProvider'
-import { apiFetch, errorMessage } from '../lib/api'
+import { errorMessage } from '../lib/api'
 import {
-  cacheDetailQuery, cacheItemsQuery, filterContents,
-  type CacheSummary, type ContentsFilter,
+  cacheDetailQuery, cacheItemsQuery, cacheListQuery, filterContents,
+  type ContentsFilter,
 } from '../lib/caches'
-import type { JoinRequest } from '../lib/joining'
+import { joinRequestsQuery as cacheJoinRequestsQuery } from '../lib/joining'
 import { shareInvite } from '../lib/invites'
 import { AddItemSheet } from './AddItemSheet'
 import { Avatar } from '../components/Avatar'
@@ -30,8 +30,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
   const addItemDialog = useRef<HTMLDialogElement>(null)
   const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!me.display_name })
   const cachesQuery = useQuery({
-    queryKey: ['caches'],
-    queryFn: () => apiFetch<CacheSummary[]>('/api/caches'),
+    ...cacheListQuery(),
     enabled: !!me.display_name,
   })
   const itemsQuery = useQuery({
@@ -39,8 +38,7 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
     enabled: !!me.display_name && !itemsMoving,
   })
   const joinRequestsQuery = useQuery({
-    queryKey: ['join-requests', cacheId],
-    queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`),
+    ...cacheJoinRequestsQuery(cacheId),
     enabled: !!me.display_name && cacheQuery.data?.owner_id === me.id,
   })
   const [startedWithSkeleton] = useState(cacheQuery.isPending || itemsQuery.isPending)

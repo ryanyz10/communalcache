@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useProfile } from '../auth/AuthProvider'
-import { apiFetch, errorMessage } from '../lib/api'
-import type { ItemRequest } from '../lib/requests'
+import { errorMessage } from '../lib/api'
+import { requestDetailQuery } from '../lib/requests'
 import { Cat } from '../components/Cat'
 import { Avatar } from '../components/Avatar'
 import { Stamp } from '../components/Stamp'
@@ -16,8 +16,7 @@ export function RequestDetailPage() {
   const { requestId = '' } = useParams()
   const me = useProfile()
   const requestQuery = useQuery({
-    queryKey: ['request-detail', me.id, requestId],
-    queryFn: () => apiFetch<ItemRequest>(`/api/me/requests/${requestId}`),
+    ...requestDetailQuery(me.id, requestId),
     enabled: !!me.display_name,
   })
 

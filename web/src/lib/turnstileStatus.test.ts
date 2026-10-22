@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { mountTurnstile, type TurnstileApi } from './turnstile'
+import { configQuery } from './config'
 import type { TurnstileHandle, TurnstileStatus } from '../components/Turnstile'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
@@ -55,7 +56,7 @@ function fixture(action: 'signin' | 'create_cache' = 'signin', blocked = false) 
       jsxs, Fragment: React.Fragment,
     },
     '@tanstack/react-query': { useQuery: () => config },
-    '../lib/config': { loadConfig: vi.fn() },
+    '../lib/config': { configQuery },
     '../lib/turnstile': { loadTurnstile: load, mountTurnstile, turnstileTheme: () => 'light' },
     './Skeleton': { LoadingStatus: () => null, Shimmer: () => null },
   }

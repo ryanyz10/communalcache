@@ -2,8 +2,8 @@ import { useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, errorMessage } from '../lib/api'
-import type { Item } from '../lib/items'
-import { invalidateRequestViews } from '../lib/requests'
+import { itemKeys, type Item } from '../lib/items'
+import { invalidateRequestViews, requestKeys } from '../lib/requests'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
 
@@ -18,9 +18,9 @@ export function DeleteItem({ item, disabled = false, onBusy }: {item:Item;disabl
     onSuccess: async () => {
       dialog.current?.close()
       navigate('/items',{replace:true})
-      client.removeQueries({queryKey:['item']})
-      client.removeQueries({queryKey:['library-item']})
-      client.removeQueries({queryKey:['item-requests']})
+      client.removeQueries({queryKey:itemKeys.detailPrefix()})
+      client.removeQueries({queryKey:itemKeys.libraryItemPrefix()})
+      client.removeQueries({queryKey:requestKeys.itemPrefix()})
       await invalidateRequestViews(client)
       showToast('Item deleted.')
     },

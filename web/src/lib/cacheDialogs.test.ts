@@ -7,7 +7,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { apiFetch, errorMessage } from './api'
-import { cacheDetailQuery, type CacheDetail } from './caches'
+import { cacheDetailQuery, cacheKeys, invalidateCacheViews, type CacheDetail } from './caches'
+import { joiningKeys } from './joining'
 import { invalidateRequestViews } from './requests'
 import { toastFixture } from '../test/toastFixture'
 
@@ -129,7 +130,8 @@ function fixture(flow: Flow) {
     '@tanstack/react-query': { useQuery: () => ({ data: cache, isPending: false, isError: false }), useQueryClient: () => queryClient, useMutation },
     '../auth/AuthProvider': { useAuth: () => ({ me: { id: flow === 'leave' ? memberId : ownerId, display_name: 'Neighbor' } }), useProfile: () => ({ id: flow === 'leave' ? memberId : ownerId, display_name: 'Neighbor' }) },
     '../lib/api': { apiFetch, errorMessage },
-    '../lib/caches': { cacheDetailQuery },
+    '../lib/caches': { cacheDetailQuery, cacheKeys, invalidateCacheViews },
+    '../lib/joining': { joiningKeys },
     '../lib/requests': { invalidateRequestViews },
     './OnboardingPage': { OnboardingPage: () => null },
     './JoinRequests': { JoinRequests: () => null },

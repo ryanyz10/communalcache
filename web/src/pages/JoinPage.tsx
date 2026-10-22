@@ -1,9 +1,10 @@
 import { Link, useParams } from 'react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { joinFromToken, previewFromToken } from '../lib/joining'
+import { joinFromToken, invitePreviewQuery, joiningKeys } from '../lib/joining'
 import { errorMessage } from '../lib/api'
 import { useAuth } from '../auth/AuthProvider'
+import { cacheKeys } from '../lib/caches'
 import { clearJoinToken, stashJoinToken, validJoinToken } from '../lib/pendingJoin'
 import { LoginForm } from './LoginPage'
 import { OnboardingPage } from './OnboardingPage'
@@ -22,17 +23,16 @@ export function JoinPage() {
   const joinCache = useMutation({
     mutationFn: joinFromToken,
     retry: false,
-    onSuccess: () => { void client.invalidateQueries({ queryKey: ['caches'] }) },
+    onSuccess: () => { void client.invalidateQueries({ queryKey: cacheKeys.list() }) },
     onError: (error, failedToken) => {
       if (transientActionFailure(error)) showToast(errorMessage(error), 'error')
-      return client.invalidateQueries({ queryKey: ['invite-preview', me?.id, failedToken] })
+      return client.invalidateQueries({ queryKey: joiningKeys.preview(me?.id, failedToken) })
     },
   })
   const validToken = validJoinToken(token)
   const joinedThisInvite = joinCache.isSuccess && joinCache.variables === token
   const previewQuery = useQuery({
-    queryKey: ['invite-preview', me?.id, token],
-    queryFn: () => previewFromToken(token),
+    ...invitePreviewQuery(me?.id, token),
     enabled: validToken && !!me?.display_name && !storageError && !joinedThisInvite,
     retry: false, staleTime: 0, gcTime: 0,
   })

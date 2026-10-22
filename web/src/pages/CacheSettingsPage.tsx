@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import { cacheDetailQuery, type CacheDetail, type CacheInfo } from '../lib/caches'
+import { cacheDetailQuery, cacheKeys, invalidateCacheViews, type CacheDetail, type CacheInfo } from '../lib/caches'
 import { invalidateRequestViews } from '../lib/requests'
 import { JoinRequests } from './JoinRequests'
+import { joiningKeys } from '../lib/joining'
 import { WideBreadcrumbs } from '../components/WideBreadcrumbs'
 import { Avatar } from '../components/Avatar'
 import { useToast } from '../components/Toast'
@@ -23,10 +24,7 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
       `/api/caches/${cache.id}`, { method: 'PATCH', body: changes },
     ),
     onSuccess: async (_result, changes) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['cache', cache.id] }),
-        queryClient.invalidateQueries({ queryKey: ['caches'] }),
-      ])
+      await invalidateCacheViews(queryClient, cache.id)
       showToast('Settings saved.')
       if (changes.name !== undefined) {
         setIsEditingName(false)
@@ -137,8 +135,7 @@ function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDeta
     onSuccess: async () => {
       removeDialog.current?.close()
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['cache', cache.id] }),
-        queryClient.invalidateQueries({ queryKey: ['caches'] }),
+        invalidateCacheViews(queryClient, cache.id),
         invalidateRequestViews(queryClient),
       ])
       showToast('Member removed.')
@@ -205,10 +202,10 @@ function LeaveCache({ cache }: { cache: CacheDetail }) {
     mutationFn: () => apiFetch<void>(`/api/caches/${cache.id}/leave`, { body: {} }),
     onSuccess: async () => {
       leaveDialog.current?.close()
-      queryClient.removeQueries({ queryKey: ['cache', cache.id] })
-      queryClient.removeQueries({ queryKey: ['join-requests', cache.id] })
+      queryClient.removeQueries({ queryKey: cacheKeys.detail(cache.id) })
+      queryClient.removeQueries({ queryKey: joiningKeys.requests(cache.id) })
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['caches'] }),
+        queryClient.invalidateQueries({ queryKey: cacheKeys.list() }),
         invalidateRequestViews(queryClient),
       ])
       showToast('Left cache.')
@@ -277,7 +274,7 @@ export function CacheSettingsPage() {
     onSuccess: async () => {
       rotateDialog.current?.close()
       showToast('Invite rotated. The old link no longer works.')
-      await queryClient.invalidateQueries({ queryKey: ['cache', cacheId] })
+      await queryClient.invalidateQueries({ queryKey: cacheKeys.detail(cacheId) })
     },
     onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
   })

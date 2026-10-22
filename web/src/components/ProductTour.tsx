@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import type { Me } from '../lib/api'
+import { meKey } from '../lib/profile'
 import { peekJoinToken } from '../lib/pendingJoin'
 import { saveTourCompletion, shouldStartTour, spotlightLayout, tourSteps } from '../lib/tour'
 
@@ -44,11 +45,11 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   function persist(completed: boolean) {
     if (!me || identity.current !== me.id || !writer.current) return
     const userId = me.id, signal = writer.current.signal
-    client.setQueryData<Me | null>(['me'], current => current?.id === userId
+    client.setQueryData<Me | null>(meKey(), current => current?.id === userId
       ? { ...current, tour_completed_at: completed ? Date.now() : null } : current)
     // Keep a slow finish/retry from overwriting a newer replay (or vice versa).
     pending.current = pending.current.then(() => saveTourCompletion(completed,
-      () => identity.current === userId && client.getQueryData<Me | null>(['me'])?.id === userId, signal))
+      () => identity.current === userId && client.getQueryData<Me | null>(meKey())?.id === userId, signal))
   }
 
   function replay() {

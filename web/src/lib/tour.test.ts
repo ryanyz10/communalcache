@@ -9,6 +9,7 @@ import { Tabs } from '../components/Tabs'
 import { MemoryRouter } from 'react-router'
 import { saveTourCompletion, shouldStartTour, spotlightLayout, tourSteps } from './tour'
 import type { Me } from './api'
+import { meKey } from './profile'
 
 type Element = React.ReactElement<Record<string, unknown>>
 const initialMe: Me = { id: 'a', email: 'own@example.test', display_name: 'Neighbor', tour_completed_at: null }
@@ -50,6 +51,7 @@ function fixture(initial: Me | null = initialMe, path = '/', deferNavigation = f
     '../auth/AuthProvider': { useAuth: () => auth },
     '../lib/pendingJoin': { peekJoinToken: () => null },
     '../lib/tour': { saveTourCompletion, shouldStartTour, spotlightLayout, tourSteps },
+    '../lib/profile': { meKey },
   }
   const source = readFileSync(new URL('../components/ProductTour.tsx', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText

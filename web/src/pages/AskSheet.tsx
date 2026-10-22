@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, errorMessage } from '../lib/api'
-import type { Item } from '../lib/items'
+import { cacheItemQuery, type Item } from '../lib/items'
 import { invalidateRequestViews, type ItemRequest } from '../lib/requests'
 import { Cat } from '../components/Cat'
 import { LoadingLines } from '../components/Skeleton'
@@ -19,8 +19,7 @@ export function AskSheet({ item, cacheName = 'This cache', onClose }: {
   const { showToast } = useToast()
   const [quantity, setQuantity] = useState('1')
   const currentItemQuery = useQuery({
-    queryKey: ['item', item.cache_id, item.id],
-    queryFn: () => apiFetch<Item>(`/api/caches/${item.cache_id}/items/${item.id}`),
+    ...cacheItemQuery(item.cache_id, item.id),
     enabled: !!item.cache_id,
   })
   const currentItem = currentItemQuery.data ?? item
