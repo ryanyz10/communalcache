@@ -4,7 +4,6 @@ import * as React from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { ApiError, apiFetch, errorMessage } from './api'
 import * as requests from './requests'
@@ -20,7 +19,6 @@ type MutationOptions = {
   onError?: (error: unknown, variables?: unknown) => unknown
   onSettled?: () => unknown
 }
-const parent = 'c9c06db17817e6d49e5d5cfbbdd7f021ffcb3656'
 const item: Item = {
   id: 'item', cache_id: 'cache', owner_id: 'owner', owner_name: 'Owner', title: 'Starter',
   description: null, is_consumable: true, quantity: 8, available_quantity: 3,
@@ -124,9 +122,7 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
     '../components/Cat': { Cat: Null }, '../components/Skeleton': { LoadingLines: ({ label }: { label: string }) => createElement('p', null, label) },
   }
   const file = kind === 'ask' ? 'AskSheet' : kind === 'decision' ? 'RequestDecision' : 'RequestContact'
-  const source = process.env.REQUEST_CONTRACT_PARENT === '1'
-    ? execFileSync('git', ['show', `${parent}:web/src/pages/${file}.tsx`], { encoding: 'utf8' })
-    : readFileSync(new URL(`../pages/${file}.tsx`, import.meta.url), 'utf8')
+  const source = readFileSync(new URL(`../pages/${file}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText

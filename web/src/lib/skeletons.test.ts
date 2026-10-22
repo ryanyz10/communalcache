@@ -79,14 +79,13 @@ it('pins reviewed skeleton markup including the redesigned private item layout',
   ]
   const hash = createHash('sha256')
   for (const [name, element] of examples) {
-    let html = render(element)
+    const html = render(element)
     if (name === 'ItemEditorSkeleton') {
-      // Startup no longer mimics a full-page editor; keep every other legacy byte pinned.
       expect(html).toContain('class="cc-page cc-page-skeleton"')
       expect(html).not.toContain('<button')
-      html = html.replace('class="cc-page cc-page-skeleton"','class="organic-item-editor cc-page-skeleton"')
-        .replace('<h1>New item</h1>','')
-        .replace('</span><div class="cc-item-fields">','</span><div class="cc-item-editor-nav"><button disabled="">Cancel</button><h1>New item</h1><button disabled="">Save</button></div><div class="cc-item-fields">')
+      expect(html).toContain('<h1>New item</h1>')
+      expect(html).toContain('class="cc-item-fields"')
+      expect(html).not.toMatch(/organic-item-editor|cc-item-editor-nav/)
     }
     if (name === 'LibrarySkeleton') {
       expect(html).toContain('cc-library-grid')
@@ -99,7 +98,7 @@ it('pins reviewed skeleton markup including the redesigned private item layout',
     }
     hash.update(name + '\0' + html + '\0')
   }
-  expect(hash.digest('hex')).toBe('e7a144c3cad0d6eb52497db0ec7d0db93c4732190deeaec575e73bcfdf9c5b68')
+  expect(hash.digest('hex')).toBe('c6a6040d5e5f524b56b637fdab242e0643c95ef0fea62da3bd87c2b5af85bd02')
 })
 
 it.each([undefined,id])('uses one item loading layout with a context-specific Back for %s',cacheId=>{

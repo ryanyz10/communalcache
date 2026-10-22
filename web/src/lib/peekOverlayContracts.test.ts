@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 
 type ModelElement = {
@@ -11,7 +10,6 @@ type ModelElement = {
   remove: () => void
   animate: (frames: unknown, options: { duration: number }) => { finished: Promise<void>; cancel: () => void }
 }
-const parent = '2dfffd47f1bd59d39eb3fd52d8ad859898194cba'
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
 function fixture(destination = true) {
@@ -40,9 +38,7 @@ function fixture(destination = true) {
     body: { append: (...nodes: ModelElement[]) => trace.push(['append', ...nodes.map(node => node.className)]) },
     querySelector: () => destination ? { getBoundingClientRect: () => destinationRect } : null,
   })
-  const source = process.env.CONTROL_CONTRACT_PARENT === '1'
-    ? execFileSync('git', ['show', `${parent}:web/src/components/peekOverlay.ts`], { encoding: 'utf8' })
-    : readFileSync(new URL('../components/peekOverlay.ts', import.meta.url), 'utf8')
+  const source = readFileSync(new URL('../components/peekOverlay.ts', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const module = { exports: {} as { openCacheWithPeek: (event: unknown, cacheId: string, navigate: () => void) => void } }
   let enabled = true, hasHandle = true
