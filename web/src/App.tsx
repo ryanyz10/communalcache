@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { HomePage } from './pages/HomePage'
+import { OnboardingPage } from './pages/OnboardingPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { CachePage } from './pages/CachePage'
 import { ItemPage } from './pages/ItemPage'
@@ -37,6 +38,14 @@ export function Ready({ children }: { children: ReactNode }) {
   return children
 }
 
+// Ready handles auth loading; these pages can assume a signed-in, named user.
+function RequireProfile() {
+  const { me } = useAuth()
+  if (!me) return <Navigate to="/login" replace />
+  if (!me.display_name) return <OnboardingPage />
+  return <Outlet />
+}
+
 export function AppRoutes() {
   return <Routes>
     <Route path="/privacy" element={<LegalPage policy="privacy" />} />
@@ -45,19 +54,21 @@ export function AppRoutes() {
     <Route path="/auth/link" element={<MagicLinkPage />} />
     <Route path="/join/:token" element={<JoinPage />} />
     <Route path="/" element={<HomePage />} />
-    <Route path="/requests" element={<RequestsPage />} />
-    <Route path="/requests/:requestId" element={<RequestDetailPage />} />
-    <Route path="/items" element={<LibraryPage />} />
-    <Route path="/items/new" element={<ItemEditorPage />} />
-    <Route path="/items/:itemId" element={<ItemPage />} />
-    <Route path="/items/:itemId/edit" element={<ItemEditorPage editing />} />
-    <Route path="/account" element={<AccountPage />} />
     <Route path="/admin" element={<AdminPage />} />
-    <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
-    <Route path="/caches/:cacheId" element={<CachePage />} />
-    <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
-    <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
-    <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
+    <Route element={<RequireProfile />}>
+      <Route path="/requests" element={<RequestsPage />} />
+      <Route path="/requests/:requestId" element={<RequestDetailPage />} />
+      <Route path="/items" element={<LibraryPage />} />
+      <Route path="/items/new" element={<ItemEditorPage />} />
+      <Route path="/items/:itemId" element={<ItemPage />} />
+      <Route path="/items/:itemId/edit" element={<ItemEditorPage editing />} />
+      <Route path="/account" element={<AccountPage />} />
+      <Route path="/caches/:cacheId/settings" element={<CacheSettingsPage />} />
+      <Route path="/caches/:cacheId" element={<CachePage />} />
+      <Route path="/caches/:cacheId/items/new" element={<ItemEditorPage />} />
+      <Route path="/caches/:cacheId/items/:itemId" element={<ItemPage />} />
+      <Route path="/caches/:cacheId/items/:itemId/edit" element={<ItemEditorPage editing />} />
+    </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
 }

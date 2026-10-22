@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '../auth/AuthProvider'
+import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { cacheDetailQuery } from '../lib/caches'
 import { libraryItemQuery, type Item } from '../lib/items'
-import { OnboardingPage } from './OnboardingPage'
 import { ItemForm, type ItemEditorState } from './ItemForm'
 import { ItemPage } from './ItemPage'
 import { LibraryPage } from './LibraryPage'
@@ -15,23 +14,21 @@ import { LoadingStatus } from '../components/Skeleton'
 
 export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   const { cacheId, itemId = '' } = useParams()
-  const { me } = useAuth()
+  const me = useProfile()
   const navigate = useNavigate()
   const location = useLocation()
   const [busy, setBusy] = useState(false)
   const [state, setState] = useState<ItemEditorState>({ dirty: false, committed: false })
-  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me?.display_name })
+  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me.display_name })
   const itemQuery = useQuery<Item>({
     ...(cacheId ? {
       queryKey: ['item', cacheId, itemId],
       queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`),
-    } : libraryItemQuery(me?.id, itemId)),
-    enabled: editing && !!me?.display_name && !state.committed,
+    } : libraryItemQuery(me.id, itemId)),
+    enabled: editing && !!me.display_name && !state.committed,
   })
   const backPath = cacheId ? `/caches/${cacheId}` : '/items'
 
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
   if (editing && itemQuery.isSuccess && itemQuery.data.owner_id !== me.id) return <Navigate to={backPath} replace />
 
   // A committed deactivation hides the cache route; keep its save continuation mounted.

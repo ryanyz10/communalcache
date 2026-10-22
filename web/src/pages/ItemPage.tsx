@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, useLocation, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAuth } from '../auth/AuthProvider'
+import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { cacheDetailQuery } from '../lib/caches'
 import { libraryItemQuery, type Item } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
-import { OnboardingPage } from './OnboardingPage'
 import { ItemPhoto } from './ItemPhoto'
 import { ItemRequests } from './ItemRequests'
 import { Avatar } from '../components/Avatar'
@@ -40,29 +39,27 @@ export function ItemAvailability({ item }: { item: Item }) {
 
 export function ItemPage() {
   const { cacheId, itemId = '' } = useParams()
-  const { me } = useAuth()
+  const me = useProfile()
   const location = useLocation()
   const [isAskOpen, setIsAskOpen] = useState(false)
   const cacheItemQuery = useQuery({
     queryKey: ['item', cacheId, itemId],
     queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`),
-    enabled: !!cacheId && !!me?.display_name,
+    enabled: !!cacheId && !!me.display_name,
   })
-  const isCacheOwner = cacheItemQuery.isSuccess && cacheItemQuery.data.owner_id === me?.id
+  const isCacheOwner = cacheItemQuery.isSuccess && cacheItemQuery.data.owner_id === me.id
   const ownerItemQuery = useQuery({
-    ...libraryItemQuery(me?.id, itemId),
-    enabled: !!me?.display_name && (!cacheId || isCacheOwner),
+    ...libraryItemQuery(me.id, itemId),
+    enabled: !!me.display_name && (!cacheId || isCacheOwner),
   })
   // Cache context must succeed before switching to the owner's private detail.
   const itemQuery = cacheId && !isCacheOwner ? cacheItemQuery : ownerItemQuery
-  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me?.display_name })
+  const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me.display_name })
   useEffect(() => {
     if (itemQuery.isSuccess && location.hash === '#sharing') document.getElementById('sharing')?.scrollIntoView()
   }, [itemQuery.isSuccess, location.hash])
   const backPath = cacheId ? `/caches/${cacheId}` : '/items'
 
-  if (!me) return <Navigate to="/login" replace />
-  if (!me.display_name) return <OnboardingPage />
   if (itemQuery.isPending) return <ItemSkeleton cacheId={cacheId} />
   if (itemQuery.isError) return <main className="cc-page">
     <Link to={backPath}>‹ {cacheId ? 'Back to cache' : 'Your items'}</Link>
