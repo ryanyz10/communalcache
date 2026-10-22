@@ -19,11 +19,10 @@ export function ThingTile({ item, library = false, tone = 'pale' }: { item: Item
   </span>
 }
 
-export function ThingStatus({ item, pending = 0, compact = false, quantityAsStatus = true }: {
+export function ThingStatus({ item, pending = 0, compact = false }: {
   item: Item
   pending?: number
   compact?: boolean
-  quantityAsStatus?: boolean
 }) {
   let status: string
   let tone: string
@@ -36,12 +35,9 @@ export function ThingStatus({ item, pending = 0, compact = false, quantityAsStat
   } else if (item.available === false) {
     status = 'Lent out'
     tone = 'muted'
-  } else if (item.is_consumable && quantityAsStatus) {
+  } else if (item.is_consumable) {
     status = `Give · ${item.available_quantity ?? item.quantity ?? 0}`
     tone = 'give'
-  } else if (item.is_consumable && (item.available_quantity ?? item.quantity ?? 0) <= 0) {
-    status = 'No stock'
-    tone = 'muted'
   } else {
     status = 'Available'
     tone = 'available'
