@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type RefObject } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useProfile } from '../auth/AuthProvider'
@@ -70,35 +70,10 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
           Edit<span className="sr-only"> cache name</span>
         </button>
       </div>
-      {isEditingName && <form onSubmit={saveName} className="border-t border-slate-100 p-4">
-        <label htmlFor="settings-name" className="block text-sm font-medium">Cache name</label>
-        <input
-          autoFocus
-          id="settings-name"
-          className="cc-input"
-          type="text"
-          required
-          maxLength={60}
-          value={cacheName}
-          onChange={event => setCacheName(event.target.value)}
-        />
-        <div className="mt-3 flex gap-2">
-          <button disabled={updateSettings.isPending || !cacheName.trim()} className="cc-pill">
-            {updateSettings.isPending ? 'Saving…' : 'Save settings'}
-          </button>
-          <button
-            type="button"
-            disabled={updateSettings.isPending}
-            className="cc-outline"
-            onClick={() => {
-              setIsEditingName(false)
-              editNameButton.current?.focus()
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      </form>}
+      {isEditingName && <CacheNameEditor cacheName={cacheName} setCacheName={setCacheName} isPending={updateSettings.isPending} onSubmit={saveName} onCancel={() => {
+        setIsEditingName(false)
+        editNameButton.current?.focus()
+      }} />}
       <label className="cc-row">
         <span className="min-w-0 flex-1">
           <span className="block font-semibold">Approve new members</span>
@@ -123,6 +98,41 @@ function OwnerSettings({ cache }: { cache: CacheDetail }) {
       {errorMessage(updateSettings.error)}
     </p>}
   </section>
+}
+
+function CacheNameEditor({ cacheName, setCacheName, isPending, onSubmit, onCancel }: {
+  cacheName: string
+  setCacheName: (name: string) => void
+  isPending: boolean
+  onSubmit: (event: FormEvent) => void
+  onCancel: () => void
+}) {
+  return <form onSubmit={onSubmit} className="border-t border-slate-100 p-4">
+    <label htmlFor="settings-name" className="block text-sm font-medium">Cache name</label>
+    <input
+      autoFocus
+      id="settings-name"
+      className="cc-input"
+      type="text"
+      required
+      maxLength={60}
+      value={cacheName}
+      onChange={event => setCacheName(event.target.value)}
+    />
+    <div className="mt-3 flex gap-2">
+      <button disabled={isPending || !cacheName.trim()} className="cc-pill">
+        {isPending ? 'Saving…' : 'Save settings'}
+      </button>
+      <button
+        type="button"
+        disabled={isPending}
+        className="cc-outline"
+        onClick={onCancel}
+      >
+        Cancel
+      </button>
+    </div>
+  </form>
 }
 
 function RemoveMember({ cache, member }: { cache: CacheDetail; member: CacheDetail['members'][number] }) {
@@ -332,98 +342,121 @@ export function CacheSettingsPage() {
       </nav>
       <div className="contents lg:block lg:min-w-0 lg:space-y-5">
         {isOwner && <JoinRequests cacheId={cache.id} />}
-        <section
-          className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4"
-          aria-labelledby="members-heading"
-          id="members"
-        >
-          <h2
-            id="members-heading"
-            tabIndex={-1}
-            className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case"
-          >
-            Members
-          </h2>
-          <ul className="cc-list lg:border-0">
-            {!cache.members.length && <li className="cc-list-empty">No members yet.</li>}
-            {cache.members.map(member => <li key={member.user_id} className="cc-row">
-              <Avatar
-                userId={member.user_id}
-                name={member.display_name ?? 'Member'}
-                photoVersion={member.profile_photo_version}
-                coat={member.cat_coat}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="break-words font-semibold">{member.display_name ?? 'Member'}</p>
-                {member.user_id === cache.owner_id && <p className="text-sm text-slate-600">Owner</p>}
-              </div>
-              {isOwner && member.user_id !== cache.owner_id && <RemoveMember cache={cache} member={member} />}
-            </li>)}
-          </ul>
-        </section>
-        <section
-          className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4"
-          aria-labelledby="invite-heading"
-          id="invite"
-        >
-          <h2
-            id="invite-heading"
-            className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case"
-          >
-            Invite link
-          </h2>
-          <div className="cc-list lg:border-0">
-            <div className="cc-row">
-              <a href={inviteUrl} className="min-w-0 flex-1 font-mono text-sm break-all select-all">{inviteUrl}</a>
-              <button type="button" className="cc-pill" onClick={() => void copyInvite()}>Copy</button>
-            </div>
-            {isOwner && <button
-              type="button"
-              className="cc-row w-full text-left"
-              onClick={() => {
-                rotateInvite.reset()
-                rotateDialog.current?.showModal()
-              }}
-            >
-              <span className="flex-1">
-                <span className="block font-semibold">Reset link</span>
-                <span className="block text-sm text-slate-600">Old link stops working</span>
-              </span>
-              <span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span>
-            </button>}
-          </div>
-        </section>
+        <SettingsMembers cache={cache} isOwner={isOwner} />
+        <SettingsInvite inviteUrl={inviteUrl} isOwner={isOwner} copyInvite={copyInvite} openRotate={() => {
+          rotateInvite.reset()
+          rotateDialog.current?.showModal()
+        }} />
         {isOwner ? <OwnerSettings cache={cache} /> : <LeaveCache cache={cache} />}
-        {isOwner && <dialog
-          ref={rotateDialog}
-          onCancel={event => { if (rotateInvite.isPending) event.preventDefault() }}
-          className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900"
-          aria-labelledby="rotate-heading"
-        >
-          <h2 id="rotate-heading" className="text-xl font-semibold">Reset this invite?</h2>
-          <p className="mt-3">The old link will stop working. Existing members keep access.</p>
-          {rotateInvite.isError && !transientActionFailure(rotateInvite.error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(rotateInvite.error)}</p>}
-          <div className="mt-6 flex gap-3">
-            <button
-              type="button"
-              autoFocus
-              disabled={rotateInvite.isPending}
-              onClick={() => rotateDialog.current?.close()}
-              className="cc-outline"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={rotateInvite.isPending}
-              onClick={() => rotateInvite.mutate()}
-              className="cc-pill"
-            >
-              {rotateInvite.isPending ? 'Resetting…' : 'Confirm reset'}
-            </button>
-          </div>
-        </dialog>}
+        {isOwner && <RotateInviteDialog dialog={rotateDialog} isPending={rotateInvite.isPending} isError={rotateInvite.isError} error={rotateInvite.error} onConfirm={() => rotateInvite.mutate()} />}
       </div>
     </div>
   </main>
+}
+
+function SettingsMembers({ cache, isOwner }: { cache: CacheDetail; isOwner: boolean }) {
+  return <section
+    className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4"
+    aria-labelledby="members-heading"
+    id="members"
+  >
+    <h2
+      id="members-heading"
+      tabIndex={-1}
+      className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case"
+    >
+      Members
+    </h2>
+    <ul className="cc-list lg:border-0">
+      {!cache.members.length && <li className="cc-list-empty">No members yet.</li>}
+      {cache.members.map(member => <li key={member.user_id} className="cc-row">
+        <Avatar
+          userId={member.user_id}
+          name={member.display_name ?? 'Member'}
+          photoVersion={member.profile_photo_version}
+          coat={member.cat_coat}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="break-words font-semibold">{member.display_name ?? 'Member'}</p>
+          {member.user_id === cache.owner_id && <p className="text-sm text-slate-600">Owner</p>}
+        </div>
+        {isOwner && member.user_id !== cache.owner_id && <RemoveMember cache={cache} member={member} />}
+      </li>)}
+    </ul>
+  </section>
+}
+
+function SettingsInvite({ inviteUrl, isOwner, copyInvite, openRotate }: {
+  inviteUrl: string
+  isOwner: boolean
+  copyInvite: () => Promise<void>
+  openRotate: () => void
+}) {
+  return <section
+    className="mt-6 lg:mt-0 lg:scroll-mt-[84px] lg:rounded-[14px] lg:border lg:border-slate-200 lg:bg-white lg:p-4"
+    aria-labelledby="invite-heading"
+    id="invite"
+  >
+    <h2
+      id="invite-heading"
+      className="cc-section-title lg:mb-3 lg:ml-0 lg:text-[17px] lg:tracking-normal lg:text-slate-900 lg:normal-case"
+    >
+      Invite link
+    </h2>
+    <div className="cc-list lg:border-0">
+      <div className="cc-row">
+        <a href={inviteUrl} className="min-w-0 flex-1 font-mono text-sm break-all select-all">{inviteUrl}</a>
+        <button type="button" className="cc-pill" onClick={() => void copyInvite()}>Copy</button>
+      </div>
+      {isOwner && <button
+        type="button"
+        className="cc-row w-full text-left"
+        onClick={openRotate}
+      >
+        <span className="flex-1">
+          <span className="block font-semibold">Reset link</span>
+          <span className="block text-sm text-slate-600">Old link stops working</span>
+        </span>
+        <span aria-hidden="true" className="text-xl leading-none text-slate-500">›</span>
+      </button>}
+    </div>
+  </section>
+}
+
+function RotateInviteDialog({ dialog, isPending, isError, error, onConfirm }: {
+  dialog: RefObject<HTMLDialogElement | null>
+  isPending: boolean
+  isError: boolean
+  error: Error | null
+  onConfirm: () => void
+}) {
+  return <dialog
+    ref={dialog}
+    onCancel={event => { if (isPending) event.preventDefault() }}
+    className="w-[calc(100%-2rem)] max-w-md rounded-lg bg-white p-6 text-slate-900"
+    aria-labelledby="rotate-heading"
+  >
+    <h2 id="rotate-heading" className="text-xl font-semibold">Reset this invite?</h2>
+    <p className="mt-3">The old link will stop working. Existing members keep access.</p>
+    {isError && !transientActionFailure(error) && <p role="alert" className="mt-3 text-red-700">{errorMessage(error)}</p>}
+    <div className="mt-6 flex gap-3">
+      <button
+        type="button"
+        autoFocus
+        disabled={isPending}
+        onClick={() => dialog.current?.close()}
+        className="cc-outline"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={onConfirm}
+        className="cc-pill"
+      >
+        {isPending ? 'Resetting…' : 'Confirm reset'}
+      </button>
+    </div>
+  </dialog>
 }
