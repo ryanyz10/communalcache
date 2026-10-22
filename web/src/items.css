@@ -666,10 +666,6 @@
   --cc-art-ink: #a19786;
 }
 
-.cc-item-photo-hint {
-  display: none;
-}
-
 .cc-item-photo-error {
   position: absolute;
   top: 20px;
@@ -863,10 +859,6 @@
 .cc-owner-hero .cc-item-photo-frame {
   height: 240px;
   border-radius: 0;
-}
-
-.cc-owner-hero .cc-item-photo-hint {
-  display: none;
 }
 
 .cc-owner-hero-links {

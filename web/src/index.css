@@ -416,14 +416,6 @@ li.cc-list-empty, .cc-packing-slip li.cc-list-empty {
   font: 400 16px var(--font-heading);
 }
 
-.cc-page-skeleton .cc-library-slip {
-  padding: 0;
-}
-
-.cc-page-skeleton .cc-library-hero .cc-shimmer {
-  margin-top: 4px;
-}
-
 .cc-page-skeleton .cc-skeleton-field {
   border-radius: 28px;
 }
