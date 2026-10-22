@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useRef, useState, type FormEvent, type RefObject, type MouseEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import { askedWhen, cacheDetailQuery, cacheItemsQuery, cacheListQuery, cacheKeys, greeting, incomingDescription, useHomeSummary, type CacheInfo } from '../lib/caches'
+import { askedWhen, cacheDetailQuery, cacheItemsQuery, cacheListQuery, cacheKeys, greeting, incomingDescription, useHomeSummary, type CacheInfo, type CacheSummary, type HomeSummary } from '../lib/caches'
 import { openCacheWithPeek } from '../components/peekOverlay'
-import { useLibrary } from '../lib/items'
+import { useLibrary, type LibraryItem } from '../lib/items'
 import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
 import { OnboardingPage } from './OnboardingPage'
 import { Box } from '../components/Box'
@@ -89,9 +89,38 @@ export function HomePage() {
     <button type="button" className="cc-home-plus" aria-label="New cache or join with an invite" aria-haspopup="dialog" onClick={() => actionsDialog.current?.showModal()}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
     </button>
-    <section aria-labelledby="caches-heading">
+    <HomeCachesSection displayName={me.display_name} cachesQuery={cachesQuery} summaryQuery={summaryQuery} summary={summary} openCreate={openCreate} openJoin={openJoin}
+      prefetchCache={cacheId => {
+        void client.prefetchQuery(cacheDetailQuery(cacheId))
+        void client.prefetchQuery(cacheItemsQuery(cacheId))
+      }}
+      openCache={(event, cacheId) => openCacheWithPeek(event, cacheId, () => navigate(`/caches/${cacheId}`))} />
+    <div className="cc-home-slips">
+      <HomeThingsSection libraryQuery={libraryQuery} previewItems={previewItems} ownedItemCount={summary?.owned_item_count} />
+      <HomeAsksSection isPending={summaryQuery.isPending} summary={summary} />
+    </div>
+    <CacheActionsDialog dialog={actionsDialog} openCreate={openCreate} openJoin={openJoin} />
+    <JoinInviteSheet dialog={joinDialog} />
+    <CreateCacheDialog dialog={createDialog} me={me} name={name} setName={setName} requiresApproval={requiresApproval} setRequiresApproval={setRequiresApproval}
+      createOpen={createOpen} isPending={createCache.isPending} isError={createCache.isError} error={createCache.error}
+      botCheck={botCheck} botStatus={botStatus} botToken={botToken} botFailure={botFailure} onBotStatus={onBotStatus} setBotToken={setBotToken}
+      onClose={() => { setCreateOpen(false); setBotToken(''); setBotStatus('checking') }} onSubmit={submitCreate} />
+  </main>
+}
+
+function HomeCachesSection({ displayName, cachesQuery, summaryQuery, summary, openCreate, openJoin, prefetchCache, openCache }: {
+  displayName: string
+  cachesQuery: UseQueryResult<CacheSummary[]>
+  summaryQuery: ReturnType<typeof useHomeSummary>
+  summary: HomeSummary | undefined
+  openCreate: () => void
+  openJoin: () => void
+  prefetchCache: (cacheId: string) => void
+  openCache: (event: MouseEvent<HTMLAnchorElement>, cacheId: string) => void
+}) {
+  return <section aria-labelledby="caches-heading">
       <div className="cc-home-title" data-tour="caches">
-        <div><p>{greeting(new Date().getHours())}, {me.display_name}</p><h1 id="caches-heading">Your caches</h1></div>
+        <div><p>{greeting(new Date().getHours())}, {displayName}</p><h1 id="caches-heading">Your caches</h1></div>
         <div className="cc-home-desktop-actions">
           <button type="button" className="cc-profile-secondary" aria-haspopup="dialog" onClick={openJoin}>Join with an invite</button>
           <button type="button" className="cc-profile-primary" aria-haspopup="dialog" onClick={openCreate}>+ New cache</button>
@@ -120,10 +149,7 @@ export function HomePage() {
       {(!!cachesQuery.data?.length || cachesQuery.isSuccess) && <ul className="cc-home-boxes">
         {cachesQuery.data?.map(cache => <li key={cache.id}>
           <MemberCats members={cache.member_preview ?? []} total={cache.active_member_count} />
-          <Link to={`/caches/${cache.id}`} className="cc-labelled-cache" onPointerDown={() => {
-            void client.prefetchQuery(cacheDetailQuery(cache.id))
-            void client.prefetchQuery(cacheItemsQuery(cache.id))
-          }} onClick={event => openCacheWithPeek(event, cache.id, () => navigate(`/caches/${cache.id}`))}>
+          <Link to={`/caches/${cache.id}`} className="cc-labelled-cache" onPointerDown={() => prefetchCache(cache.id)} onClick={event => openCache(event, cache.id)}>
             <Box id={cache.id} label={cache.name}>
               <span className="cc-box-counts">{cache.active_member_count} {cache.active_member_count === 1 ? 'neighbor' : 'neighbors'} · {cache.attached_item_count} {cache.attached_item_count === 1 ? 'thing' : 'things'}</span>
             </Box>
@@ -139,9 +165,15 @@ export function HomePage() {
       </li>}
       </ul>}
     </section>
-    <div className="cc-home-slips">
-      <section aria-labelledby="your-things-heading">
-        <div className="cc-slip-title"><h2 id="your-things-heading">Your things</h2><Link to="/items">{summary?.owned_item_count ? `See all ${summary.owned_item_count}` : 'See all'}</Link></div>
+}
+
+function HomeThingsSection({ libraryQuery, previewItems, ownedItemCount }: {
+  libraryQuery: ReturnType<typeof useLibrary>
+  previewItems: LibraryItem[]
+  ownedItemCount: number | undefined
+}) {
+  return <section aria-labelledby="your-things-heading">
+        <div className="cc-slip-title"><h2 id="your-things-heading">Your things</h2><Link to="/items">{ownedItemCount ? `See all ${ownedItemCount}` : 'See all'}</Link></div>
         {libraryQuery.isPending && <SkeletonRows label="Loading your items…" kind="library" count={3} />}
         {libraryQuery.isError && <div className="cc-read-error">
           <p role="alert">{errorMessage(libraryQuery.error)} Previously loaded items may be out of date.</p>
@@ -159,9 +191,12 @@ export function HomePage() {
           {libraryQuery.isSuccess && !previewItems.length && <li className="cc-list-empty"><p>No things yet.</p><div><Link to="/items/new" state={{ itemEditor: true }} data-item-editor-trigger="new">+ New item</Link></div></li>}
         </ul>}
       </section>
-      <section aria-labelledby="your-asks-heading">
+}
+
+function HomeAsksSection({ isPending, summary }: { isPending: boolean; summary: HomeSummary | undefined }) {
+  return <section aria-labelledby="your-asks-heading">
         <div className="cc-slip-title"><h2 id="your-asks-heading">Your asks</h2></div>
-        {summaryQuery.isPending && <SkeletonRows label="Loading your asks…" kind="requests" count={2} />}
+        {isPending && <SkeletonRows label="Loading your asks…" kind="requests" count={2} />}
         {summary && <ul className="cc-packing-slip cc-home-asks">
           {summary.outgoing.map(ask => {
             let statusLabel = 'Approved'
@@ -182,20 +217,47 @@ export function HomePage() {
           {!summary.outgoing.length && <li className="cc-list-empty"><p>No asks in your current caches.</p><div><Link to="/requests">See all asks</Link></div></li>}
         </ul>}
       </section>
-    </div>
-    <dialog ref={actionsDialog} className="cc-cache-actions" aria-labelledby="cache-actions-heading">
+}
+
+function CacheActionsDialog({ dialog, openCreate, openJoin }: {
+  dialog: RefObject<HTMLDialogElement | null>
+  openCreate: () => void
+  openJoin: () => void
+}) {
+  return <dialog ref={dialog} className="cc-cache-actions" aria-labelledby="cache-actions-heading">
       <h2 id="cache-actions-heading" className="sr-only">Cache actions</h2>
       <button type="button" className="cc-text-action" onClick={openCreate}>New cache</button>
       <button type="button" className="cc-text-action" onClick={openJoin}>Join with an invite</button>
-      <button type="button" className="cc-text-action" onClick={() => actionsDialog.current?.close()}>Cancel</button>
+      <button type="button" className="cc-text-action" onClick={() => dialog.current?.close()}>Cancel</button>
     </dialog>
-    <JoinInviteSheet dialog={joinDialog} />
-    <dialog
-      ref={createDialog}
+}
+
+function CreateCacheDialog({ dialog, me, name, setName, requiresApproval, setRequiresApproval, createOpen, isPending, isError, error, botCheck, botStatus, botToken, botFailure, onBotStatus, setBotToken, onClose, onSubmit }: {
+  dialog: RefObject<HTMLDialogElement | null>
+  me: NonNullable<ReturnType<typeof useAuth>['me']>
+  name: string
+  setName: (name: string) => void
+  requiresApproval: boolean
+  setRequiresApproval: (requiresApproval: boolean) => void
+  createOpen: boolean
+  isPending: boolean
+  isError: boolean
+  error: Error | null
+  botCheck: RefObject<TurnstileHandle | null>
+  botStatus: TurnstileStatus
+  botToken: string
+  botFailure: string
+  onBotStatus: (status: TurnstileStatus) => void
+  setBotToken: (token: string) => void
+  onClose: () => void
+  onSubmit: (event: FormEvent) => void
+}) {
+  return <dialog
+      ref={dialog}
       className="cc-new-cache"
       aria-labelledby="new-cache-heading"
-      onClose={() => { setCreateOpen(false); setBotToken(''); setBotStatus('checking') }}
-      onCancel={event => { if (createCache.isPending) event.preventDefault() }}
+      onClose={onClose}
+      onCancel={event => { if (isPending) event.preventDefault() }}
     >
       <div className="cc-sheet-grip" aria-hidden="true" />
       <div className="cc-create-preview">
@@ -211,7 +273,7 @@ export function HomePage() {
         </div>
         <p>That cat is you. Each person you invite adds another cat to the box.</p>
       </div>
-      <form onSubmit={submitCreate} className="cc-create-form">
+      <form onSubmit={onSubmit} className="cc-create-form">
         <h2 id="new-cache-heading">New cache</h2>
         <p className="cc-create-description">A cache is a shared box for one group of people. You can invite them once it's made.</p>
         <div className="cc-create-name">
@@ -231,14 +293,13 @@ export function HomePage() {
           {botStatus === 'checking' && <span className="sr-only" role="status">Checking your browser…</span>}
           {botStatus === 'failed' && <span className="sr-only" role="alert">{botFailure}</span>}
         </div>}
-        {createCache.isError && !transientActionFailure(createCache.error) && <p role="alert" className="cc-form-error">{errorMessage(createCache.error)}</p>}
+        {isError && !transientActionFailure(error) && <p role="alert" className="cc-form-error">{errorMessage(error)}</p>}
         <div className="cc-create-buttons">
-          <button type="button" disabled={createCache.isPending} onClick={() => createDialog.current?.close()} className="cc-profile-secondary">Cancel</button>
+          <button type="button" disabled={isPending} onClick={() => dialog.current?.close()} className="cc-profile-secondary">Cancel</button>
           {botStatus === 'failed'
-            ? <button type="button" disabled={createCache.isPending} className="cc-profile-primary" onClick={() => botCheck.current?.retry()}>Try again</button>
-            : <button type="submit" disabled={createCache.isPending || !name.trim() || !botToken} className="cc-profile-primary">{createCache.isPending ? 'Creating…' : 'Create cache'}</button>}
+            ? <button type="button" disabled={isPending} className="cc-profile-primary" onClick={() => botCheck.current?.retry()}>Try again</button>
+            : <button type="submit" disabled={isPending || !name.trim() || !botToken} className="cc-profile-primary">{isPending ? 'Creating…' : 'Create cache'}</button>}
         </div>
       </form>
     </dialog>
-  </main>
 }
