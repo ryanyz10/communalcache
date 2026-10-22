@@ -27,7 +27,7 @@ function render(page: 'item' | 'all' | 'ask', options: { caller?: string; item?:
   const data: RequestsPageData = { requests: rows, unavailable_cache_ids: options.unavailable ?? [], next_cursor: options.next ?? null }
   client.setQueryData(['requests'], { pages: [data], pageParams: [null] })
   client.setQueryData(['requests', 'incoming'], { pages: [{ ...data, requests: rows.filter(row => row.owner_id === (options.caller ?? 'member') && row.status === 'pending') }], pageParams: [null] })
-  const element = page === 'item' ? createElement(ItemRequests, { item: options.item ?? item }) : page === 'ask' ? createElement(AskSheet,{item:options.item ?? item,onClose:()=>{}}) : createElement(RequestsPage)
+  const element = page === 'item' ? createElement(ItemRequests, { item: options.item ?? item, askOpen: false, onAskClose: () => {} }) : page === 'ask' ? createElement(AskSheet,{item:options.item ?? item,onClose:()=>{}}) : createElement(RequestsPage)
   const markup = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(AuthProvider, { children: createElement(MemoryRouter, null, element) })))
   client.clear()
   return markup
@@ -120,16 +120,17 @@ it('reopens the request page without a migration message or discovery-lag claim'
 })
 
 it('does not infer other-cache availability from the visible queue and blocks new asks while Lent out', () => {
-  const shared = render('item', { item: { ...item, available_quantity: 1 }, requests: [] })
-  expect(shared).toContain('Available now: 1')
-  expect(shared).not.toContain('Available now: 5')
+  const shared = render('ask', { item: { ...item, available_quantity: 0 } })
+  expect(shared).toContain('No stock available now.')
+  expect(shared).not.toContain('Refresh the item to see current availability')
   const missing = render('ask', { item: { ...item, available_quantity: undefined } })
   expect(missing).toContain('Refresh the item to see current availability')
   const legacyItem = { ...item, available: false, unavailable_note: 'With a neighbor' }
   const lent = render('item', { item: legacyItem })
   expect(lent).toContain('Lent out.')
   expect(lent).not.toContain('With a neighbor')
-  expect(lent).toMatch(/<button[^>]*disabled=""[^>]*>Ask for some/)
+  // The Ask trigger lives in the item hero; itemDetail.test.ts covers it staying disabled while Lent out.
+  expect(lent).not.toMatch(/Ask for some|Ask to borrow/)
 })
 
 it('offers the reusable approval checkbox without blocking decisions on existing Lent out requests', () => {

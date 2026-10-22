@@ -94,8 +94,8 @@ it('keeps cache contents and defensive member-empty states inside their collecti
   emptyList(render(createElement(CacheSettingsPage)), 'No members yet.', 'cc-list')
 })
 
-it.each([false, true])('keeps item-request empty copy in-list (compact=%s)', compact => {
-  emptyList(render(createElement(ItemRequests, { item, compact })), 'No visible requests for this item yet.', compact ? 'cc-detail-ask-list' : 'cc-request-slip')
+it('keeps item-request empty copy in-list', () => {
+  emptyList(render(createElement(ItemRequests, { item, askOpen: false, onAskClose: () => {} })), 'No visible requests for this item yet.', 'cc-detail-ask-list')
 })
 
 it('keeps join requests, the add-item selector and sharing empties inside their lists', () => {
@@ -104,7 +104,7 @@ it('keeps join requests, the add-item selector and sharing empties inside their 
   emptyList(adding, 'No items yet. Choose New item to start your library.', 'cc-add-selection')
   const sharing = render(createElement(ShownIn, { item }))
   emptyList(sharing, 'Not in any caches yet.', 'cc-cache-list')
-  expect(sharing).toContain('Edit item')
+  expect(sharing).toContain('>In caches</h2>')
 })
 
 it('keeps admin empty states in the switch list and full-width table cells', () => {

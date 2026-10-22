@@ -289,14 +289,6 @@
   margin-top: 24px;
 }
 
-.cc-item-requests {
-  margin-top: 24px;
-}
-
-.cc-item-requests > .cc-detail-requests-title {
-  display: flex;
-}
-
 .cc-action-sheet {
   display: none;
   width: 100%;
