@@ -1,7 +1,7 @@
 import { Shimmer, LoadingStatus, LoadingLines } from '../Skeleton'
 import { COATS } from '../../lib/cats'
 import { SupportCard } from '../Support'
-import { PeekControls } from '../../pages/PeekControls'
+import { PeekControls } from '../PeekControls'
 
 export function AccountSkeleton() {
   return <main className="cc-account-page cc-page-skeleton" data-skeleton="account" aria-busy="true">

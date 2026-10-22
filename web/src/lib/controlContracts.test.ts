@@ -125,14 +125,14 @@ function fixture(page: Page, options: { subscribed?: boolean; noPhoto?: boolean 
     '../components/InstallHint': { IOSInstallInstructions: Null }, '../lib/install': install,
     '../components/PhotoPreview': { PhotoPreview: Null },
     '../components/ContactLink': { ContactLink: ({ contact }: { contact: contacts.Contact }) => createElement('a', { href: contact.link }, contact.value), PlatformIcon: Null },
-    '../components/Skeleton': { Shimmer: Null, LoadingStatus: Null, LoadingLines: Null }, './CoatControls': { CoatControls: Null },
+    '../components/Skeleton': { Shimmer: Null, LoadingStatus: Null, LoadingLines: Null }, '../components/CoatControls': { CoatControls: Null },
   }
   const hook = { exports: {} }
   const hookSource = readFileSync(new URL('./usePhotoSelection.ts', import.meta.url), 'utf8')
   const hookCompiled = ts.transpileModule(hookSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   new Function('require', 'module', 'exports', hookCompiled)((name: string) => name === 'react' ? modules.react : { resizePhoto }, hook, hook.exports)
   modules['../lib/usePhotoSelection'] = hook.exports
-  const source = readFileSync(new URL(`../pages/${page}.tsx`, import.meta.url), 'utf8')
+  const source = readFileSync(new URL(`../${page === 'CoatControls' || page === 'PeekControls' ? 'components' : 'pages'}/${page}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
   const module = { exports: {} as Record<string, React.ComponentType<Record<string, unknown>>> }
   new Function('require', 'module', 'exports', compiled)((name: string) => { if (!(name in modules)) throw new Error(`Unexpected control dependency ${name}`); return modules[name] }, module, module.exports)
