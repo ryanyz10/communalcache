@@ -5,7 +5,6 @@ import { jsx, jsxs } from 'react/jsx-runtime'
 import * as Router from 'react-router'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { apiFetch, errorMessage } from './api'
 import { cacheDetailQuery, type CacheDetail } from './caches'
@@ -30,10 +29,7 @@ const cache: CacheDetail = {
     { user_id: memberId, display_name: 'Member', attached_item_count: 0 },
   ],
 }
-const parent = '842f85f73b442da878c21f4daa62d806fa6631ec'
-const source = process.env.CACHE_DIALOG_PARENT === '1'
-  ? execFileSync('git', ['show', `${parent}:web/src/pages/CacheSettingsPage.tsx`], { encoding: 'utf8' })
-  : readFileSync(new URL('../pages/CacheSettingsPage.tsx', import.meta.url), 'utf8')
+const source = readFileSync(new URL('../pages/CacheSettingsPage.tsx', import.meta.url), 'utf8')
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText
@@ -196,7 +192,7 @@ for (const flow of ['rotate', 'remove', 'leave'] as const) {
     expect(page.queryClient.invalidateQueries).not.toHaveBeenCalled()
   })
 
-  it(`${flow} sends the parent method/URL/body, blocks pending Escape, and retains errors`, async () => {
+  it(`${flow} sends the exact method/URL/body, blocks pending Escape, and retains errors`, async () => {
     let respond!: (response: Response) => void
     const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(resolve => { respond = resolve }))
     const page = fixture(flow)
