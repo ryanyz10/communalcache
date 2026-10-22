@@ -143,12 +143,8 @@
 
 .cc-request-primary, .cc-request-secondary {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   min-height: 40px;
   padding: 0 18px;
-  border-radius: 999px;
   font: 400 14px var(--font-heading);
 }
 
