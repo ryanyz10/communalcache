@@ -5,10 +5,11 @@ import { useProfile } from '../auth/AuthProvider'
 import { errorMessage } from '../lib/api'
 import {
   cacheDetailQuery, cacheItemsQuery, cacheListQuery, filterContents,
-  type ContentsFilter,
+  type CacheDetail, type CacheSummary, type ContentsFilter,
 } from '../lib/caches'
 import { joinRequestsQuery as cacheJoinRequestsQuery } from '../lib/joining'
 import { shareInvite } from '../lib/invites'
+import type { Item } from '../lib/items'
 import { AddItemSheet } from './AddItemSheet'
 import { Avatar } from '../components/Avatar'
 import { boxColor } from '../components/Box'
@@ -123,81 +124,11 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
       {showPlaceholder && <div className="cc-cache-skeleton-exit" aria-hidden="true" inert>
         <CacheContentsSkeleton />
       </div>}
-      <div className="cc-contents-toolbar">
-        <h2 id="contents-heading">Contents</h2>
-        <div className="cc-contents-filters" role="group" aria-label="Filter contents">
-          {filterOptions.map(([value, wide, phone, count]) => <button
-            key={value}
-            type="button"
-            aria-pressed={contentsFilter === value}
-            onClick={() => setContentsFilter(value)}
-          >
-            <span className="cc-desktop-copy">{wide}</span>
-            <span className="cc-phone-copy">{phone}</span>
-            {itemsQuery.isSuccess ? ` ${count}` : ''}
-          </button>)}
-        </div>
-        <button
-          type="button"
-          className="cc-search-toggle"
-          aria-label="Search contents"
-          aria-expanded={isSearchOpen}
-          onClick={() => setIsSearchOpen(value => !value)}
-        >
-          ⌕
-        </button>
-        <label className="cc-contents-search" data-open={isSearchOpen}>
-          <span className="sr-only">Search contents</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            type="search"
-            placeholder="Search contents"
-            value={searchTerm}
-            onChange={event => setSearchTerm(event.target.value)}
-          />
-        </label>
-      </div>
-      <div className={`cc-packing-slip cc-contents-slip${startedWithSkeleton ? ' cc-skeleton-swap' : ''}`}>
-        <div className="cc-contents-columns" aria-hidden="true">
-          <span /><span>Thing</span><span>From</span><span>Status</span><span />
-        </div>
-        <ul>
-          {filteredItems.map((item, index) => {
-            const isItemOwner = item.owner_id === me.id
-            const canAsk = item.available !== false && (!item.is_consumable || (item.available_quantity ?? 0) > 0)
-            return <li
-              key={item.id}
-              className="cc-contents-row"
-              style={startedWithSkeleton ? { animationDelay: `${Math.min(index + 1, 4) * 80}ms` } : undefined}
-            >
-              <Link className="cc-content-main" to={`/caches/${cache.id}/items/${item.id}`}>
-                <ThingTile item={item} />
-                <strong>{item.title}</strong>
-                <span className="cc-contents-owner">
-                  <Avatar
-                    userId={item.owner_id}
-                    name={item.owner_name ?? 'Neighbor'}
-                    coat={item.owner_cat_coat}
-                    photoVersion={item.owner_photo_version}
-                    size={26}
-                  />
-                  {isItemOwner ? 'You' : item.owner_name ?? 'Neighbor'}
-                </span>
-                <ThingStatus item={item} pending={isItemOwner ? item.pending_count : 0} />
-              </Link>
-              {isItemOwner ? !!item.pending_count && <Link className="cc-content-review" to="/requests">
-                Review<span className="sr-only"> asks for {item.title}</span>
-              </Link> : canAsk && <Link className="cc-content-ask" to={`/caches/${cache.id}/items/${item.id}`}>
-                Ask<span className="sr-only"> for {item.title}</span>
-              </Link>}
-            </li>
-          })}
-          {itemsQuery.isSuccess && !filteredItems.length && <li className="cc-list-empty">No things match your search or filter.</li>}
-        </ul>
-      </div>
+      <CacheContentsToolbar filterOptions={filterOptions} contentsFilter={contentsFilter} showCounts={itemsQuery.isSuccess}
+        isSearchOpen={isSearchOpen} searchTerm={searchTerm} onFilterChange={setContentsFilter}
+        onSearchToggle={() => setIsSearchOpen(value => !value)} onSearchChange={setSearchTerm} />
+      <CacheContentsList cacheId={cache.id} viewerId={me.id} items={filteredItems}
+        startedWithSkeleton={startedWithSkeleton} isSuccess={itemsQuery.isSuccess} />
     </div>
   }
 
@@ -206,69 +137,189 @@ export function CachePage({ itemsMoving = false }: { itemsMoving?: boolean }) {
       <Link to="/">‹ Caches</Link>
       <Link to={settingsPath} aria-label="Cache settings"><CacheSettingsIcon /></Link>
     </div>
-    <div className="cc-cache-hero-wrap">
-      <nav className="cc-cache-folders" aria-label="Your caches">
-        {[cache, ...otherCaches].map(row => <Link
-          key={row.id}
-          to={`/caches/${row.id}`}
-          aria-current={row.id === cache.id ? 'page' : undefined}
-          style={row.id === cache.id ? { background: boxColor(cache.id), color: '#201e1d' } : undefined}
-        >
-          {row.name}
-        </Link>)}
-      </nav>
-      <MemberCats members={cache.members} limit={6} />
-      <div className="cc-cache-box" style={{ background: boxColor(cache.id) }}>
-        <span className="cc-box-handle" aria-hidden="true" />
-        <span className="cc-cache-up" aria-hidden="true"><Stamp>↑ This side up</Stamp></span>
-        {cache.requires_approval && <span className="cc-cache-approval">
-          <Stamp><span className="cc-desktop-copy">Owner </span>approves joins</Stamp>
-        </span>}
-        <div className="cc-cache-label">
-          <h1>{cache.name}</h1>
-          <p>
-            {cache.members.length} {cache.members.length === 1 ? 'neighbor' : 'neighbors'}
-            {' · '}
-            {attachedItemCount} {attachedItemCount === 1 ? 'thing' : 'things'}
-            {isOwner && <span className="cc-desktop-copy"> · you own this box</span>}
-          </p>
-        </div>
-        <div className="cc-cache-box-controls">
-          <Link to={settingsPath} aria-label="Cache settings"><CacheSettingsIcon /></Link>
-          {cacheControls}
-        </div>
-      </div>
-    </div>
+    <CacheHero cache={cache} otherCaches={otherCaches} attachedItemCount={attachedItemCount}
+      isOwner={isOwner} settingsPath={settingsPath} controls={cacheControls} />
     <div className="cc-cache-phone-controls">{cacheControls}</div>
     <div className="cc-contents-layout">
       <section aria-label="Contents" className="cc-contents">{contents}</section>
-      <aside className="cc-in-the-box" aria-labelledby="cache-members-heading">
-        <h2 id="cache-members-heading">In the box</h2>
-        {isOwner && joinRequestsQuery.isError && <div className="cc-read-error">
-          <p role="alert">Join requests could not be loaded.</p>
-          <Link to={`${settingsPath}#join-requests`}>Open settings to try again</Link>
-        </div>}
-        {isOwner && !!joinRequestsQuery.data?.length && <div className="cc-join-banner">
-          <span>{joinRequestsQuery.data.length} {joinRequestsQuery.data.length === 1 ? 'person wants' : 'people want'} to join</span>
-          <Link to={`${settingsPath}#join-requests`}>Review</Link>
-        </div>}
-        <ul className="cc-packing-slip cc-member-list">
-          {!cache.members.length && <li className="cc-list-empty">No members yet.</li>}
-          {cache.members.map(member => <li key={member.user_id}>
-            <Avatar
-              userId={member.user_id}
-              name={member.display_name ?? 'Neighbor'}
-              coat={member.cat_coat}
-              photoVersion={member.profile_photo_version}
-              size={32}
-            />
-            <strong>{member.user_id === me.id ? 'You' : member.display_name ?? 'Neighbor'}</strong>
-            {member.user_id === cache.owner_id && <span className="cc-owner-label">Owner</span>}
-            <span>{member.attached_item_count} {member.attached_item_count === 1 ? 'thing' : 'things'}</span>
-          </li>)}
-        </ul>
-      </aside>
+      <CacheMembers cache={cache} viewerId={me.id} isOwner={isOwner} settingsPath={settingsPath}
+        joinsError={joinRequestsQuery.isError} joinRequestCount={joinRequestsQuery.data?.length ?? 0} />
     </div>
     {!itemsMoving && <AddItemSheet cacheId={cache.id} cacheName={cache.name} dialog={addItemDialog} />}
   </main>
+}
+
+function CacheHero({ cache, otherCaches, attachedItemCount, isOwner, settingsPath, controls }: {
+  cache: CacheDetail
+  otherCaches: CacheSummary[]
+  attachedItemCount: number
+  isOwner: boolean
+  settingsPath: string
+  controls: ReactNode
+}) {
+  return <div className="cc-cache-hero-wrap">
+    <nav className="cc-cache-folders" aria-label="Your caches">
+      {[cache, ...otherCaches].map(row => <Link
+        key={row.id}
+        to={`/caches/${row.id}`}
+        aria-current={row.id === cache.id ? 'page' : undefined}
+        style={row.id === cache.id ? { background: boxColor(cache.id), color: '#201e1d' } : undefined}
+      >
+        {row.name}
+      </Link>)}
+    </nav>
+    <MemberCats members={cache.members} limit={6} />
+    <div className="cc-cache-box" style={{ background: boxColor(cache.id) }}>
+      <span className="cc-box-handle" aria-hidden="true" />
+      <span className="cc-cache-up" aria-hidden="true"><Stamp>↑ This side up</Stamp></span>
+      {cache.requires_approval && <span className="cc-cache-approval">
+        <Stamp><span className="cc-desktop-copy">Owner </span>approves joins</Stamp>
+      </span>}
+      <div className="cc-cache-label">
+        <h1>{cache.name}</h1>
+        <p>
+          {cache.members.length} {cache.members.length === 1 ? 'neighbor' : 'neighbors'}
+          {' · '}
+          {attachedItemCount} {attachedItemCount === 1 ? 'thing' : 'things'}
+          {isOwner && <span className="cc-desktop-copy"> · you own this box</span>}
+        </p>
+      </div>
+      <div className="cc-cache-box-controls">
+        <Link to={settingsPath} aria-label="Cache settings"><CacheSettingsIcon /></Link>
+        {controls}
+      </div>
+    </div>
+  </div>
+}
+
+function CacheContentsToolbar({ filterOptions, contentsFilter, showCounts, isSearchOpen, searchTerm, onFilterChange, onSearchToggle, onSearchChange }: {
+  filterOptions: readonly (readonly [ContentsFilter, string, string, number])[]
+  contentsFilter: ContentsFilter
+  showCounts: boolean
+  isSearchOpen: boolean
+  searchTerm: string
+  onFilterChange: (filter: ContentsFilter) => void
+  onSearchToggle: () => void
+  onSearchChange: (value: string) => void
+}) {
+  return <div className="cc-contents-toolbar">
+    <h2 id="contents-heading">Contents</h2>
+    <div className="cc-contents-filters" role="group" aria-label="Filter contents">
+      {filterOptions.map(([value, wide, phone, count]) => <button
+        key={value}
+        type="button"
+        aria-pressed={contentsFilter === value}
+        onClick={() => onFilterChange(value)}
+      >
+        <span className="cc-desktop-copy">{wide}</span>
+        <span className="cc-phone-copy">{phone}</span>
+        {showCounts ? ` ${count}` : ''}
+      </button>)}
+    </div>
+    <button
+      type="button"
+      className="cc-search-toggle"
+      aria-label="Search contents"
+      aria-expanded={isSearchOpen}
+      onClick={onSearchToggle}
+    >
+      ⌕
+    </button>
+    <label className="cc-contents-search" data-open={isSearchOpen}>
+      <span className="sr-only">Search contents</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" aria-hidden="true">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+      <input
+        type="search"
+        placeholder="Search contents"
+        value={searchTerm}
+        onChange={event => onSearchChange(event.target.value)}
+      />
+    </label>
+  </div>
+}
+
+function CacheContentsList({ cacheId, viewerId, items, startedWithSkeleton, isSuccess }: {
+  cacheId: string
+  viewerId: string
+  items: (Item & { pending_count: number })[]
+  startedWithSkeleton: boolean
+  isSuccess: boolean
+}) {
+  return <div className={`cc-packing-slip cc-contents-slip${startedWithSkeleton ? ' cc-skeleton-swap' : ''}`}>
+    <div className="cc-contents-columns" aria-hidden="true">
+      <span /><span>Thing</span><span>From</span><span>Status</span><span />
+    </div>
+    <ul>
+      {items.map((item, index) => {
+        const isItemOwner = item.owner_id === viewerId
+        const canAsk = item.available !== false && (!item.is_consumable || (item.available_quantity ?? 0) > 0)
+        return <li
+          key={item.id}
+          className="cc-contents-row"
+          style={startedWithSkeleton ? { animationDelay: `${Math.min(index + 1, 4) * 80}ms` } : undefined}
+        >
+          <Link className="cc-content-main" to={`/caches/${cacheId}/items/${item.id}`}>
+            <ThingTile item={item} />
+            <strong>{item.title}</strong>
+            <span className="cc-contents-owner">
+              <Avatar
+                userId={item.owner_id}
+                name={item.owner_name ?? 'Neighbor'}
+                coat={item.owner_cat_coat}
+                photoVersion={item.owner_photo_version}
+                size={26}
+              />
+              {isItemOwner ? 'You' : item.owner_name ?? 'Neighbor'}
+            </span>
+            <ThingStatus item={item} pending={isItemOwner ? item.pending_count : 0} />
+          </Link>
+          {isItemOwner ? !!item.pending_count && <Link className="cc-content-review" to="/requests">
+            Review<span className="sr-only"> asks for {item.title}</span>
+          </Link> : canAsk && <Link className="cc-content-ask" to={`/caches/${cacheId}/items/${item.id}`}>
+            Ask<span className="sr-only"> for {item.title}</span>
+          </Link>}
+        </li>
+      })}
+      {isSuccess && !items.length && <li className="cc-list-empty">No things match your search or filter.</li>}
+    </ul>
+  </div>
+}
+
+function CacheMembers({ cache, viewerId, isOwner, settingsPath, joinsError, joinRequestCount }: {
+  cache: CacheDetail
+  viewerId: string
+  isOwner: boolean
+  settingsPath: string
+  joinsError: boolean
+  joinRequestCount: number
+}) {
+  return <aside className="cc-in-the-box" aria-labelledby="cache-members-heading">
+    <h2 id="cache-members-heading">In the box</h2>
+    {isOwner && joinsError && <div className="cc-read-error">
+      <p role="alert">Join requests could not be loaded.</p>
+      <Link to={`${settingsPath}#join-requests`}>Open settings to try again</Link>
+    </div>}
+    {isOwner && !!joinRequestCount && <div className="cc-join-banner">
+      <span>{joinRequestCount} {joinRequestCount === 1 ? 'person wants' : 'people want'} to join</span>
+      <Link to={`${settingsPath}#join-requests`}>Review</Link>
+    </div>}
+    <ul className="cc-packing-slip cc-member-list">
+      {!cache.members.length && <li className="cc-list-empty">No members yet.</li>}
+      {cache.members.map(member => <li key={member.user_id}>
+        <Avatar
+          userId={member.user_id}
+          name={member.display_name ?? 'Neighbor'}
+          coat={member.cat_coat}
+          photoVersion={member.profile_photo_version}
+          size={32}
+        />
+        <strong>{member.user_id === viewerId ? 'You' : member.display_name ?? 'Neighbor'}</strong>
+        {member.user_id === cache.owner_id && <span className="cc-owner-label">Owner</span>}
+        <span>{member.attached_item_count} {member.attached_item_count === 1 ? 'thing' : 'things'}</span>
+      </li>)}
+    </ul>
+  </aside>
 }
