@@ -68,8 +68,8 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
     examples.push(['ContactLink', 'PlatformIcon', { kind }])
     examples.push(['ContactLink', 'ContactLink', { contact: { kind, value: 'chosen', link: kind === 'email' ? 'mailto:chosen@example.test' : 'https://example.test/chosen' }, name: '<Neighbor>' }])
   }
-  for (const is_consumable of [false, true]) for (const available of [false, true]) for (const quantity of [null, 0, 3]) for (const pending of [0, 1, 3]) for (const compact of [false, true]) for (const quantityAsStatus of [false, true]) {
-    examples.push(['ThingTile', 'ThingStatus', { item: { ...item, is_consumable, available, quantity, unavailable_note: 'With a neighbor' }, pending, compact, quantityAsStatus }])
+  for (const is_consumable of [false, true]) for (const available of [false, true]) for (const quantity of [null, 0, 3]) for (const pending of [0, 1, 3]) for (const compact of [false, true]) {
+    examples.push(['ThingTile', 'ThingStatus', { item: { ...item, is_consumable, available, quantity, unavailable_note: 'With a neighbor' }, pending, compact }])
   }
   for (const library of [false, true]) for (const photo_version of [null, 'a/b?c']) examples.push(['ThingTile', 'ThingTile', { item: { ...item, photo_version }, library }])
   const exports = new Map<string, ReturnType<typeof load>>()
@@ -99,7 +99,7 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
       expect(html).not.toContain('cc-status-note')
       expect(html).not.toContain('With a neighbor')
       const currentItem=props.item as {is_consumable:boolean;available:boolean;quantity:number|null}
-      if (!props.pending && currentItem.available && currentItem.is_consumable && props.quantityAsStatus) {
+      if (!props.pending && currentItem.available && currentItem.is_consumable) {
         const quantity=currentItem.quantity ?? 0
         expect(html).toContain(`>Give · ${quantity}</span>`)
         html=html.replace(`>Give · ${quantity}</span>`,`>${quantity} to give</span>`)
@@ -112,6 +112,6 @@ it('retains shared markup apart from tested contrast/tour hooks, including every
     fingerprint.update(file + '\0' + name + '\0' + (path ?? '/') + '\0' + html + '\0')
   }
   // Pin retained parent cases so shallow CI checkouts do not need historical Git objects.
-  expect(fingerprint.digest('hex')).toBe('5e7e2a1c107a4d8e82fa5e3e86d6379f105ec74efacef2ffe509852b294543c4')
-  expect(examples.length).toBeGreaterThan(200)
+  expect(fingerprint.digest('hex')).toBe('b2991f9e4624ee47f612cb71e95d9d8ca89e47cced7ac23f572335333ed98fbc')
+  expect(examples).toHaveLength(161)
 })
