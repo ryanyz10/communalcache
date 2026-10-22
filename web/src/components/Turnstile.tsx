@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { loadConfig } from '../lib/config'
+import { configQuery as appConfigQuery } from '../lib/config'
 import { loadTurnstile, mountTurnstile, turnstileTheme } from '../lib/turnstile'
 
 export type TurnstileStatus = 'checking' | 'verified' | 'failed'
@@ -11,7 +11,7 @@ export function Turnstile({ action, onToken, onStatus, ref }: {
   onStatus?: (status: TurnstileStatus) => void
   ref?: Ref<TurnstileHandle>
 }) {
-  const configQuery = useQuery({ queryKey: ['config'], queryFn: loadConfig })
+  const configQuery = useQuery(appConfigQuery())
   const container = useRef<HTMLDivElement>(null)
   const widget = useRef<ReturnType<typeof mountTurnstile> | null>(null)
   const autoRetried = useRef(false)

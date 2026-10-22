@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../lib/api'
-import { contactAction, contactDisplayValue, contactOpenLabel, type Contact } from '../lib/contacts'
+import { contactAction, contactDisplayValue, contactOpenLabel, requestContactQuery } from '../lib/contacts'
 import type { ItemRequest } from '../lib/requests'
 import { LoadingLines } from '../components/Skeleton'
 
@@ -11,8 +10,7 @@ export function ApprovedContact({ request, callerId, focused = false }: {
 }) {
   const isParty = callerId === request.owner_id || callerId === request.requester_id
   const contactQuery = useQuery({
-    queryKey: ['request-contact', callerId, request.id],
-    queryFn: () => apiFetch<{ contact: Contact | null }>(`/api/me/requests/${request.id}/contact`),
+    ...requestContactQuery(callerId, request.id),
     enabled: isParty && request.status === 'approved',
     retry: false,
     gcTime: 0,

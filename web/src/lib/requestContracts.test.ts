@@ -8,7 +8,7 @@ import ts from 'typescript'
 import { ApiError, apiFetch, errorMessage } from './api'
 import * as requests from './requests'
 import * as contacts from './contacts'
-import type { Item } from './items'
+import { cacheItemQuery, type Item } from './items'
 import { toastFixture } from '../test/toastFixture'
 
 type Element = ReactElement<Record<string, unknown>>
@@ -118,7 +118,7 @@ function fixture(kind: Kind, options: { item?: Item; request?: requests.ItemRequ
       useMutation(options: MutationOptions) { mutationOptions = options; return mutationApi },
       useQuery(options: Record<string, unknown>) { queryOptions.push(options); return query },
     },
-    '../lib/api': { ApiError, apiFetch, errorMessage }, '../lib/requests': requests, '../lib/contacts': contacts,
+    '../lib/api': { ApiError, apiFetch, errorMessage }, '../lib/requests': requests, '../lib/contacts': contacts, '../lib/items': { cacheItemQuery },
     '../components/Cat': { Cat: Null }, '../components/Skeleton': { LoadingLines: ({ label }: { label: string }) => createElement('p', null, label) },
   }
   const file = kind === 'ask' ? 'AskSheet' : kind === 'decision' ? 'RequestDecision' : 'RequestContact'

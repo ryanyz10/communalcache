@@ -22,14 +22,23 @@ export type Item = {
 }
 
 export type LibraryItem = Item & { caches: { id: string; name: string }[]; pending_count: number }
-export const libraryItemQuery = (userId: string | undefined, itemId: string) => ({ queryKey: ['library-item', userId, itemId], queryFn: () => apiFetch<LibraryItem>(`/api/me/items/${itemId}`) })
+export const itemKeys = {
+  detailPrefix: () => ['item'],
+  detail: (cacheId: string | null | undefined, itemId: string) => ['item', cacheId, itemId],
+  libraryPrefix: () => ['library'],
+  library: (userId: string | undefined) => ['library', userId],
+  libraryItemPrefix: () => ['library-item'],
+  libraryItem: (userId: string | undefined, itemId: string) => ['library-item', userId, itemId],
+}
+export const cacheItemQuery = (cacheId: string | null | undefined, itemId: string) => ({ queryKey: itemKeys.detail(cacheId, itemId), queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`) })
+export const libraryItemQuery = (userId: string | undefined, itemId: string) => ({ queryKey: itemKeys.libraryItem(userId, itemId), queryFn: () => apiFetch<LibraryItem>(`/api/me/items/${itemId}`) })
 export type LibraryFilter = 'all' | 'lend' | 'give' | 'unshared'
 export type LibraryTotals = {total_count:number;lend_count:number;give_count:number;unshared_count:number;shared_cache_count:number}
 export type LibraryPageData = { items: LibraryItem[]; next_cursor: string | null; totals: LibraryTotals }
 
 export function libraryQuery(userId: string | undefined) {
   return infiniteQueryOptions({
-    queryKey: ['library', userId], initialPageParam: null as string | null,
+    queryKey: itemKeys.library(userId), initialPageParam: null as string | null,
     queryFn: async ({ pageParam, signal }) => {
       const first = await apiFetch<LibraryPageData>(`/api/me/items${pageParam ? `?after=${encodeURIComponent(pageParam)}` : ''}`, { signal })
       signal.throwIfAborted()

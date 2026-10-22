@@ -2,10 +2,10 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
-import { apiFetch } from '../lib/api'
+import { configKey } from '../lib/config'
 import { useToast } from '../components/Toast'
 import { transientActionFailure } from '../lib/feedback'
-import { adminListPath, setAdminFlag, setAdminPlan, type AdminCache, type AdminFlag, type AdminOutbox, type AdminOverview, type AdminPageRows, type AdminPlan, type AdminUser } from '../lib/admin'
+import { adminKeys, adminOverviewQuery, adminCachesQuery, adminUsersQuery, adminOutboxQuery, adminFlagsQuery, setAdminFlag, setAdminPlan, type AdminFlag, type AdminPlan } from '../lib/admin'
 
 function PlanControl({ kind, id, plan, plans, onSaved }: { kind: 'caches' | 'users'; id: string; plan: string; plans: AdminPlan[]; onSaved: () => Promise<void> }) {
   const [selected, setSelected] = useState(plan)
@@ -76,14 +76,13 @@ export function AdminPage() {
   const [cacheAfter, setCacheAfter] = useState<string | null>(null)
   const [userAfter, setUserAfter] = useState<string | null>(null)
   const [outboxAfter, setOutboxAfter] = useState<string | null>(null)
-  const prefix = ['admin', me?.id]
-  const overview = useQuery({ queryKey: [...prefix, 'overview'], queryFn: () => apiFetch<AdminOverview>('/api/admin/overview'), enabled: !!me, retry: false })
+  const overview = useQuery({ ...adminOverviewQuery(me?.id), enabled: !!me, retry: false })
   const enabled = !!me && overview.isSuccess
-  const caches = useQuery({ queryKey: [...prefix, 'caches', cacheAfter], queryFn: () => apiFetch<AdminPageRows<AdminCache>>(adminListPath('caches', cacheAfter)), enabled, retry: false })
-  const users = useQuery({ queryKey: [...prefix, 'users', userAfter], queryFn: () => apiFetch<AdminPageRows<AdminUser>>(adminListPath('users', userAfter)), enabled, retry: false })
-  const outbox = useQuery({ queryKey: [...prefix, 'failed-outbox', outboxAfter], queryFn: () => apiFetch<AdminPageRows<AdminOutbox>>(adminListPath('failed-outbox', outboxAfter)), enabled, retry: false })
-  const flags = useQuery({ queryKey: [...prefix, 'flags'], queryFn: () => apiFetch<{ flags: AdminFlag[] }>('/api/admin/flags'), enabled, retry: false })
-  async function refresh() { await client.invalidateQueries({ queryKey: prefix }) }
+  const caches = useQuery({ ...adminCachesQuery(me?.id, cacheAfter), enabled, retry: false })
+  const users = useQuery({ ...adminUsersQuery(me?.id, userAfter), enabled, retry: false })
+  const outbox = useQuery({ ...adminOutboxQuery(me?.id, outboxAfter), enabled, retry: false })
+  const flags = useQuery({ ...adminFlagsQuery(me?.id), enabled, retry: false })
+  async function refresh() { await client.invalidateQueries({ queryKey: adminKeys.all(me?.id) }) }
   if (!me || overview.isError) return <main className="cc-admin-page"><p role="alert">This page is not available.</p><Link to="/">Back to Home</Link></main>
   if (!overview.data) return <main className="cc-admin-page" aria-busy="true"><p role="status">Loading…</p></main>
   const totals = overview.data
@@ -103,8 +102,8 @@ export function AdminPage() {
       {flags.isError && <p role="alert">Could not load switches. Use Refresh to retry.</p>}
       {flags.data && <ul className="cc-list">
         {flags.data.flags.map(flag => <li key={flag.key} className="cc-row"><FlagControl flag={flag} onSaved={async () => {
-          await client.invalidateQueries({ queryKey: [...prefix, 'flags'] }, { throwOnError: true })
-          await client.invalidateQueries({ queryKey: ['config'] })
+          await client.invalidateQueries({ queryKey: adminKeys.flags(me?.id) }, { throwOnError: true })
+          await client.invalidateQueries({ queryKey: configKey() })
         }} /></li>)}
         {!flags.data.flags.length && <li className="cc-list-empty">No switches configured.</li>}
       </ul>}

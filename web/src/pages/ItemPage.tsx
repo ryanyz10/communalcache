@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useProfile } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
 import { cacheDetailQuery } from '../lib/caches'
-import { libraryItemQuery, type Item } from '../lib/items'
+import { cacheItemQuery, libraryItemQuery, type Item } from '../lib/items'
 import { invalidateRequestViews } from '../lib/requests'
 import { ItemPhoto } from './ItemPhoto'
 import { ItemRequests } from './ItemRequests'
@@ -42,18 +42,17 @@ export function ItemPage() {
   const me = useProfile()
   const location = useLocation()
   const [isAskOpen, setIsAskOpen] = useState(false)
-  const cacheItemQuery = useQuery({
-    queryKey: ['item', cacheId, itemId],
-    queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`),
+  const cacheItemResult = useQuery({
+    ...cacheItemQuery(cacheId, itemId),
     enabled: !!cacheId && !!me.display_name,
   })
-  const isCacheOwner = cacheItemQuery.isSuccess && cacheItemQuery.data.owner_id === me.id
+  const isCacheOwner = cacheItemResult.isSuccess && cacheItemResult.data.owner_id === me.id
   const ownerItemQuery = useQuery({
     ...libraryItemQuery(me.id, itemId),
     enabled: !!me.display_name && (!cacheId || isCacheOwner),
   })
   // Cache context must succeed before switching to the owner's private detail.
-  const itemQuery = cacheId && !isCacheOwner ? cacheItemQuery : ownerItemQuery
+  const itemQuery = cacheId && !isCacheOwner ? cacheItemResult : ownerItemQuery
   const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me.display_name })
   useEffect(() => {
     if (itemQuery.isSuccess && location.hash === '#sharing') document.getElementById('sharing')?.scrollIntoView()

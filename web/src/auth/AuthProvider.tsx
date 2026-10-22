@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, apiFetch, errorMessage, type Me } from '../lib/api'
+import { apiFetch, errorMessage, type Me } from '../lib/api'
 import { disablePush, reconcilePushAccount, setPushAccount } from '../lib/push'
 import { clearJoinToken } from '../lib/pendingJoin'
 import { setSessionHint } from '../lib/sessionHint'
+import { meKey, meQuery } from '../lib/profile'
 
 type AuthState = {
   ready: boolean
@@ -19,7 +20,7 @@ const privateQuery = (query: { queryKey: readonly unknown[] }) => !['me', 'confi
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
-  const currentId = useRef(queryClient.getQueryData<Me | null>(['me'])?.id ?? null)
+  const currentId = useRef(queryClient.getQueryData<Me | null>(meKey())?.id ?? null)
   const announcedId = useRef<string | null | undefined>(undefined)
   const channel = useRef<BroadcastChannel | null>(null)
   const revision = useRef(0)
@@ -40,27 +41,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.getMutationCache().clear()
   }, [queryClient])
 
-  const query = useQuery({
-    queryKey: ['me'],
-    queryFn: async ({ signal }) => {
-      let me: Me | null
-      try { me = await apiFetch<Me>('/api/me', { signal }) }
-      catch (error) {
-        if (!(error instanceof ApiError) || error.status !== 401) throw error
-        me = null
-      }
-      signal.throwIfAborted()
-      const userId = me?.id ?? null
-      if (currentId.current !== userId) await clearPrivate()
-      signal.throwIfAborted()
-      await reconcilePushAccount(userId, signal)
-      signal.throwIfAborted()
-      setSessionHint(!!userId)
-      currentId.current = userId
-      if (announcedId.current !== userId) announce(userId)
-      return me
-    },
-  })
+  const query = useQuery(meQuery(async (me, signal) => {
+    const userId = me?.id ?? null
+    if (currentId.current !== userId) await clearPrivate()
+    signal.throwIfAborted()
+    await reconcilePushAccount(userId, signal)
+    signal.throwIfAborted()
+    setSessionHint(!!userId)
+    currentId.current = userId
+    if (announcedId.current !== userId) announce(userId)
+  }))
 
   const refresh = useCallback(async () => {
     const attempt = ++revision.current
@@ -69,8 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await setPushAccount(null)
     await clearPrivate()
     if (attempt !== revision.current) return
-    queryClient.setQueryData(['me'], null)
-    try { await queryClient.refetchQueries({ queryKey: ['me'], exact: true }, { throwOnError: true }) }
+    queryClient.setQueryData(meKey(), null)
+    try { await queryClient.refetchQueries({ queryKey: meKey(), exact: true }, { throwOnError: true }) }
     finally { if (attempt === revision.current) setChecking(false) }
   }, [queryClient, clearPrivate])
 
@@ -118,11 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     currentId.current = null
     setSessionHint(false)
     clearJoinToken()
-    queryClient.setQueryData(['me'], null)
+    queryClient.setQueryData(meKey(), null)
     announce(null)
     setChecking(false)
   }
-  const fetching = query.isFetching && queryClient.getQueryState(['me'])?.fetchStatus === 'fetching'
+  const fetching = query.isFetching && queryClient.getQueryState(meKey())?.fetchStatus === 'fetching'
   const ready = !checking && !query.isPending && !fetching
   return <AuthContext.Provider value={{
     ready,

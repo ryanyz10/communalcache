@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
-import { apiFetch, errorMessage } from '../lib/api'
+import { errorMessage } from '../lib/api'
 import type { Item } from '../lib/items'
-import { relativeWhen, requesterQueueLabel, type ItemRequest } from '../lib/requests'
+import { relativeWhen, requesterQueueLabel, itemRequestsQuery } from '../lib/requests'
 import { Stamp } from '../components/Stamp'
 import { Avatar } from '../components/Avatar'
 import { SkeletonRows } from '../components/Skeleton'
@@ -17,8 +17,7 @@ export function ItemRequests({ item, askOpen, onAskClose, cacheName }: {
 }) {
   const { me } = useAuth()
   const requestsQuery = useQuery({
-    queryKey: ['item-requests', item.cache_id, item.id],
-    queryFn: () => apiFetch<ItemRequest[]>(`/api/caches/${item.cache_id}/items/${item.id}/requests`),
+    ...itemRequestsQuery(item.cache_id, item.id),
     enabled: !!me?.display_name,
   })
 

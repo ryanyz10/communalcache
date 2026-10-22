@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { Toast, type useToast } from '../components/Toast'
 import * as caches from './caches'
+import * as joining from './joining'
 import { apiFetch, errorMessage } from './api'
 import { shareInvite } from './invites'
 import { transientActionFailure } from './feedback'
@@ -32,7 +33,7 @@ function page(name: 'CachePage' | 'CacheSettingsPage') {
     },
     '../auth/AuthProvider': { useAuth: () => ({ me: { id: 'owner', display_name: 'Owner' } }), useProfile: () => ({ id: 'owner', display_name: 'Owner' }) },
     '../lib/feedback': { transientActionFailure },
-    '../lib/api': { apiFetch, errorMessage }, '../lib/caches': caches, '../lib/invites': { shareInvite }, '../lib/requests': {},
+    '../lib/api': { apiFetch, errorMessage }, '../lib/caches': caches, '../lib/invites': { shareInvite }, '../lib/requests': {}, '../lib/joining': joining,
     './OnboardingPage': { OnboardingPage: Null }, './AddItemSheet': { AddItemSheet: Null }, './JoinRequests': { JoinRequests: Null },
     '../components/Toast': { Toast, useToast: () => ({ toast: notice, showToast, dismissToast: () => { notice = null } }) },
     '../components/WideBreadcrumbs': { WideBreadcrumbs: Null }, '../components/Avatar': { Avatar: Null },

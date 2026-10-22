@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { readFileSync } from 'node:fs'
 import ts from 'typescript'
 import { apiFetch } from './api'
+import * as config from './config'
 import { adminListPath, setAdminFlag, setAdminPlan, type AdminFlag } from './admin'
 import { toastFixture } from '../test/toastFixture'
 
@@ -31,7 +32,7 @@ function control(onSaved: () => Promise<void>, kind: 'flag' | 'plan' = 'flag') {
     } },
     'react/jsx-runtime': { jsx: record(jsx), jsxs: record(jsxs) },
     'react-router': {}, '@tanstack/react-query': {}, '../auth/AuthProvider': {},
-    '../lib/api': { apiFetch }, '../lib/admin': { adminListPath, setAdminFlag, setAdminPlan },
+    '../lib/api': { apiFetch }, '../lib/admin': { adminListPath, setAdminFlag, setAdminPlan }, '../lib/config': config,
   }
   const source = readFileSync(new URL('../pages/AdminPage.tsx', import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source + '\nexport { PlanControl }', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText

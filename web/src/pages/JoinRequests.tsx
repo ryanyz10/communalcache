@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, errorMessage } from '../lib/api'
-import type { JoinRequest } from '../lib/joining'
+import { joiningKeys, joinRequestsQuery as cacheJoinRequestsQuery } from '../lib/joining'
+import { cacheKeys } from '../lib/caches'
 import { Avatar } from '../components/Avatar'
 import { SkeletonRows } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
@@ -9,18 +10,15 @@ import { transientActionFailure } from '../lib/feedback'
 export function JoinRequests({ cacheId }: { cacheId: string }) {
   const queryClient = useQueryClient()
   const { showToast } = useToast()
-  const joinRequestsQuery = useQuery({
-    queryKey: ['join-requests', cacheId],
-    queryFn: () => apiFetch<JoinRequest[]>(`/api/caches/${cacheId}/join-requests`),
-  })
+  const joinRequestsQuery = useQuery(cacheJoinRequestsQuery(cacheId))
   const decideJoin = useMutation({
     mutationFn: ({ userId, decision }: { userId: string; decision: 'approve' | 'reject' }) => apiFetch(`/api/caches/${cacheId}/join-requests/${userId}/${decision}`, { body: {} }),
     onSuccess: () => showToast('Join request decided.'),
     onError: error => { if (transientActionFailure(error)) showToast(errorMessage(error), 'error') },
     onSettled: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['join-requests', cacheId] })
-      await queryClient.invalidateQueries({ queryKey: ['cache', cacheId] })
-      await queryClient.invalidateQueries({ queryKey: ['caches'] })
+      await queryClient.invalidateQueries({ queryKey: joiningKeys.requests(cacheId) })
+      await queryClient.invalidateQueries({ queryKey: cacheKeys.detail(cacheId) })
+      await queryClient.invalidateQueries({ queryKey: cacheKeys.list() })
     },
   })
 

@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useProfile } from '../auth/AuthProvider'
-import { apiFetch, errorMessage } from '../lib/api'
+import { errorMessage } from '../lib/api'
 import { cacheDetailQuery } from '../lib/caches'
-import { libraryItemQuery, type Item } from '../lib/items'
+import { cacheItemQuery, libraryItemQuery, type Item } from '../lib/items'
 import { ItemForm, type ItemEditorState } from './ItemForm'
 import { ItemPage } from './ItemPage'
 import { LibraryPage } from './LibraryPage'
@@ -21,10 +21,7 @@ export function ItemEditorPage({ editing = false }: { editing?: boolean }) {
   const [state, setState] = useState<ItemEditorState>({ dirty: false, committed: false })
   const cacheQuery = useQuery({ ...cacheDetailQuery(cacheId), enabled: !!cacheId && !!me.display_name })
   const itemQuery = useQuery<Item>({
-    ...(cacheId ? {
-      queryKey: ['item', cacheId, itemId],
-      queryFn: () => apiFetch<Item>(`/api/caches/${cacheId}/items/${itemId}`),
-    } : libraryItemQuery(me.id, itemId)),
+    ...(cacheId ? cacheItemQuery(cacheId, itemId) : libraryItemQuery(me.id, itemId)),
     enabled: editing && !!me.display_name && !state.committed,
   })
   const backPath = cacheId ? `/caches/${cacheId}` : '/items'

@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
-import { apiFetch, errorMessage } from '../lib/api'
-import { libraryItemQuery, persistItem, type Item, type LibraryItem, type ItemSaveProgress } from '../lib/items'
-import type { CacheSummary } from '../lib/caches'
+import { errorMessage } from '../lib/api'
+import { libraryItemQuery, itemKeys, persistItem, type Item, type LibraryItem, type ItemSaveProgress } from '../lib/items'
+import { cacheListQuery } from '../lib/caches'
 import { usePhotoSelection } from '../lib/usePhotoSelection'
 import { PhotoPreview } from '../components/PhotoPreview'
 import { invalidateRequestViews } from '../lib/requests'
@@ -49,8 +49,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
   const saveProgress = useRef<ItemSaveProgress>({ item: null, remainingCacheIds: [], remainingDetachIds: [], failedCacheId: null, photoPending: false, stage: 'saving' })
   const [saveSnapshot, setSaveSnapshot] = useState<ItemSaveProgress | null>(null)
   const cachesQuery = useQuery({
-    queryKey: ['caches'],
-    queryFn: () => apiFetch<CacheSummary[]>('/api/caches'),
+    ...cacheListQuery(),
     enabled: !!me?.display_name,
   })
   const libraryItem = useQuery({ ...libraryItemQuery(me?.id, item?.id ?? ''), enabled: !!item && !!me?.display_name })
@@ -84,7 +83,7 @@ export function ItemForm({ cacheId, item, onSaved, onCancel, onBusy, onStateChan
         removePhotoVersion,
         body: itemChanges,
       }, () => setSaveSnapshot({ ...saveProgress.current }), (id,shared) => {
-        queryClient.setQueryData<LibraryItem>(['library-item', me?.id, saveProgress.current.item!.id], current => {
+        queryClient.setQueryData<LibraryItem>(itemKeys.libraryItem(me?.id, saveProgress.current.item!.id), current => {
           if (!current) return current
           const otherCaches = current.caches.filter(cache => cache.id !== id)
           return { ...current, caches: shared ? [...otherCaches,{id,name:cacheNames[id]}] : otherCaches }

@@ -3,7 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { apiFetch, errorMessage } from '../lib/api'
-import { askedWhen, cacheDetailQuery, cacheItemsQuery, greeting, incomingDescription, useHomeSummary, type CacheInfo, type CacheSummary } from '../lib/caches'
+import { askedWhen, cacheDetailQuery, cacheItemsQuery, cacheListQuery, cacheKeys, greeting, incomingDescription, useHomeSummary, type CacheInfo } from '../lib/caches'
 import { openCacheWithPeek } from '../components/peekOverlay'
 import { useLibrary } from '../lib/items'
 import { destinationAfterLogin, peekJoinToken } from '../lib/pendingJoin'
@@ -44,8 +44,7 @@ export function HomePage() {
   const [name, setName] = useState('')
   const [requiresApproval, setRequiresApproval] = useState(false)
   const cachesQuery = useQuery({
-    queryKey: ['caches'],
-    queryFn: () => apiFetch<CacheSummary[]>('/api/caches'),
+    ...cacheListQuery(),
     enabled: !!me?.display_name,
   })
   const summaryQuery = useHomeSummary(!!me?.display_name)
@@ -57,7 +56,7 @@ export function HomePage() {
     onSettled: () => botCheck.current?.reset(),
     onSuccess: cache => {
       createDialog.current?.close()
-      void client.invalidateQueries({ queryKey: ['caches'] })
+      void client.invalidateQueries({ queryKey: cacheKeys.list() })
       showToast('Cache created.')
       navigate(`/caches/${cache.id}`)
     },

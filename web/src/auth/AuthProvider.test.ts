@@ -6,6 +6,7 @@ import { apiFetch, ApiError, errorMessage, type Me } from '../lib/api'
 import * as push from '../lib/push'
 import { clearJoinToken } from '../lib/pendingJoin'
 import { setSessionHint } from '../lib/sessionHint'
+import { meKey, meQuery } from '../lib/profile'
 
 type Auth = { ready: boolean; me: Me | null; refresh: () => Promise<void>; signOut: () => Promise<void> }
 const A = { id: 'account-A', email: 'a@example.test', display_name: 'A' }
@@ -99,7 +100,7 @@ function tab() {
       },
     },
     '../lib/api': { apiFetch, ApiError, errorMessage }, '../lib/push': push,
-    '../lib/pendingJoin': { clearJoinToken }, '../lib/sessionHint': { setSessionHint },
+    '../lib/pendingJoin': { clearJoinToken }, '../lib/sessionHint': { setSessionHint }, '../lib/profile': { meKey, meQuery },
   }
   const module = { exports: {} as { AuthProvider: (props: { children: null }) => unknown } }
   new Function('require', 'module', 'exports', compiled)((name: string) => {
