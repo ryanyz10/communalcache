@@ -59,7 +59,7 @@
   height: 54px;
   padding: 0 26px;
   background: var(--cc-accent);
-  color: #201e1d;
+  color: var(--cc-hole);
   font-size: 17px;
 }
 
@@ -145,7 +145,7 @@
 .cc-landing-box {
   position: relative;
   flex: none;
-  color: #201e1d;
+  color: var(--cc-hole);
 }
 
 .cc-landing-box-face {
@@ -263,7 +263,7 @@
   width: 104px;
   height: 32px;
   border-radius: 999px;
-  background: #201e1d;
+  background: var(--cc-hole);
   box-shadow: inset 0 4px 10px rgba(0,0,0,.5);
   display: grid;
   place-items: center;
@@ -759,7 +759,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 24px;
-  color: #201e1d;
+  color: var(--cc-hole);
 }
 
 .cc-landing-bottom-box > div {
@@ -774,7 +774,7 @@
 .cc-landing-bottom .cc-landing-primary {
   height: 56px;
   padding: 0 28px;
-  background: #201e1d;
+  background: var(--cc-hole);
   color: #f5ead8;
 }
 
