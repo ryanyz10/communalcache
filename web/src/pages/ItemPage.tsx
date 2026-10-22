@@ -94,7 +94,7 @@ export function ItemPage() {
         {item.description && <section className="cc-owner-note"><h2>Note</h2><p>{item.description}</p></section>}
         {isOwner ? <>
           <ItemAvailability item={item} />
-          <div id="sharing"><ShownIn item={item} compact /></div>
+          <div id="sharing"><ShownIn item={item} /></div>
         </> : <>
           <section className="cc-item-from"><h2>From</h2><p>
             <Avatar userId={item.owner_id} name={item.owner_name ?? 'Member'} photoVersion={item.owner_photo_version} coat={item.owner_cat_coat} size={28} />
@@ -110,7 +110,7 @@ export function ItemPage() {
         </>}
       </div>
       {isOwner ? <ItemWaiting item={item} pendingCount={ownerItemQuery.data?.pending_count} />
-        : <aside className="cc-member-asks"><ItemRequests item={item} compact askOpen={isAskOpen} onAskClose={() => setIsAskOpen(false)} cacheName={cacheQuery.data?.name} /></aside>}
+        : <aside className="cc-member-asks"><ItemRequests item={item} askOpen={isAskOpen} onAskClose={() => setIsAskOpen(false)} cacheName={cacheQuery.data?.name} /></aside>}
     </div>
   </main>
 }

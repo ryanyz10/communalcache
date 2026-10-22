@@ -294,13 +294,13 @@ it('availability failure toasts without flipping the saved state and permits a m
   expect(fetch).toHaveBeenCalledTimes(2)
 })
 
-it('item overview lists only saved cache links and the edit hint, with no sharing controls', () => {
+it('item overview lists only saved cache links, with no sharing controls', () => {
   const fetch = vi.spyOn(globalThis,'fetch'), page = fixture('sharing')
   const html = page.render()
   expect(html).toContain(`href="/caches/${cacheA.id}"`)
   expect(html).toContain(`href="/caches/${cacheB.id}"`)
   expect(html).not.toMatch(/<button|aria-pressed|<dialog/)
-  expect(html).toContain('to change where it&#x27;s shown')
+  expect(html).toContain('>In caches</h2>')
   expect(fetch).not.toHaveBeenCalled()
 })
 

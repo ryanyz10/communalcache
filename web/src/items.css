@@ -764,12 +764,6 @@
   color: var(--cc-sub);
 }
 
-.cc-owner-sharing {
-  border-radius: 28px;
-  padding: 20px;
-  background: var(--cc-card);
-}
-
 .cc-cache-list {
   display: flex;
   flex-wrap: wrap;
@@ -785,10 +779,6 @@
   border-radius: 999px;
   background: var(--cc-chip);
   font: 600 13px var(--font-body);
-}
-
-.cc-owner-sharing .cc-form-hint a {
-  text-decoration: underline;
 }
 
 .cc-delete-item {
@@ -1186,10 +1176,6 @@
 
   .cc-pending-ask-row .cc-stamp {
     padding: 4px 10px;
-  }
-
-  .cc-owner-sharing {
-    padding: 22px;
   }
 }
 
