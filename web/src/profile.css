@@ -15,14 +15,19 @@
   }
 }
 
-.cc-profile-primary, .cc-profile-secondary {
+.cc-profile-primary, .cc-profile-secondary,
+.cc-request-primary, .cc-request-secondary,
+.cc-landing-primary, .cc-landing-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: 999px;
+}
+
+.cc-profile-primary, .cc-profile-secondary {
   gap: 8px;
   min-height: 52px;
   padding: 0 24px;
-  border-radius: 999px;
   font: 400 16px/1.2 var(--font-heading);
   text-align: center;
 }

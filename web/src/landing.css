@@ -45,11 +45,7 @@
 }
 
 .cc-landing-primary, .cc-landing-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  border-radius: 999px;
   text-decoration: none;
   text-align: center;
   font: 700 16px/1 var(--font-body);
